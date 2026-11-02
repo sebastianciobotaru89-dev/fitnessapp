@@ -1,0 +1,128 @@
+name: Aplicația nativă – construire de test
+
+# Builds the Android and iOS apps on every push that touches them, without signing.
+# Android: a debug APK you can install on a phone, then the app is opened on an emulator
+# and its console is checked for errors. iOS: a build for the simulator, to prove it compiles.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'css/**'
+      - 'js/**'
+      - 'fonts/**'
+      - 'icons/**'
+      - 'android/**'
+      - 'ios/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'capacitor.config.json'
+      - 'tools/build-www.mjs'
+      - '.github/workflows/native-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Există proiectul Android?
+        id: has
+        run: '[ -f android/app/build.gradle ] && echo "ok=1" >> "$GITHUB_OUTPUT" || echo "::notice::Proiectul Android nu există încă. Rulează întâi workflow-ul de creare."'
+      - uses: actions/setup-node@v5
+        if: steps.has.outputs.ok
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v5
+        if: steps.has.outputs.ok
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v5
+        if: steps.has.outputs.ok
+      - name: Verific că nu sunt chei în fișiere
+        if: steps.has.outputs.ok
+        run: node tools/check-secrets.mjs --all
+      - name: Pregătesc aplicația
+        if: steps.has.outputs.ok
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          npx cap sync android
+      - name: Construiesc APK-ul de test
+        if: steps.has.outputs.ok
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        if: steps.has.outputs.ok
+        with:
+          name: portia-android-test
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+      - name: Pornesc emulatorul (KVM)
+        if: steps.has.outputs.ok
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Deschid aplicația pe un telefon Android emulat
+        if: steps.has.outputs.ok
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: bash tools/android-smoke.sh android/app/build/outputs/apk/debug/app-debug.apk
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.has.outputs.ok
+        with:
+          name: portia-android-capturi
+          path: smoke/
+          retention-days: 14
+
+  ios:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - name: Există proiectul iOS?
+        id: has
+        run: '[ -d ios/App/App.xcodeproj ] && echo "ok=1" >> "$GITHUB_OUTPUT" || echo "::notice::Proiectul iOS nu există încă. Rulează întâi workflow-ul de creare."'
+      - uses: actions/setup-node@v5
+        if: steps.has.outputs.ok
+        with:
+          node-version: 22
+          cache: npm
+      - name: Pregătesc aplicația
+        if: steps.has.outputs.ok
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          npx cap sync ios
+      - name: Construiesc pentru simulator
+        if: steps.has.outputs.ok
+        run: |
+          xcodebuild -version
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -40
+          test -d build/Build/Products/Debug-iphonesimulator/App.app
+      - name: Deschid aplicația pe un iPhone și un iPad simulate
+        if: steps.has.outputs.ok
+        run: bash tools/ios-smoke.sh build/Build/Products/Debug-iphonesimulator/App.app
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.has.outputs.ok
+        with:
+          name: portia-ios-capturi
+          path: smoke/
+          retention-days: 14

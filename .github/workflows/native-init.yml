@@ -1,0 +1,46 @@
+name: Aplicația nativă – creare proiecte iOS și Android
+
+# Runs once, by hand: creates the ios/ and android/ projects with Capacitor, draws every icon
+# and launch-screen size from assets/, and commits the result to main.
+# It skips a platform whose folder already exists, so running it again changes nothing.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: native-init
+  cancel-in-progress: false
+
+jobs:
+  init:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Verific că nu sunt chei în fișiere
+        run: node tools/check-secrets.mjs --all
+      - name: Instalez Capacitor
+        run: npm install --no-audit --no-fund
+      - name: Adun fișierele aplicației în www/
+        run: npm run build
+      - name: Creez proiectul Android
+        run: '[ -d android ] || npx cap add android'
+      - name: Creez proiectul iOS
+        run: '[ -d ios ] || npx cap add ios'
+      - name: Desenez iconițele și ecranul de pornire
+        run: npx capacitor-assets generate --ios --android --iconBackgroundColor '#11874F' --iconBackgroundColorDark '#0A110E' --splashBackgroundColor '#EFF4F1' --splashBackgroundColorDark '#0A110E'
+      - name: Sincronizez
+        run: npx cap sync
+      - name: Salvez proiectele în repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json android ios
+          node tools/check-secrets.mjs --staged
+          if git diff --cached --quiet; then echo "Nimic nou."; exit 0; fi
+          git commit -m "Proiectele native iOS și Android, create cu Capacitor"
+          git push

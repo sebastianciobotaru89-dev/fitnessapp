@@ -1,0 +1,34 @@
+{
+  "name": "portia",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Porția: calorii și macronutrienți, în română. Aplicația pentru iOS și Android, construită cu Capacitor.",
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "node tools/build-www.mjs",
+    "sync": "node tools/build-www.mjs && cap sync",
+    "android": "node tools/build-www.mjs && cap sync android && cap open android",
+    "ios": "node tools/build-www.mjs && cap sync ios && cap open ios",
+    "check-secrets": "node tools/check-secrets.mjs --all && node tools/check-secrets.mjs --history"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.4.0",
+    "@capacitor/app": "^8.0.0",
+    "@capacitor/core": "^8.4.0",
+    "@capacitor/filesystem": "^8.0.0",
+    "@capacitor/haptics": "^8.0.0",
+    "@capacitor/ios": "^8.4.0",
+    "@capacitor/keyboard": "^8.0.0",
+    "@capacitor/preferences": "^8.0.0",
+    "@capacitor/share": "^8.0.0",
+    "@capacitor/splash-screen": "^8.0.0",
+    "@zxing/library": "0.21.3"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.4.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

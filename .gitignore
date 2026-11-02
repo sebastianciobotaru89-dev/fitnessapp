@@ -24,3 +24,8 @@ node_modules/
 secrets/
 supabase/.env
 supabase/.temp/
+
+# Aplicația nativă: fișiere generate, refăcute la fiecare build
+www/
+smoke/
+build/
