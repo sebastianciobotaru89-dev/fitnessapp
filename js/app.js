@@ -34,6 +34,8 @@ const MEALS = [
 const DAY_ABBR = ['Du','Lu','Ma','Mi','Jo','Vi','Sâ'];
 const X_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 const CAM_ICON = '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
+const MIC_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg>';
+const PROD_MAX = 600; // products kept in the library; the library is one stored document, capped at 256 KiB
 
 const THEMES = {
   cobalt: { t:'Cobalt', d:'albastru intens cu accent galben', logo:{ bg1:'#5C74FF', bg2:'#1C2EA0', s1:'#FFFFFF', s2:'#DCE3FF', dot:'#E9A92A', dot2:'#FFE7A8' },
@@ -592,6 +594,7 @@ async function boot(){
   loadCache();
   applyTheme(savedSkin());
   bindStatic();
+  checkVoice();
   renderAll();
   setInterval(() => { const f = S.profile && S.profile.fast; if (f && f.start && !document.hidden) renderFast(); }, 30000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) renderFast(); });
@@ -1498,7 +1501,7 @@ function normReport(d){
 function normLibrary(l){
   const out = { recipes: [], favorites: [], reports: [], products: [] };
   if (!l || typeof l !== 'object') return out;
-  if (Array.isArray(l.products)) out.products = l.products.map(normProduct).filter(Boolean).slice(0, 300);
+  if (Array.isArray(l.products)) out.products = l.products.map(normProduct).filter(Boolean).slice(0, PROD_MAX);
   if (Array.isArray(l.recipes)) out.recipes = l.recipes.map(r => {
     if (!r || !r.name) return null;
     const items = (Array.isArray(r.items) ? r.items : []).map(normItem).filter(Boolean).slice(0, 40);
@@ -1532,8 +1535,10 @@ function subLibrary(){
 }
 function libChanged(){ saveLibrary(); renderRecent(); renderHistory(); if (!$('#libSheet').hidden) renderLib(); }
 
-function openLib(){ renderLib(); showSheet('#libSheet'); $('#libTitle').focus({ preventScroll: true }); }
+function openLib(){ S.prodIO = null; S.prodQ = ''; renderLib(); showSheet('#libSheet'); $('#libTitle').focus({ preventScroll: true }); }
 function renderLib(){
+  // keep typing position when the library changes underneath (e.g. a sync arrives)
+  const ae = document.activeElement, keep = ae && (ae.id === 'impText' || ae.id === 'prodQ') ? [ae.id, ae.selectionStart, ae.selectionEnd] : null;
   const L = S.library;
   const rec = L.recipes.length
     ? '<ul class="lib-list">' + L.recipes.map(r => { const s = sumItems(r.items); return '<li><div><b>' + esc(r.name) + '</b><span>' + r.servings + (r.servings === 1 ? ' porție' : ' porții') + ' · ' + fmt(s.kcal / r.servings) + ' kcal pe porție' + (r.totalGrams ? ' · ' + fmt(r.totalGrams) + ' g gătit' : '') + '</span></div><div class="row"><button class="rm" data-action="recipe-edit" data-id="' + esc(r.id) + '">Editează</button><button class="btn soft sm" data-action="recipe-log" data-id="' + esc(r.id) + '">Adaugă</button></div></li>'; }).join('') + '</ul>'
@@ -1544,10 +1549,43 @@ function renderLib(){
   $('#libCard').innerHTML = sheetHead('libTitle', 'Rețete și favorite', 'close-lib') +
     '<section><div class="panel-head" style="margin-bottom:8px"><h3>Rețetele mele</h3><button class="btn primary sm" data-action="recipe-new">+ Rețetă nouă</button></div>' + rec + '</section>' +
     '<section><h3 style="margin-bottom:8px">Mese favorite</h3>' + fav + '</section>' +
-    '<section><h3 style="margin-bottom:8px">Produse scanate</h3>' + (L.products.length
-      ? '<ul class="lib-list">' + L.products.map(p => '<li><div><b>' + esc(p.name) + '</b><span>' + fmt(p.per100.kcal) + ' kcal la 100 ' + p.unit + ' · cod ' + esc(p.code) + '</span></div><div class="row"><button class="rm" data-action="prod-del" data-code="' + esc(p.code) + '">Șterge</button></div></li>').join('') + '</ul>'
-      : '<p class="empty">Produsele salvate prin codul de bare apar aici.</p>') + '</section>' +
+    prodSection() +
     '<p class="foot">Se adaugă la ' + mealName(S.meal).toLowerCase() + (S.view === todayKey() ? '' : ', ' + dayWord(S.view).toLowerCase()) + '. Masa o alegi din panoul „Ce ai mâncat?”.</p>';
+  if (keep){ const n = $('#' + keep[0]); if (n){ n.focus({ preventScroll: true }); try { n.setSelectionRange(keep[1], keep[2]); } catch (e) {} } }
+}
+function prodListHtml(){
+  const P = S.library.products, q = String(S.prodQ || '').trim().toLowerCase();
+  if (!P.length) return '<p class="empty">Produsele salvate prin codul de bare apar aici. Poți importa și o listă întreagă.</p>';
+  const shown = q ? P.filter(p => p.name.toLowerCase().includes(q) || p.code.includes(q)) : P;
+  if (!shown.length) return '<p class="empty">Niciun produs nu se potrivește cu „' + esc(S.prodQ.trim()) + '”.</p>';
+  return '<ul class="lib-list">' + shown.map(p => '<li><div><b>' + esc(p.name) + '</b><span>' + fmt(p.per100.kcal) + ' kcal la 100 ' + p.unit + ' · cod ' + esc(p.code) + '</span></div><div class="row"><button class="rm" data-action="prod-del" data-code="' + esc(p.code) + '">Șterge</button></div></li>').join('') + '</ul>';
+}
+function prodSection(){
+  const P = S.library.products, io = S.prodIO;
+  let panel = '';
+  if (io && io.mode === 'import'){
+    panel = '<div class="io"><p class="hint">Un produs pe rând, cu valorile la 100 g: <b>cod; nume; kcal; proteine; glucide; grăsimi</b>. Opțional, la final: <b>unitate</b> (g sau ml), <b>porție</b> și <b>pachet</b>. Merge și un tabel salvat din Excel ca CSV, sau o listă exportată din Porția. Un cod care există deja se actualizează.</p>' +
+      '<label class="lbl" for="impText">Lipește lista</label><textarea id="impText" class="code" rows="5" spellcheck="false" placeholder="5941234567890; Iaurt grecesc 2%; 73; 9; 4; 2">' + esc(io.text || '') + '</textarea>' +
+      '<label class="btn ghost sm filebtn" for="impFile">Sau alege un fișier .csv<input type="file" id="impFile" accept=".csv,.txt,text/csv,text/plain"></label>' +
+      '<div class="imp-prev" id="impPrev" aria-live="polite">' + importPreviewHtml() + '</div>' +
+      '<div class="row"><button class="btn ghost" data-action="prod-io-close">Renunță</button><button class="btn primary wide" data-action="prod-import-ok"' + (io.parsed && io.parsed.ok.length ? '' : ' disabled') + '>Adaugă în bibliotecă</button></div></div>';
+  } else if (io && io.mode === 'export' && P.length){
+    panel = '<div class="io"><p class="hint">Lista ta, cu ' + nProd(P.length) + '. O poți păstra, deschide în Excel sau trimite cuiva care o importă în Porția.</p>' +
+      '<label class="sr" for="expText">Lista de produse</label><textarea id="expText" class="code" rows="6" readonly spellcheck="false">' + esc(productsCsv()) + '</textarea>' +
+      '<div class="row"><button class="btn soft" data-action="prod-copy">Copiază lista</button>' + (window.claude ? '' : '<button class="btn ghost" data-action="prod-download">Descarcă .csv</button>') + '</div></div>';
+  }
+  return '<section id="prodSec"><div class="panel-head" style="margin-bottom:8px"><h3>Produse cu cod de bare' + (P.length ? ' · ' + P.length : '') + '</h3><div class="row">' +
+      '<button class="btn soft sm" data-action="prod-import" aria-pressed="' + !!(io && io.mode === 'import') + '">Importă o listă</button>' +
+      (P.length ? '<button class="btn ghost sm" data-action="prod-export" aria-pressed="' + !!(io && io.mode === 'export') + '">Exportă</button>' : '') + '</div></div>' +
+    panel +
+    (P.length > 8 ? '<label class="sr" for="prodQ">Caută în produse</label><input type="text" id="prodQ" class="prod-q" placeholder="Caută după nume sau cod" value="' + esc(S.prodQ || '') + '">' : '') +
+    '<div id="prodList">' + prodListHtml() + '</div></section>';
+}
+function openProdIO(mode){
+  S.prodIO = S.prodIO && S.prodIO.mode === mode ? null : { mode, text: '', parsed: null };
+  renderLib();
+  const sec = $('#prodSec'); if (sec && S.prodIO) sec.scrollIntoView({ block: 'start', behavior: reduceMotion() ? 'auto' : 'smooth' });
+  if (S.prodIO && mode === 'import'){ const ta = $('#impText'); if (ta) ta.focus({ preventScroll: true }); }
 }
 
 /* favorites */
@@ -1597,7 +1635,7 @@ function renderRecipe(){
   $('#recipeCard').innerHTML = sheetHead('recTitle', d.id ? 'Editează rețeta' : 'Rețetă nouă', 'close-recipe') +
     '<label class="lbl" for="rName">Nume</label><input type="text" id="rName" value="' + esc(d.name) + '" placeholder="ex: Ciorbă de pui">' +
     '<div class="edit-block"><label class="lbl" for="rText">Ingrediente</label>' +
-      (S.aiOff ? '' : '<textarea id="rText" rows="3" placeholder="ex: 1 kg piept de pui, 2 cepe, 2 morcovi, 300 g orez, 3 linguri ulei"></textarea><button class="btn soft" data-action="recipe-ai" id="rAiBtn">Calculează ingredientele</button>') +
+      (S.aiOff ? '' : '<div class="dict' + (voiceOn() ? ' has-mic' : '') + '"><textarea id="rText" rows="3" placeholder="ex: 1 kg piept de pui, 2 cepe, 2 morcovi, 300 g orez, 3 linguri ulei"></textarea>' + micBtn('rText') + '</div><button class="btn soft" data-action="recipe-ai" id="rAiBtn">Calculează ingredientele</button>') +
       '<div class="status" id="rStatus" hidden><span class="spin" aria-hidden="true"></span><p>Claude calculează ingredientele…</p><button class="btn ghost sm" data-action="recipe-stop">Oprește</button></div><p class="err" id="rErr" hidden></p></div>' +
     '<div id="rItems"></div>' +
     '<details class="manual"' + (S.aiOff ? ' open' : '') + '><summary>Adaugă un ingredient manual</summary><div class="mgrid">' +
@@ -1919,7 +1957,10 @@ function lookupCode(raw){
   if (code.length < 8){ S.bc = { state: 'error', msg: 'Codul de bare are de obicei 8 sau 13 cifre. Verifică cifrele.' }; renderBarcode(); return; }
   const p = S.library.products.find(x => x.code === code);
   if (p) S.bc = { state: 'found', code, qty: String(p.serving || 100) };
-  else S.bc = { state: 'new', code, warn: !validCode(code), draft: { name: '', unit: 'g', kcal: '', protein: '', carbs: '', fat: '', serving: '', pack: '' } };
+  else {
+    S.bc = { state: 'new', code, warn: !validCode(code), draft: { name: '', unit: 'g', kcal: '', protein: '', carbs: '', fat: '', serving: '', pack: '' } };
+    if (offOn()){ S.bc.looking = true; offLookup(S.bc); }
+  }
   renderBarcode();
 }
 const bcProduct = () => S.bc && S.library.products.find(x => x.code === S.bc.code);
@@ -1961,7 +2002,8 @@ function renderBarcode(){
   const accept = (S.imgLimits && S.imgLimits.mediaTypes && S.imgLimits.mediaTypes.join(',')) || 'image/jpeg,image/png,image/webp';
   const field = (id, label, key, unit, cls, mode) => '<div class="' + (cls || '') + '"><label class="lbl" for="' + id + '">' + label + '</label>' + (unit ? '<div class="unit">' : '') + '<input type="text" id="' + id + '"' + (mode ? ' inputmode="' + mode + '"' : '') + ' value="' + esc(d[key]) + '">' + (unit ? '<em>' + unit + '</em></div>' : '') + '</div>';
   el.innerHTML = '<div class="bc-card"><div class="bc-top"><div><b>' + (B.editing ? 'Editează produsul' : 'Produs nou') + '</b><span class="meta">Cod ' + esc(B.code) + (B.warn ? ' · verifică cifrele, codul pare incomplet' : '') + '</span></div></div>' +
-    (B.editing ? '' : '<p class="hint">Nu e încă în lista ta. ' + (canAI ? 'Fotografiază tabelul cu valori nutriționale de pe ambalaj sau completează manual.' : 'Completează valorile de pe etichetă.') + ' Îl salvez, ca data viitoare să-l găsești instant.</p>') +
+    (B.looking ? '<div class="status" style="margin-top:0"><span class="spin" aria-hidden="true"></span><p>Caut produsul în Open Food Facts…<small>O bază de date deschisă, cu produse din toată lumea.</small></p></div>' : '') +
+    (B.editing || B.off ? '' : '<p class="hint">Nu e încă în lista ta. ' + (canAI ? 'Fotografiază tabelul cu valori nutriționale de pe ambalaj sau completează manual.' : 'Completează valorile de pe etichetă.') + ' Îl salvez, ca data viitoare să-l găsești instant.</p>') +
     (canAI ? '<label class="photo-pick" for="bcLabelInput"><input type="file" id="bcLabelInput" accept="' + accept + '"><span class="ph">' + CAM_ICON + '</span><span><b>Fotografiază eticheta</b><span>tabelul „Valori nutriționale”</span></span></label>' : '') +
     (B.reading ? '<div class="status" style="margin-top:0"><span class="spin" aria-hidden="true"></span><p>Claude citește eticheta…<small>Durează de obicei 10–30 de secunde.</small></p></div>' : '') +
     (B.note ? '<p class="hint">' + esc(B.note) + '</p>' : '') +
@@ -2021,6 +2063,7 @@ function saveProduct(){
   if (!p){ err.textContent = 'Verifică valorile introduse.'; return; }
   const i = S.library.products.findIndex(x => x.code === p.code);
   if (i >= 0) S.library.products[i] = p; else S.library.products.unshift(p);
+  S.library.products = S.library.products.slice(0, PROD_MAX);
   libChanged();
   S.bc = { state: 'found', code: p.code, qty: String(p.serving || 100) };
   renderBarcode();
@@ -2039,6 +2082,209 @@ function delProduct(code){
   const p = S.library.products.splice(i, 1)[0];
   libChanged();
   toast('Șters: ' + p.name, 'Anulează', () => { S.library.products.splice(i, 0, p); libChanged(); });
+}
+
+/* ---------- Open Food Facts: free, open product database (data under ODbL) ---------- */
+// Reachable on the web and in the store app. Inside Claude the page has no network, so the first failed call turns it off for the session.
+const Off = { blocked: false };
+const OFF_FIELDS = 'product_name,product_name_ro,generic_name,brands,quantity,product_quantity,product_quantity_unit,serving_quantity,nutriments';
+const offOn = () => !Off.blocked && typeof fetch === 'function' && navigator.onLine !== false;
+function offProduct(p){
+  const n = (p && p.nutriments) || {};
+  let kcal = num(n['energy-kcal_100g']);
+  if (!(kcal >= 0)){ const kj = num(n['energy-kj_100g']) || num(n['energy_100g']); if (kj > 0) kcal = kj / 4.184; }
+  const brand = String(p.brands || '').split(',')[0].trim();
+  let name = String(p.product_name_ro || p.product_name || p.generic_name || '').trim();
+  if (brand && name && !name.toLowerCase().includes(brand.toLowerCase())) name += ' · ' + brand;
+  if (!name && !(kcal >= 0)) return null;
+  const u = String(p.product_quantity_unit || (String(p.quantity || '').match(/\b(ml|cl|l)\b/i) || [])[1] || '').toLowerCase();
+  const sv = num(p.serving_quantity), pk = num(p.product_quantity);
+  return { name: name.slice(0, 80), unit: /^(ml|cl|l)$/.test(u) ? 'ml' : 'g', kcal: kcal >= 0 ? inVal(Math.round(kcal)) : '',
+    protein: inVal(num(n.proteins_100g)), carbs: inVal(num(n.carbohydrates_100g)), fat: inVal(num(n.fat_100g)),
+    serving: sv > 0 ? String(Math.round(sv)) : '', pack: pk > 0 ? String(Math.round(pk)) : '' };
+}
+async function offLookup(B){
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 8000);
+  let found = null;
+  try {
+    const r = await fetch('https://world.openfoodfacts.org/api/v2/product/' + B.code + '?fields=' + OFF_FIELDS, { signal: ctl.signal });
+    if (r.ok){ const j = await r.json(); if (j && j.status === 1 && j.product) found = offProduct(j.product); }
+  } catch (e) {
+    if (!(e && e.name === 'AbortError')) Off.blocked = true; // no network here; a timeout only skips this one
+  } finally { clearTimeout(timer); }
+  if (S.bc !== B) return;
+  B.looking = false;
+  if (found){
+    const d = B.draft, typed = ['name', 'kcal', 'protein', 'carbs', 'fat', 'serving', 'pack'].some(k => String(d[k]).trim());
+    if (!typed) d.unit = found.unit;
+    Object.keys(found).forEach(k => { if (k !== 'unit' && !String(d[k]).trim()) d[k] = found[k]; });
+    B.off = true;
+    B.note = found.kcal ? 'Am găsit produsul în Open Food Facts. Verifică valorile cu eticheta, apoi salvează.' : 'Am găsit numele în Open Food Facts, dar fără valori nutriționale. Completează-le de pe etichetă.';
+  }
+  renderBarcode();
+}
+
+/* ---------- product lists: import and export ---------- */
+// One product per line: code; name; kcal; protein; carbs; fat; [unit; serving; pack], values per 100 g or ml.
+// Separator: tab, semicolon or comma. With a semicolon or tab, decimals may use a comma (Excel in Romanian).
+function splitCsv(line, sep){
+  const out = []; let cur = '', q = false;
+  for (let i = 0; i < line.length; i++){
+    const ch = line[i];
+    if (q){ if (ch === '"'){ if (line[i + 1] === '"'){ cur += '"'; i++; } else q = false; } else cur += ch; }
+    else if (ch === '"') q = true;
+    else if (ch === sep){ out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out.map(c => c.trim());
+}
+function parseProductList(text){
+  const lines = String(text || '').replace(/^\uFEFF/, '').split(/\r?\n/).slice(0, 5000);
+  const byCode = new Map(), bad = [];
+  let first = true;
+  lines.forEach((line, i) => {
+    if (!line.trim()) return;
+    const sep = line.includes('\t') ? '\t' : line.includes(';') ? ';' : ',';
+    const c = splitCsv(line, sep), code = (c[0] || '').replace(/\s/g, '');
+    const isFirst = first; first = false;
+    if (isFirst && !/\d/.test(code)) return; // header row
+    const val = x => { const s = String(x == null ? '' : x).trim(); return s ? num(s) : NaN; };
+    const row = i + 1;
+    if (!/^\d{8,14}$/.test(code)){ bad.push([row, 'codul trebuie să aibă 8–14 cifre']); return; }
+    const kcal = val(c[2]);
+    if (!(kcal >= 0 && kcal <= 950)){ bad.push([row, 'lipsesc caloriile']); return; }
+    const macro = [val(c[3]), val(c[4]), val(c[5])];
+    if (macro.some(m => m < 0 || m > 100)){ bad.push([row, 'proteinele, glucidele și grăsimile sunt la 100 g, deci între 0 și 100']); return; }
+    const p = normProduct({ code, name: c[1] || '', unit: /^(ml|l)$/i.test(c[6] || '') ? 'ml' : 'g',
+      per100: { kcal, protein: macro[0] || 0, carbs: macro[1] || 0, fat: macro[2] || 0 }, serving: val(c[7]), pack: val(c[8]) });
+    if (p) byCode.set(code, p); else bad.push([row, 'rând incomplet']);
+  });
+  const ok = [...byCode.values()], have = new Set(S.library.products.map(p => p.code));
+  const upd = ok.filter(p => have.has(p.code)).length;
+  return { ok, bad, upd, fresh: ok.length - upd };
+}
+// Romanian: "5 produse", but "20 de produse", "120 de produse"
+const nProd = n => n === 1 ? 'un produs' : n + ((n % 100 === 0 && n > 0) || n % 100 >= 20 ? ' de' : '') + ' produse';
+const csvCell = s => /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+const csvNum = n => (n == null || !isFinite(n)) ? '' : String(n).replace('.', ',');
+function productsCsv(){
+  return ['cod;nume;kcal;proteine;glucide;grasimi;unitate;portie;pachet'].concat(S.library.products.map(p =>
+    [p.code, csvCell(p.name), p.per100.kcal, csvNum(p.per100.protein), csvNum(p.per100.carbs), csvNum(p.per100.fat), p.unit, p.serving || '', p.pack || ''].join(';'))).join('\n');
+}
+function importPreviewHtml(){
+  const R = S.prodIO && S.prodIO.parsed;
+  if (!R) return '';
+  const room = Math.max(0, PROD_MAX - S.library.products.length), fit = Math.min(R.fresh, room);
+  let h = R.ok.length
+    ? '<p><b>Gata de adăugat: ' + nProd(R.ok.length) + '</b>' + (R.upd ? ' (' + [R.fresh ? R.fresh + ' noi' : '', R.upd + (R.upd === 1 ? ' actualizat' : ' actualizate')].filter(Boolean).join(', ') + ')' : '') + '.</p>'
+    : '<p><b>Nu am găsit încă niciun produs valid.</b></p>';
+  if (fit < R.fresh) h += '<p>Biblioteca are loc pentru ' + PROD_MAX + ' de produse, așa că adaug doar ' + (fit === 1 ? 'primul nou' : 'primele ' + fit + ' noi') + '.</p>';
+  if (R.bad.length) h += '<p class="muted">' + (R.bad.length === 1 ? 'Un rând sărit: ' : R.bad.length + ' rânduri sărite: ') + R.bad.slice(0, 3).map(b => 'rândul ' + b[0] + ', ' + esc(b[1])).join('; ') + (R.bad.length > 3 ? '; și încă ' + (R.bad.length - 3) : '') + '.</p>';
+  return h;
+}
+function onImportText(txt){
+  if (!S.prodIO || S.prodIO.mode !== 'import') return;
+  S.prodIO.text = txt;
+  S.prodIO.parsed = String(txt).trim() ? parseProductList(txt) : null;
+  const pv = $('#impPrev'); if (pv) pv.innerHTML = importPreviewHtml();
+  const ok = $('[data-action="prod-import-ok"]'); if (ok) ok.disabled = !(S.prodIO.parsed && S.prodIO.parsed.ok.length);
+}
+async function readImportFile(f){
+  if (!f) return;
+  if (f.size > 2e6){ toast('Fișierul e prea mare. Încearcă o listă cu cel mult ' + PROD_MAX + ' de produse.'); return; }
+  try {
+    const buf = await f.arrayBuffer();
+    let txt = new TextDecoder('utf-8').decode(buf);
+    if (txt.includes('\uFFFD')){ try { txt = new TextDecoder('windows-1250').decode(buf); } catch (e) {} } // older Excel saves Romanian text this way
+    const ta = $('#impText'); if (ta) ta.value = txt;
+    onImportText(txt);
+  } catch (e) { toast('Nu am putut citi fișierul.'); }
+}
+function importProducts(){
+  const R = S.prodIO && S.prodIO.parsed; if (!R || !R.ok.length) return;
+  const before = clone(S.library.products), list = S.library.products.slice(), fresh = [];
+  let upd = 0;
+  R.ok.forEach(p => { const i = list.findIndex(x => x.code === p.code); if (i >= 0){ list[i] = p; upd++; } else fresh.push(p); });
+  const add = fresh.slice(0, Math.max(0, PROD_MAX - list.length));
+  S.library.products = add.concat(list);
+  S.prodIO = null;
+  libChanged(); renderLib();
+  const n = add.length + upd, txt = nProd(n);
+  toast(txt.charAt(0).toUpperCase() + txt.slice(1) + ' în bibliotecă' + (upd ? ', dintre care ' + upd + (upd === 1 ? ' actualizat' : ' actualizate') : '') + '.', 'Anulează', () => { S.library.products = before; libChanged(); });
+}
+function copyProducts(){
+  const ta = $('#expText'); if (!ta) return;
+  const fallback = () => { ta.focus(); ta.select(); toast('Lista e selectată. Copiaz-o din meniul telefonului.'); };
+  try { navigator.clipboard.writeText(ta.value).then(() => toast('Lista a fost copiată.'), fallback); } catch (e) { fallback(); }
+}
+function downloadProducts(){
+  try {
+    const url = URL.createObjectURL(new Blob(['\uFEFF' + productsCsv()], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a'); a.href = url; a.download = 'portia-produse.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  } catch (e) { copyProducts(); }
+}
+
+/* ---------- voice dictation ---------- */
+// Web Speech API (Safari, Chrome). Where the page gets no microphone (often inside Claude), the buttons hide and the keyboard's own mic remains.
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+const Voice = { rec: null, target: null, blocked: false };
+const voiceOn = () => !!SpeechRec && !Voice.blocked;
+function micBtn(id){
+  if (!voiceOn()) return '';
+  const on = !!Voice.rec && Voice.target === id;
+  return '<button type="button" class="mic" data-action="mic" data-target="' + id + '" aria-label="' + (on ? 'Oprește dictarea' : 'Dictează') + '" aria-pressed="' + on + '">' + MIC_ICON + '</button>';
+}
+function syncMics(){
+  $$('.mic').forEach(b => {
+    const on = !!Voice.rec && Voice.target === b.dataset.target;
+    b.hidden = !voiceOn();
+    b.setAttribute('aria-pressed', String(on));
+    b.setAttribute('aria-label', on ? 'Oprește dictarea' : 'Dictează');
+  });
+  $$('.dict').forEach(w => w.classList.toggle('has-mic', voiceOn()));
+}
+async function checkVoice(){
+  if (SpeechRec){
+    try { const pp = document.permissionsPolicy || document.featurePolicy; if (pp && pp.allowsFeature && !pp.allowsFeature('microphone')) Voice.blocked = true; } catch (e) {}
+    try { if (!Voice.blocked && navigator.permissions && navigator.permissions.query){ const st = await navigator.permissions.query({ name: 'microphone' }); if (st.state === 'denied') Voice.blocked = true; } } catch (e) {}
+  }
+  syncMics();
+}
+function stopVoice(){ if (Voice.rec){ try { Voice.rec.abort(); } catch (e) {} } }
+function voiceBlocked(){
+  Voice.blocked = true; syncMics();
+  toast('Aici aplicația nu are acces la microfon. Atinge câmpul și folosește microfonul de pe tastatura telefonului.');
+}
+function toggleVoice(id){
+  if (Voice.rec){ const same = Voice.target === id; try { Voice.rec.stop(); } catch (e) {} if (same) return; }
+  const el = document.getElementById(id); if (!el || !voiceOn()) return;
+  let rec; try { rec = new SpeechRec(); } catch (e) { voiceBlocked(); return; }
+  rec.lang = 'ro-RO'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+  const base = el.value.replace(/\s+$/, ''), ph = el.placeholder;
+  Voice.rec = rec; Voice.target = id;
+  el.placeholder = 'Ascult…';
+  rec.onresult = ev => {
+    let said = ''; for (let i = 0; i < ev.results.length; i++) said += ev.results[i][0].transcript;
+    said = said.trim();
+    const cur = document.getElementById(id); if (!cur || !said) return;
+    cur.value = base ? base + (/[.,;:]$/.test(base) ? ' ' : ', ') + said : said;
+    cur.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  rec.onerror = ev => {
+    if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed' || ev.error === 'audio-capture') voiceBlocked();
+    else if (ev.error === 'no-speech') toast('Nu am auzit nimic. Atinge microfonul și încearcă din nou.');
+    else if (ev.error !== 'aborted') toast('Dictarea nu a mers de data asta. Încearcă din nou.');
+  };
+  rec.onend = () => {
+    if (Voice.rec === rec){ Voice.rec = null; Voice.target = null; }
+    const cur = document.getElementById(id); if (cur) cur.placeholder = ph;
+    syncMics();
+  };
+  try { rec.start(); } catch (e) { Voice.rec = null; Voice.target = null; el.placeholder = ph; toast('Dictarea nu a pornit. Încearcă din nou.'); }
+  syncMics();
 }
 
 /* ---------- snow (falls from the top) ---------- */
@@ -2386,7 +2632,7 @@ function renderPreview(){
   const cc = CONF[d.confidence];
   const range = unsure && Math.round(hi) - Math.round(lo) >= 40 ? '<p class="krange">Probabil între ' + fmt(Math.round(lo / 10) * 10) + ' și ' + fmt(Math.round(hi / 10) * 10) + ' kcal' + (d.question ? '. Răspunsul de mai jos îl strânge.' : d.items.some(it => it.conf === 'mică') ? '. Ajustează porțiile marcate cu „verifică”.' : '.') + '</p>' : '';
   const ask = d.question && (d.src === 'text' || d.src === 'photo') && !S.aiOff
-    ? '<div class="ask"><p><b>Claude întreabă:</b> ' + esc(d.question) + '</p><div class="ask-row"><label class="sr" for="askIn">Răspunsul tău</label><input type="text" id="askIn" placeholder="ex: o lingură"><button class="btn soft sm" data-action="ask-send">Recalculează</button></div></div>' : '';
+    ? '<div class="ask"><p><b>Claude întreabă:</b> ' + esc(d.question) + '</p><div class="ask-row"><label class="sr" for="askIn">Răspunsul tău</label><div class="dict' + (voiceOn() ? ' has-mic' : '') + '"><input type="text" id="askIn" placeholder="ex: o lingură">' + micBtn('askIn') + '</div><button class="btn soft sm" data-action="ask-send">Recalculează</button></div></div>' : '';
   el.innerHTML = '<div class="panel-head"><h2 id="pvTitle">Verifică și adaugă</h2>' + '<span class="aichip">Generat de AI</span>' + (cc ? '<span class="conf cf-' + cc.cls + '"><i></i>Siguranță ' + esc(d.confidence) + '</span>' : '') + '</div>' +
     '<ul class="pitems">' + rows + '</ul>' +
     '<div class="ptotal"><span class="mx"><span><i class="dot p"></i>' + fmt1(tot.protein) + ' g</span><span><i class="dot c"></i>' + fmt1(tot.carbs) + ' g</span><span><i class="dot f"></i>' + fmt1(tot.fat) + ' g</span></span><b>' + fmt(tot.kcal) + ' kcal</b></div>' +
@@ -2778,7 +3024,14 @@ function bindStatic(){
       case 'prev-day': S.view = addDays(S.view, -1); renderDayParts(); break;
       case 'next-day': if (S.view < todayKey()){ S.view = addDays(S.view, 1); renderDayParts(); } break;
       case 'go-today': S.view = todayKey(); renderDayParts(); break;
-      case 'tab': S.tab = b.dataset.tab; showErr(''); renderTabs(); break;
+      case 'tab': S.tab = b.dataset.tab; showErr(''); stopVoice(); renderTabs(); break;
+      case 'mic': toggleVoice(b.dataset.target); break;
+      case 'prod-import': if ($('#libSheet').hidden) openLib(); openProdIO('import'); break;
+      case 'prod-export': openProdIO('export'); break;
+      case 'prod-io-close': S.prodIO = null; renderLib(); break;
+      case 'prod-import-ok': importProducts(); break;
+      case 'prod-copy': copyProducts(); break;
+      case 'prod-download': downloadProducts(); break;
       case 'meal': S.meal = b.dataset.meal; renderMeals(); renderRecent(); renderPreview(); renderHero(); if (S.bc && S.bc.state === 'found') renderBarcode(); break;
       case 'add-to': S.meal = b.dataset.meal; renderMeals(); renderRecent(); renderPreview(); renderHero(); if (S.bc && S.bc.state === 'found') renderBarcode(); goToLogger(); break;
       case 'estimate-text': estimate('text'); break;
@@ -2962,12 +3215,15 @@ function bindStatic(){
     if (S.bc && t.id === 'bcQty'){ S.bc.qty = t.value; $$('[data-action="bc-qty"]').forEach(x => x.setAttribute('aria-pressed', String(num(x.dataset.q) === num(t.value)))); updateBcPrev(); }
     const BPF = { bpName: 'name', bpK: 'kcal', bpP: 'protein', bpC: 'carbs', bpF: 'fat', bpServ: 'serving', bpPack: 'pack' };
     if (S.bc && S.bc.draft && BPF[t.id]) S.bc.draft[BPF[t.id]] = t.value;
+    if (t.id === 'impText') onImportText(t.value);
+    if (t.id === 'prodQ'){ S.prodQ = t.value; const pl = $('#prodList'); if (pl) pl.innerHTML = prodListHtml(); }
   });
   $('#photoInput').addEventListener('change', ev => onPhoto(ev.target.files && ev.target.files[0]));
   document.addEventListener('change', ev => {
     const t = ev.target;
     if (t.id === 'bcInput') onBarcodePhoto(t.files && t.files[0]);
     if (t.id === 'bcLabelInput') readLabel(t.files && t.files[0]);
+    if (t.id === 'impFile'){ readImportFile(t.files && t.files[0]); t.value = ''; }
     if (t.dataset && t.dataset.consent && S.cdraft){ S.cdraft[t.dataset.consent] = t.checked; const b = $('[data-action="consent-ok"]'); if (b) b.disabled = !(S.cdraft.health && S.cdraft.age); }
   });
   $('#toastBtn').addEventListener('click', () => { const fn = toastFn; toastFn = null; $('#toast').hidden = true; if (fn) fn(); });

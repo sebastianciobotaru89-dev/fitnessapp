@@ -567,3 +567,25 @@ details.manual .mgrid{margin-top:10px}
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
 }
+
+/* voice dictation: a mic button inside text fields */
+.dict{position:relative;min-width:0}
+.dict.has-mic textarea{padding-right:56px}
+.dict.has-mic input[type="text"]{padding-right:50px}
+.mic{position:absolute;right:6px;bottom:6px;width:40px;height:40px;padding:0;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);display:grid;place-items:center;cursor:pointer}
+.dict input + .mic{top:50%;bottom:auto;right:5px;width:36px;height:36px;margin-top:-18px}
+.dict textarea + .mic{right:14px;bottom:10px}
+.mic[aria-pressed="true"]{background:var(--over);border-color:var(--over);color:#fff;animation:micPulse 1.3s ease-out infinite}
+@keyframes micPulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--over) 55%,transparent)}100%{box-shadow:0 0 0 12px color-mix(in srgb,var(--over) 0%,transparent)}}
+@media (prefers-reduced-motion: reduce){.mic[aria-pressed="true"]{animation:none}}
+
+/* product lists: import and export */
+.io{display:flex;flex-direction:column;gap:10px;margin:0 0 14px;padding:14px;border-radius:16px;background:var(--sunk)}
+.io textarea{background:var(--surface)}
+.io .lbl{margin:0}
+.filebtn{position:relative;align-self:flex-start}
+.filebtn input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.imp-prev p{margin:0 0 4px;font-size:13.5px}
+.imp-prev:empty{display:none}
+.prod-q{margin-bottom:6px}
+.bc-import{align-self:flex-start;padding-left:0}

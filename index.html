@@ -84,7 +84,7 @@
 
         <div class="pane" data-pane="text">
           <label class="sr" for="foodText">Descrie ce ai mâncat</label>
-          <textarea id="foodText" rows="3" placeholder="ex: 2 ouă ochiuri, o felie de pâine integrală și o cafea cu lapte"></textarea>
+          <div class="dict"><textarea id="foodText" rows="3" placeholder="ex: 2 ouă ochiuri, o felie de pâine integrală și o cafea cu lapte"></textarea><button type="button" class="mic" data-action="mic" data-target="foodText" aria-label="Dictează" aria-pressed="false" hidden><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg></button></div>
           <button class="btn primary" data-action="estimate-text">Calculează caloriile</button>
           <p class="hint">Merge și cu produse de marcă sau din restaurant, de exemplu „un meniu Big Mac mediu”.</p>
         </div>
@@ -98,7 +98,7 @@
             <span><b id="photoTitle">Fă o poză farfuriei</b><span id="photoSub">sau etichetei de pe ambalaj</span></span>
           </label>
           <label class="sr" for="photoNote">Detalii despre poză</label>
-          <input type="text" id="photoNote" placeholder="Detalii (opțional): ex. am mâncat doar jumătate">
+          <div class="dict"><input type="text" id="photoNote" placeholder="Detalii (opțional): ex. am mâncat doar jumătate"><button type="button" class="mic" data-action="mic" data-target="photoNote" aria-label="Dictează" aria-pressed="false" hidden><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg></button></div>
           <button class="btn primary" data-action="estimate-photo" id="photoBtn" disabled>Analizează poza</button>
           <p class="hint">Pune o furculiță lângă farfurie, ca porția să fie estimată mai bine.</p>
         </div>
@@ -111,12 +111,13 @@
           </label>
           <div class="bc-row"><label class="sr" for="bcCode">Cifrele codului de bare</label><input type="text" id="bcCode" inputmode="numeric" placeholder="sau scrie cifrele de sub cod"><button class="btn soft" data-action="bc-lookup">Caută</button></div>
           <div id="bcResult"></div>
-          <p class="hint">Prima dată salvezi produsul, cu poza etichetei. Data viitoare îl găsești instant după cod.</p>
+          <p class="hint">Caut produsul întâi în lista ta, apoi, unde e posibil, în baza deschisă Open Food Facts. Ce nu găsesc salvezi o dată, cu poza etichetei, și data viitoare apare instant.</p>
+          <button class="rm bc-import" data-action="prod-import">Importă o listă de coduri de bare</button>
         </div>
 
         <div class="pane" data-pane="manual" hidden>
           <div class="mgrid">
-            <div class="full"><label class="lbl" for="mName">Aliment</label><input type="text" id="mName" placeholder="ex: Iaurt grecesc 2%, 150 g"></div>
+            <div class="full"><label class="lbl" for="mName">Aliment</label><div class="dict"><input type="text" id="mName" placeholder="ex: Iaurt grecesc 2%, 150 g"><button type="button" class="mic" data-action="mic" data-target="mName" aria-label="Dictează" aria-pressed="false" hidden><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg></button></div></div>
             <div class="half"><label class="lbl" for="mKcal">Calorii</label><div class="unit"><input type="text" id="mKcal" inputmode="decimal" placeholder="0"><em>kcal</em></div></div>
             <div class="half"><label class="lbl" for="mGrams">Cantitate</label><div class="unit"><input type="text" id="mGrams" inputmode="decimal" placeholder="opțional"><em>g</em></div></div>
             <div><label class="lbl" for="mP">Prot.</label><input type="text" id="mP" inputmode="decimal" placeholder="g"></div>
