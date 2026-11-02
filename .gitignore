@@ -11,3 +11,16 @@ desktop.ini
 # Unelte
 node_modules/
 *.log
+
+# Secrete: nu intră niciodată în repository
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.keystore
+*.jks
+secrets/
+supabase/.env
+supabase/.temp/

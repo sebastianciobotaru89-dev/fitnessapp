@@ -589,3 +589,9 @@ details.manual .mgrid{margin-top:10px}
 .imp-prev:empty{display:none}
 .prod-q{margin-bottom:6px}
 .bc-import{align-self:flex-start;padding-left:0}
+
+/* guardrails: values that fail the sanity checks */
+.warn{display:block;margin-top:3px;font-size:12.5px;font-weight:550;color:color-mix(in srgb,var(--over) 72%,var(--ink))}
+.idea .warn{margin:0}
+.warnbox{margin:0 0 10px;padding:10px 12px;border-radius:12px;border:1px solid var(--over);background:color-mix(in srgb,var(--over) 8%,transparent);font-size:13.5px;color:var(--ink)}
+.bc-card .warnbox{margin:0}

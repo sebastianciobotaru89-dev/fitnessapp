@@ -1,0 +1,4 @@
+#!/bin/sh
+# Refuses a commit that contains an API key or another secret.
+# Turn it on once per copy of the repo:  git config core.hooksPath .githooks
+exec node tools/check-secrets.mjs --staged

@@ -61,3 +61,26 @@ cod;nume;kcal;proteine;glucide;grasimi;unitate;portie;pachet
 ```
 
 Primele trei coloane sunt obligatorii. Separatorul poate fi `;`, virgulă sau tab, iar o listă salvată din Excel ca CSV merge direct. Un cod care există deja se actualizează. Biblioteca ține până la 600 de produse.
+
+## Securitate
+
+- **Nicio cheie API în acest repository.** Aplicația rulează în browser, deci tot ce e în `index.html`, `css/` și `js/` poate fi citit de oricine. Cheile (de exemplu cea pentru OpenAI) stau doar pe server, în secretele funcției care vorbește cu AI-ul.
+- **Verificare înainte de commit.** `tools/check-secrets.mjs` caută chei în fișiere și în tot istoricul. Pornește verificarea automată la fiecare commit cu:
+
+  ```
+  git config core.hooksPath .githooks
+  ```
+
+- **Verificare pe GitHub.** La fiecare push, workflow-ul „Verificare secrete” scanează din nou fișierele și istoricul.
+- **Dacă o cheie scapă totuși**, șterge-o din cod nu e de ajuns, pentru că rămâne în istoric. Revoc-o imediat la furnizor și creează alta.
+
+## Verificările pentru răspunsurile AI
+
+Modelele de limbaj pot da cifre greșite. Aplicația verifică fiecare estimare înainte s-o arate:
+
+- caloriile trebuie să se potrivească cu proteinele, glucidele și grăsimile (4, 4 și 9 kcal pe gram);
+- un aliment nu poate avea mai mult de 9 kcal pe gram, iar macronutrienții nu pot trece de gramaj;
+- pe etichete, la 100 g: cel mult 900 kcal, macronutrienții cel mult 100 g, iar kcal și kJ trebuie să se potrivească;
+- porțiile și mesele neobișnuit de mari sunt semnalate.
+
+Ce nu trece verificările e marcat „verifică”, cu motivul. Nimic nu intră în jurnal fără confirmarea ta. Nota și cifrele din raportul săptămânal sunt calculate de aplicație, iar AI-ul scrie doar textul.
