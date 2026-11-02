@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Porția</string>
+    <string name="title_activity_main">Porția</string>
+    <string name="package_name">com.portia.app</string>
+    <string name="custom_url_scheme">com.portia.app</string>
+</resources>
