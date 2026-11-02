@@ -2,7 +2,7 @@
 'use strict';
 
 /* ---------- constants ---------- */
-const PREFILL = { age: 37, height: 183, weight: 85, goal: 'recomp' };
+const PREFILL = { age: 0, height: 0, weight: 0, goal: 'recomp' };
 const ACT = [
   { id:'sed',   f:1.2,   t:'Sedentar',        d:'Puțină mișcare, fără antrenamente' },
   { id:'light', f:1.375, t:'Ușor activ',      d:'1–3 antrenamente pe săptămână' },
@@ -577,6 +577,8 @@ function loadCache(){
   if (src){ S.profile = normProfile(src.profile); S.days = normDays(src.days); S.library = normLibrary(src.library); }
 }
 async function boot(){
+  // Outside Claude (e.g. GitHub Pages) there is no owner: paid themes stay locked
+  if (!window.claude || typeof window.claude.use !== 'function') S.isOwner = false;
   S.hostTheme = document.documentElement.getAttribute('data-theme');
   applyMode();
   try {
@@ -715,7 +717,8 @@ function applyTheme(id){
   if (fx) document.documentElement.setAttribute('data-fx', fx); else document.documentElement.removeAttribute('data-fx');
   updateSnow(); updateIce(); updateHud();
 }
-const savedSkin = () => (S.profile && S.profile.skin) || lsGet('portia-skin') || 'proaspat';
+// A paid theme loads only for the owner; anyone else falls back to the default theme
+const savedSkin = () => { const id = (S.profile && S.profile.skin) || lsGet('portia-skin') || 'proaspat'; return THEMES[id] && (THEMES[id].free || S.isOwner) ? id : 'proaspat'; };
 function themeBtn(id){
   const t = THEMES[id], locked = !t.free && !S.isOwner;
   const tier = TIERS[t.tier] || TIERS.plus;
