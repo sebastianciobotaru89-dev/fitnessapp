@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Porția · Confidențialitate</title>
+<meta name="description" content="Ce date păstrează Porția, unde stau și cum le ștergi.">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<style>
+@font-face{font-family:"Archivo";src:url(fonts/archivo.woff) format("woff");font-weight:100 900;font-stretch:62% 125%;font-display:swap}
+@font-face{font-family:"Instrument Sans";src:url(fonts/instrument-sans.woff) format("woff");font-weight:400 700;font-display:swap}
+:root{--bg:#EFF4F1;--surface:#FFFFFF;--ink:#0F1C16;--muted:#57685F;--line:#D5E0D9;--acc:#11874F;color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root{--bg:#0A110E;--surface:#131C17;--ink:#E9F2EC;--muted:#8FA398;--line:#22302A;--acc:#3DD68C}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 "Instrument Sans",system-ui,sans-serif;-webkit-text-size-adjust:100%}
+main{max-width:680px;margin:0 auto;padding:40px 20px 64px}
+header{display:flex;flex-direction:column;align-items:flex-start;gap:16px;margin-bottom:28px}
+header img{width:52px;height:52px;border-radius:13px}
+h1{font-family:Archivo,system-ui,sans-serif;font-stretch:118%;font-weight:850;font-size:clamp(28px,7.6vw,42px);overflow-wrap:anywhere;line-height:1.05;letter-spacing:-.02em;margin:0}
+.date{color:var(--muted);font-size:14px;margin:4px 0 0}
+.lead{font-size:18px;margin:0 0 28px}
+section{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:20px 22px;margin:0 0 14px}
+h2{font-family:Archivo,system-ui,sans-serif;font-stretch:110%;font-weight:760;font-size:19px;line-height:1.25;margin:0 0 8px}
+p{margin:0 0 10px}
+p:last-child,ul:last-child{margin-bottom:0}
+ul{margin:0 0 10px;padding-left:20px}
+li{margin:4px 0}
+a{color:var(--acc)}
+.en{color:var(--muted);font-size:15px}
+.en h2{color:var(--ink)}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="icons/icon-192.png" alt="">
+    <div><h1>Confidențialitate</h1><p class="date">Porția, aplicația de calorii și macronutrienți · actualizat pe 2 noiembrie 2026</p></div>
+  </header>
+
+  <p class="lead">Pe scurt: jurnalul tău stă pe telefonul tău. Porția nu are conturi, nu trimite datele tale pe un server, nu are reclame și nu te urmărește.</p>
+
+  <section>
+    <h2>Ce păstrează aplicația</h2>
+    <p>Ce notezi tu: mesele, apa, greutatea, țintele de calorii și macronutrienți, posturile, rețetele, produsele salvate și setările. Datele de profil pe care le dai la început (sex, vârstă, înălțime, greutate, nivel de activitate și obiectiv) servesc doar la calculul țintei.</p>
+    <p>Acestea sunt date despre sănătate, așa că aplicația îți cere acordul explicit înainte să păstreze ceva.</p>
+  </section>
+
+  <section>
+    <h2>Unde stau datele</h2>
+    <p>Doar pe dispozitivul tău, în memoria aplicației. Nu le trimitem nicăieri și nu le vedem. Dacă ștergi aplicația, se șterg și datele.</p>
+    <p>Ca să le muți pe alt telefon, din Profil → Cod de backup generezi un cod pe care îl păstrezi tu și îl restaurezi pe celălalt dispozitiv.</p>
+  </section>
+
+  <section>
+    <h2>Ce iese de pe telefon</h2>
+    <ul>
+      <li><b>Codurile de bare.</b> Când cauți un produs care nu e în lista ta, aplicația trimite numărul codului de bare la <a href="https://world.openfoodfacts.org">Open Food Facts</a>, o bază de date deschisă despre alimente, și primește valorile nutriționale. Nu trimite nimic altceva despre tine. Se aplică <a href="https://world.openfoodfacts.org/privacy">politica lor de confidențialitate</a>.</li>
+      <li><b>Nimic altceva.</b> Nu folosim statistici de utilizare, rapoarte de erori, reclame sau servicii de urmărire.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Camera și pozele</h2>
+    <p>Aplicația folosește camera sau galeria doar când alegi tu să fotografiezi un cod de bare. Poza e citită pe telefon și nu e salvată sau trimisă nicăieri.</p>
+  </section>
+
+  <section>
+    <h2>Cum ștergi totul</h2>
+    <p>Din Profil → Datele tale → Șterge contul și toate datele. Ștergerea e imediată și definitivă. Același efect îl are dezinstalarea aplicației.</p>
+  </section>
+
+  <section>
+    <h2>Copii</h2>
+    <p>Porția e pentru persoane de cel puțin 16 ani. Nu e un dispozitiv medical și nu înlocuiește sfatul unui medic sau nutriționist.</p>
+  </section>
+
+  <section>
+    <h2>Versiunea web și versiunea din Claude</h2>
+    <p>Pe site, datele stau în browserul tău, pe dispozitivul respectiv. Site-ul e găzduit de GitHub Pages, care poate păstra jurnale tehnice ale accesărilor, după <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">politica GitHub</a>.</p>
+    <p>În aplicația Claude, datele se salvează în contul tău Claude. Dacă pornești estimările cu AI, textul sau poza mesei sunt trimise la Claude (Anthropic) doar ca să fie estimate, fără numele sau e-mailul tău.</p>
+  </section>
+
+  <section>
+    <h2>Schimbări și întrebări</h2>
+    <p>Dacă se schimbă ceva în felul în care aplicația folosește datele, actualizăm pagina aceasta și data de sus înainte ca schimbarea să ajungă în aplicație.</p>
+    <p>Pentru întrebări sau cereri despre datele tale, scrie-ne pe <a href="https://github.com/sebastianciobotaru89-dev/fitnessapp/issues">pagina proiectului</a>.</p>
+  </section>
+
+  <section class="en" lang="en">
+    <h2>In English</h2>
+    <p>Porția keeps your food journal, water, weight, targets and settings only on your device. There are no accounts, no servers, no ads, no analytics and no tracking. The only data that leaves the device is a barcode number, sent to Open Food Facts when you look up a product. The camera is used only when you choose to photograph a barcode, and the photo is read on the device. You can delete everything from Profile → Your data, or by uninstalling the app. Porția is for people aged 16 and over.</p>
+  </section>
+</main>
+</body>
+</html>

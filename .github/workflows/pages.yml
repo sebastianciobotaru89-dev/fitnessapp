@@ -29,7 +29,7 @@ jobs:
       - name: Pregătesc doar fișierele aplicației
         run: |
           mkdir _site
-          cp -r index.html manifest.webmanifest .nojekyll css js fonts icons _site/
+          cp -r index.html confidentialitate.html manifest.webmanifest .nojekyll css js fonts icons _site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   init:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5

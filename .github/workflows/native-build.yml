@@ -83,7 +83,7 @@ jobs:
           profile: pixel_7
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
-          script: bash tools/android-smoke.sh android/app/build/outputs/apk/debug/app-debug.apk
+          script: node tools/android-smoke.mjs android/app/build/outputs/apk/debug/app-debug.apk
       - uses: actions/upload-artifact@v4
         if: always() && steps.has.outputs.ok
         with:
@@ -112,6 +112,7 @@ jobs:
       - name: Construiesc pentru simulator
         if: steps.has.outputs.ok
         run: |
+          set -o pipefail
           xcodebuild -version
           xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \

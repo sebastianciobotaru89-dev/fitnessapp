@@ -15,7 +15,7 @@ tools/                verificarea de secrete și construirea versiunii pentru Cl
 .nojekyll             spune GitHub Pages să servească fișierele exact cum sunt
 ```
 
-Nu are pas de build și nici dependențe. Ce e în repository e exact ce se publică.
+Versiunea web nu are pas de build: ce e în repository e exact ce se publică pe GitHub Pages. Aplicația pentru telefoane și tablete folosește aceleași fișiere, împachetate cu Capacitor (vezi mai jos).
 
 ## Cum o pornești pe calculator
 
@@ -37,6 +37,32 @@ Workflow-ul „Publicare pe GitHub Pages” publică aplicația la fiecare push 
 ## Instalează pe telefon
 
 Pe iPhone, deschide adresa aplicației în Safari, apasă **Partajează → Adaugă pe ecranul principal**. Porția apare cu iconița ei și se deschide pe tot ecranul, fără barele browserului. Pe Android, în Chrome, alegi **Instalează aplicația** din meniu.
+
+## Aplicația pentru iPhone, iPad și Android
+
+Aceleași fișiere devin aplicație nativă cu [Capacitor](https://capacitorjs.com). ID-ul aplicației e `com.portia.app`.
+
+```
+package.json            Capacitor și pluginurile native
+capacitor.config.json   numele, culorile, ecranul de pornire, bara de stare
+assets/                 sursa iconiței și a ecranului de pornire
+android/  ios/          proiectele native, create de workflow
+tools/build-www.mjs     adună fișierele aplicației în www/
+```
+
+În aplicația nativă: vibrații la acțiuni, bara de stare care urmează tema, butonul Înapoi pe Android, tastatura care ascunde bara de taburi, partajare pentru fișierul .csv, o copie a jurnalului în memoria nativă a telefonului și două coloane pe tabletă. Temele plătite și oferta apar abia când plata prin App Store și Google Play e gata.
+
+Workflow-uri:
+
+- **Aplicația nativă – creare proiecte iOS și Android** (manual): creează sau actualizează `ios/` și `android/`, iconițele și `package-lock.json`. Rulează-l după ce schimbi `package.json`.
+- **Aplicația nativă – construire de test** (la fiecare push): construiește APK-ul de test și versiunea pentru simulatorul iOS, apoi deschide aplicația pe un telefon Android emulat, pe un iPhone și pe un iPad simulat, face capturi și verifică să nu apară erori. APK-ul și capturile se descarcă din pagina rulării, la **Artifacts**.
+
+Pe calculator (pentru Android ai nevoie de Android Studio, pentru iOS de un Mac cu Xcode):
+
+```
+npm install
+npm run android     # sau: npm run ios
+```
 
 ## Cum salvezi o schimbare
 

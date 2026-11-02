@@ -1,0 +1,162 @@
+// Smoke test of the Android app on an emulator, run by the "construire de test" workflow.
+// Installs the debug APK, opens Porția, drives it through the WebView's DevTools protocol,
+// photographs the real screen and fails on JavaScript errors or broken native features.
+// Usage: node tools/android-smoke.mjs path/to/app-debug.apk
+import { execSync } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
+
+const APK = process.argv[2];
+const PKG = 'com.portia.app';
+const OUT = 'smoke';
+mkdirSync(OUT, { recursive: true });
+const sh = c => execSync(c, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 << 20 });
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const errors = [];
+const ok = (name, cond, extra) => {
+  const line = (cond ? 'OK  ' : 'EȘEC ') + name + (extra !== undefined ? ' — ' + JSON.stringify(extra) : '');
+  console.log(cond ? '::notice::' + line : '::error::' + line);
+  if (!cond) errors.push(name);
+};
+const shot = name => writeFileSync(`${OUT}/android-${name}.png`, execSync('adb exec-out screencap -p', { maxBuffer: 64 << 20 }));
+
+// one day of food, to see the screens with content
+function seed(){
+  const k = d => d.toISOString().slice(0, 10), t = new Date(), at = Date.now();
+  const days = {};
+  for (let i = 1; i <= 6; i++){ const d = new Date(t); d.setDate(d.getDate() - i); days[k(d)] = { date: k(d), water: 2250, weight: +(84.6 - i * 0.15).toFixed(1), entries: [{ id: 'y' + i, name: 'Ovăz cu lapte și banană', kcal: 2350 + i * 70, protein: 150 + i * 4, carbs: 260, fat: 72, meal: 'breakfast', at: at - i * 864e5, src: 'manual' }] }; }
+  days[k(t)] = { date: k(t), water: 1250, entries: [
+    { id: 'a', name: '2 ouă ochiuri', grams: 110, kcal: 196, protein: 13.6, carbs: 0.9, fat: 15, meal: 'breakfast', at: at - 5e6, src: 'manual' },
+    { id: 'b', name: 'Pâine integrală', grams: 40, kcal: 98, protein: 4, carbs: 17, fat: 1.3, meal: 'breakfast', at: at - 4.9e6, src: 'manual' },
+    { id: 'c', name: 'Piept de pui la grătar', grams: 200, kcal: 330, protein: 62, carbs: 0, fat: 7, meal: 'lunch', at: at - 1e6, src: 'manual' },
+    { id: 'd', name: 'Orez basmati', grams: 150, kcal: 195, protein: 4, carbs: 42, fat: 0.5, meal: 'lunch', at: at - 0.9e6, src: 'manual' }] };
+  const consent = { v: 1, health: at, ai: 0, age: true };
+  const profile = { sex: 'm', age: 34, height: 181, weight: 84.5, activity: 'mod', goal: 'recomp', targets: { kcal: 2520, protein: 186, carbs: 290, fat: 70, water: 3000 }, consent };
+  return { data: { profile, days, library: { recipes: [], favorites: [], reports: [], products: [] } }, consent };
+}
+
+async function connect(){
+  for (let i = 0; i < 40; i++){
+    const m = sh('adb shell cat /proc/net/unix').match(/@(webview_devtools_remote_\d+)/);
+    if (m){
+      try { sh('adb forward --remove tcp:9222'); } catch {}
+      sh(`adb forward tcp:9222 localabstract:${m[1]}`);
+      try {
+        const list = await (await fetch('http://127.0.0.1:9222/json/list')).json();
+        const t = list.find(x => x.type === 'page' && /localhost/.test(x.url));
+        if (t) return cdp(t.webSocketDebuggerUrl);
+      } catch {}
+    }
+    await sleep(1000);
+  }
+  throw new Error('Nu găsesc WebView-ul aplicației.');
+}
+async function cdp(url){
+  const ws = new WebSocket(url); let id = 0; const pend = new Map(), seen = [];
+  await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
+  ws.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    if (m.id && pend.has(m.id)){ const p = pend.get(m.id); pend.delete(m.id); m.error ? p.rej(new Error(m.error.message)) : p.res(m.result); return; }
+    if (m.method === 'Runtime.exceptionThrown') seen.push('excepție: ' + (m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text));
+    if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') seen.push('console.error: ' + m.params.args.map(a => a.value ?? a.description).join(' '));
+  };
+  const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pend.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
+  const ev = async expr => {
+    const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true });
+    if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
+    return r.result.value;
+  };
+  await send('Runtime.enable');
+  return { send, ev, seen, close: () => ws.close() };
+}
+const start = () => sh(`adb shell am start -W -n ${PKG}/.MainActivity`);
+// a real finger tap through Android's input system, at the element's place on the screen
+const tap = async (page, sel) => {
+  const r = await page.ev(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); if (!el) return null; el.scrollIntoView({ block: 'nearest' }); const b = el.getBoundingClientRect(); return { x: (b.left + b.width / 2) * devicePixelRatio, y: (b.top + b.height / 2) * devicePixelRatio }; })()`);
+  if (!r){ ok('găsesc ' + sel, false); return; }
+  sh(`adb shell input tap ${Math.round(r.x)} ${Math.round(r.y)}`); await sleep(800);
+};
+const swipe = (x1, y1, x2, y2, ms = 220) => sh(`adb shell input swipe ${x1} ${y1} ${x2} ${y2} ${ms}`);
+const back = () => sh('adb shell input keyevent 4');
+const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity activities').split('\n').filter(l => /mResumedActivity|topResumedActivity|ResumedActivity:/.test(l)).join('\n'));
+
+(async () => {
+  sh('adb wait-for-device');
+  console.log(sh(`adb install -r ${APK}`).trim());
+  sh('adb logcat -c');
+  start(); await sleep(9000);
+  let page = await connect();
+  await sleep(1500);
+  shot('1-bun-venit');
+
+  const info = await page.ev(`({ native: Capacitor.isNativePlatform(), platform: Capacitor.getPlatform(), plugins: Object.keys(Capacitor.Plugins).sort(), mark: document.documentElement.getAttribute('data-native'), top: getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-top').trim(), bottom: getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-bottom').trim() })`);
+  ok('rulează ca aplicație nativă Android', info.native && info.platform === 'android' && info.mark === 'android', info);
+  for (const p of ['App', 'Clipboard', 'Filesystem', 'Haptics', 'Keyboard', 'Preferences', 'Share', 'SplashScreen', 'SystemBars']) ok('pluginul ' + p + ' e disponibil', info.plugins.includes(p));
+  ok('primul ecran e bun venit', await page.ev(`!document.querySelector('#consentSheet').hidden`));
+  ok('fără bifa pentru AI când nu există AI', await page.ev(`!document.querySelector('[data-consent="ai"]')`));
+  back(); await sleep(1200);
+  ok('Înapoi pe bun venit ascunde aplicația', !resumed());
+  start(); await sleep(2500);
+
+  // a journal with content, then a restart, as a returning user sees it
+  const { data, consent } = seed();
+  await page.ev(`localStorage.setItem('portia-consent', ${JSON.stringify(JSON.stringify(consent))}); localStorage.setItem('mt-local', ${JSON.stringify(JSON.stringify(data))}); location.reload(); true`);
+  await sleep(4000);
+  ok('jurnalul se încarcă', await page.ev(`!document.querySelector('#hero.is-empty') && document.querySelectorAll('#mealsToday .mt.has').length === 2`));
+  shot('2-azi');
+  const mirrored = await page.ev(`new Promise(r => setTimeout(async () => { const v = await Capacitor.Plugins.Preferences.get({ key: 'mt-local' }); r(!!(v && v.value && JSON.parse(v.value).profile)); }, 900))`);
+  ok('jurnalul are copie în memoria nativă', mirrored);
+  ok('vibrațiile răspund', await page.ev(`Capacitor.Plugins.Haptics.impact({ style: 'LIGHT' }).then(() => true, e => String(e))`) === true);
+
+  // real touches: swipe to yesterday and back, through the system's input
+  const size = sh('adb shell wm size').match(/(\d+)x(\d+)/); const W = +size[1], H = +size[2];
+  swipe(W * 0.3, H * 0.42, W * 0.85, H * 0.44); await sleep(900);
+  ok('glisarea spre dreapta deschide ziua de ieri', /^Ieri/.test(await page.ev(`document.querySelector('#hAzi').textContent`)), await page.ev(`document.querySelector('#hAzi').textContent`));
+  shot('3-ieri');
+  back(); await sleep(800);
+  ok('Înapoi pe o zi trecută revine la azi', await page.ev(`document.querySelector('#hAzi').textContent`) === 'Azi');
+
+  await tap(page, '#tabbar [data-nav="jurnal"]'); shot('4-jurnal');
+  await tap(page, '#meal-lunch .entry .e-main');
+  ok('foaia de editare se deschide', await page.ev(`!document.querySelector('#editSheet').hidden`));
+  shot('5-editare');
+  back(); await sleep(700);
+  ok('Înapoi închide foaia', await page.ev(`document.querySelector('#editSheet').hidden`));
+  back(); await sleep(700);
+  ok('Înapoi din Jurnal duce la Azi', await page.ev(`document.documentElement.dataset.screen`) === 'azi');
+
+  await tap(page, '#tabbar [data-nav="add"]');
+  await tap(page, '#logger [data-tab="manual"]');
+  await tap(page, '#mName');
+  await sleep(1200);
+  ok('tastatura ascunde bara de taburi', await page.ev(`document.documentElement.classList.contains('kb')`));
+  shot('6-adauga-tastatura');
+  back(); await sleep(600);
+  await page.ev(`document.activeElement && document.activeElement.blur(); true`); await sleep(600);
+  await tap(page, '#tabbar [data-nav="progres"]'); shot('7-progres');
+  await tap(page, '#tabbar [data-nav="profil"]'); shot('8-profil');
+  ok('fără abonamente în aplicația din magazin', await page.ev(`!document.querySelector('.prow[data-sec="plan"]')`));
+
+  sh('adb shell cmd uimode night yes'); await sleep(2500);
+  await tap(page, '#tabbar [data-nav="azi"]'); shot('9-azi-intunecat');
+  ok('bara de stare urmează tema', true);
+  sh('adb shell cmd uimode night no'); await sleep(1500);
+
+  // closing and reopening the app keeps everything
+  await sleep(2500);
+  sh(`adb shell am force-stop ${PKG}`); start(); await sleep(6000);
+  page.close(); page = await connect(); await sleep(1500);
+  ok('datele rămân după închiderea aplicației', await page.ev(`!document.querySelector('#hero.is-empty') && document.querySelectorAll('#mealsToday .mt.has').length === 2`));
+  // iOS and Android can clear a web view's storage; the native copy brings the journal back
+  await page.ev(`localStorage.clear(); location.reload(); true`); await sleep(4000);
+  ok('jurnalul revine din memoria nativă', await page.ev(`!!JSON.parse(localStorage.getItem('mt-local') || 'null') && !document.querySelector('#hero.is-empty')`));
+
+  const seen = page.seen.slice();
+  page.close();
+  const log = sh('adb logcat -d');
+  writeFileSync(`${OUT}/logcat.txt`, log);
+  const jsErr = log.split('\n').filter(l => /Capacitor\/Console.*(Uncaught|Error|error)|Uncaught/.test(l) && !/favicon/.test(l));
+  ok('nicio eroare JavaScript', !jsErr.length && !seen.length, jsErr.slice(0, 5).concat(seen.slice(0, 5)));
+  ok('aplicația nu s-a oprit', !/FATAL EXCEPTION/.test(log));
+  if (errors.length){ console.log('::error::' + errors.length + ' verificări au eșuat: ' + errors.join('; ')); process.exit(1); }
+  console.log('Toate verificările au trecut.');
+})().catch(e => { console.log('::error::' + e.message); try { writeFileSync(`${OUT}/logcat.txt`, sh('adb logcat -d')); } catch {} process.exit(1); });

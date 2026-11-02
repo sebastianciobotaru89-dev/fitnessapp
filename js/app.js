@@ -325,8 +325,95 @@ function logoSvg(id, size){
     '</svg>';
 }
 
+/* ---------- store app (iOS and Android, through Capacitor) ---------- */
+// In the store apps Capacitor injects window.Capacitor with one object per native plugin. On the web none of this exists,
+// so every native call goes through nat(), which quietly does nothing there and never throws.
+const CapN = window.Capacitor;
+const NATIVE = !!(CapN && typeof CapN.isNativePlatform === 'function' && CapN.isNativePlatform());
+const PLATFORM = NATIVE ? CapN.getPlatform() : 'web';
+// Paid themes and the offer stay out of the store apps until App Store and Google Play billing is in place
+const SELL = !NATIVE;
+function nat(plugin, method, args){
+  const p = NATIVE && CapN.Plugins ? CapN.Plugins[plugin] : null;
+  if (!p || typeof p[method] !== 'function') return Promise.resolve(null);
+  try { return Promise.resolve(p[method](args)).then(r => r == null ? true : r, () => null); } catch (e) { return Promise.resolve(null); }
+}
+function natOn(plugin, event, fn){
+  const p = NATIVE && CapN.Plugins ? CapN.Plugins[plugin] : null;
+  if (p && typeof p.addListener === 'function') try { p.addListener(event, fn); } catch (e) {}
+}
+// iOS can clear a web view's storage when the phone runs low on space, so the store app mirrors the journal into native storage
+const MIRROR_RX = /^(mt-|portia-)/;
+const mirrorQ = new Map(); let mirrorT = null;
+function mirrorSet(k, s){
+  if (!NATIVE || !MIRROR_RX.test(k)) return;
+  mirrorQ.set(k, s); clearTimeout(mirrorT); mirrorT = setTimeout(mirrorFlush, 400);
+}
+function mirrorDel(k){ if (!NATIVE || !MIRROR_RX.test(k)) return; mirrorQ.delete(k); nat('Preferences', 'remove', { key: k }); }
+function mirrorFlush(){
+  clearTimeout(mirrorT); mirrorT = null;
+  mirrorQ.forEach((s, k) => nat('Preferences', 'set', { key: k, value: s }));
+  mirrorQ.clear();
+}
+async function nativeRestore(){
+  if (!NATIVE) return;
+  const r = await nat('Preferences', 'keys');
+  const keys = (r && Array.isArray(r.keys) ? r.keys : []).filter(k => MIRROR_RX.test(k));
+  for (const k of keys){
+    let have = null; try { have = localStorage.getItem(k); } catch (e) {}
+    if (have != null) continue;
+    const v = await nat('Preferences', 'get', { key: k });
+    if (v && typeof v.value === 'string') try { localStorage.setItem(k, v.value); } catch (e) {}
+  }
+  // anything that so far lived only in the web view gets its native copy now
+  try { Object.keys(localStorage).filter(k => MIRROR_RX.test(k) && keys.indexOf(k) < 0).forEach(k => mirrorSet(k, localStorage.getItem(k))); } catch (e) {}
+}
+// Haptics: a light tap for small actions, a success pattern when something is saved, a tick when the day changes
+const HAPTIC = { commit: 'success', 'add-manual': 'success', 'bc-add': 'success', 'fav-add': 'success', 'recipe-log': 'success', 'rl-add': 'success', 's-save': 'success', 'water-add': 'light', 'water-set': 'light', nav: 'tick', 'quick-add': 'light', 'meal-open': 'light', 'week-prev': 'tick', 'week-next': 'tick', 'go-today': 'tick', 'fast-start': 'medium', 'fast-stop': 'medium', 'del': 'medium', 'e-del': 'medium' };
+const VIB = { success: [12, 60, 18], light: 8, tick: 5, medium: 14, warn: [20, 50, 20] };
+let tickReady = false;
+function buzz(kind){
+  if (!kind) return;
+  if (NATIVE){
+    if (kind === 'success') nat('Haptics', 'notification', { type: 'SUCCESS' });
+    else if (kind === 'warn') nat('Haptics', 'notification', { type: 'WARNING' });
+    else if (kind === 'tick'){ if (!tickReady){ tickReady = true; nat('Haptics', 'selectionStart'); } nat('Haptics', 'selectionChanged'); }
+    else nat('Haptics', 'impact', { style: kind === 'medium' ? 'MEDIUM' : 'LIGHT' });
+    return;
+  }
+  // Android browsers vibrate; iPhone browsers ignore it
+  try { if (navigator.vibrate && !reduceMotion()) navigator.vibrate(VIB[kind] || 8); } catch (e) {}
+}
+// Status bar icons: light on a dark app, dark on a light one
+function nativeBars(bg){
+  if (!NATIVE || !bg) return;
+  const c = bg.replace('#', ''); if (c.length < 6) return;
+  const n = parseInt(c.slice(0, 6), 16), lum = (0.2126 * (n >> 16 & 255) + 0.7152 * (n >> 8 & 255) + 0.0722 * (n & 255)) / 255;
+  nat('SystemBars', 'setStyle', { style: lum < 0.5 ? 'DARK' : 'LIGHT' });
+}
+// Saves a text file: the share sheet in the store app, a download on the web
+async function saveTextFile(name, text, mime){
+  if (NATIVE){
+    const w = await nat('Filesystem', 'writeFile', { path: name, data: text, directory: 'CACHE', encoding: 'utf8' });
+    if (w && w.uri){ await nat('Share', 'share', { title: name, files: [w.uri] }); return true; }
+    return false;
+  }
+  try {
+    const url = URL.createObjectURL(new Blob([text], { type: mime || 'text/plain;charset=utf-8' }));
+    const a = document.createElement('a'); a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    return true;
+  } catch (e) { return false; }
+}
+async function copyText(text){
+  if (NATIVE && await nat('Clipboard', 'write', { string: text })) return true;
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) { return false; }
+}
+const HERE = !NATIVE ? 'în acest browser' : Math.min(screen.width, screen.height) >= 600 ? 'pe această tabletă' : 'pe acest telefon';
+
 /* ---------- helpers ---------- */
-const $ = (s, r) => (r || document).querySelector(s);
+const $ =(s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const nf0 = new Intl.NumberFormat('ro-RO', { maximumFractionDigits: 0 });
@@ -344,7 +431,7 @@ const newId = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID() :
 const num = v => { const n = parseFloat(String(v == null ? '' : v).replace(',', '.').replace(/[^\d.\-]/g, '')); return isFinite(n) ? n : NaN; };
 const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 const lsGet = k => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } };
-const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } };
+const lsSet = (k, v) => { try { const t = JSON.stringify(v); localStorage.setItem(k, t); mirrorSet(k, t); return true; } catch (e) { return false; } };
 const reduceMotion = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const scrollTo = el => { if (el && el.scrollIntoView) el.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'start' }); };
 
@@ -580,8 +667,9 @@ function loadCache(){
   if (src){ S.profile = normProfile(src.profile); S.days = normDays(src.days); S.library = normLibrary(src.library); }
 }
 async function boot(){
-  // Outside Claude (e.g. GitHub Pages) there is no owner: paid themes stay locked
+  // Outside Claude (e.g. GitHub Pages, the store apps) there is no owner: paid themes stay locked
   if (!window.claude || typeof window.claude.use !== 'function') S.isOwner = false;
+  if (NATIVE) await nativeRestore();
   S.hostTheme = document.documentElement.getAttribute('data-theme');
   applyMode();
   try {
@@ -599,6 +687,7 @@ async function boot(){
   window.addEventListener('scroll', onScroll, { passive: true });
   checkVoice();
   renderAll();
+  nativeInit();
   setInterval(() => { const f = S.profile && S.profile.fast; if (f && f.start && !document.hidden) renderFast(); }, 30000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) renderFast(); });
   const C = window.claude;
@@ -671,7 +760,7 @@ function maybeMigrate(){
   S.profile = p; S.days = normDays(local.days); S.library = normLibrary(local.library);
   uploadAll(false).then(ok => { if (ok) toast('Am mutat datele din browser în contul tău.'); });
 }
-function anySheetOpen(){ return $$('.sheet').some(s => !s.hidden); }
+function anySheetOpen(){ return $$('.sheet:not(.ghost)').some(s => !s.hidden); }
 /* Light / dark: "auto" follows the phone and the Claude app; light or dark pins it for this app */
 function applyMode(){
   const r = document.documentElement, pref = S.appearance;
@@ -683,7 +772,7 @@ function applyMode(){
 // the phone's status bar and the installed app's frame take the page's background colour
 function syncThemeColor(){
   const m = document.querySelector('meta[name="theme-color"]'); if (!m) return;
-  try { const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(); if (bg) m.setAttribute('content', bg); } catch (e) {}
+  try { const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(); if (bg){ m.setAttribute('content', bg); nativeBars(bg); } } catch (e) {}
 }
 /* what "Automat" resolves to right now: the Claude app's fixed theme if it has one, else the phone */
 function phoneMode(){
@@ -738,22 +827,22 @@ function themeBtn(id){
     (locked ? '<span class="badge badge-' + (t.tier || 'plus') + '">' + LOCK_ICON + tier.name + '</span>' : '') + logoSvg(id, 30) + '<b>' + t.t + '</b></button>';
 }
 function themeOpts(){
-  const groups = [['free', 'Gratuite'], ['plus', 'Plus'], ['platinum', 'Premium'], ['vip', 'Ultra']];
+  const groups = SELL || S.isOwner ? [['free', 'Gratuite'], ['plus', 'Plus'], ['platinum', 'Premium'], ['vip', 'Ultra']] : [['free', '']];
   return groups.map(g => {
     const ids = THEME_IDS.filter(id => (THEMES[id].free ? 'free' : (THEMES[id].tier || 'plus')) === g[0]);
-    return ids.length ? '<div class="tgroup"><span class="lbl">' + g[1] + '</span><div class="topts">' + ids.map(themeBtn).join('') + '</div></div>' : '';
+    return ids.length ? '<div class="tgroup">' + (g[1] ? '<span class="lbl">' + g[1] + '</span>' : '') + '<div class="topts">' + ids.map(themeBtn).join('') + '</div></div>' : '';
   }).join('');
 }
 function themeSection(){
   const ice = !!(THEMES[S.theme] && THEMES[S.theme].logo.fx === 'ice'), bloom = !!(THEMES[S.theme] && THEMES[S.theme].logo.fx === 'bloom'), petalsOn = lsGet('portia-petals') !== false;
   const xmas = !!(THEMES[S.theme] && THEMES[S.theme].logo.fx === 'xmas'), snowOn = lsGet('portia-snow') !== false;
-  return '<h3>Teme de culori</h3><p>Proaspăt și Crăciun sunt gratuite. Celelalte se deblochează cu Porția Plus, Premium sau Ultra. Tema se aplică imediat, cu tot cu logo și efecte.</p>' +
+  return '<h3>Teme de culori</h3><p>' + (SELL ? 'Proaspăt și Crăciun sunt gratuite. Celelalte se deblochează cu Porția Plus, Premium sau Ultra. ' : '') + 'Tema se aplică imediat, cu tot cu logo și efecte.</p>' +
     '<div class="tgroups">' + themeOpts() + '</div>' +
     (ice ? '<div class="row" style="margin-top:14px;justify-content:space-between"><span class="hint">Crăpături în gheață</span><button class="chip" role="switch" data-action="cracks-toggle" aria-checked="' + iceCracksOn() + '">' + (iceCracksOn() ? 'Pornite' : 'Oprite') + '</button></div>' : '') +
     (bloom ? '<div class="row" style="margin-top:14px;justify-content:space-between"><span class="hint">Petale în aplicație</span><button class="chip" role="switch" data-action="petals-toggle" aria-checked="' + petalsOn + '">' + (petalsOn ? 'Pornite' : 'Oprite') + '</button></div>' : '') +
     (xmas ? '<div class="row" style="margin-top:14px;justify-content:space-between"><span class="hint">Ninsoare în aplicație</span><button class="chip" role="switch" data-action="snow-toggle" aria-checked="' + snowOn + '">' + (snowOn ? 'Pornită' : 'Oprită') + '</button></div>' : '') +
     (S.isOwner ? '<p class="hint" style="margin-top:10px">Ca proprietar, le ai pe toate deblocate. Clienții le vor debloca prin abonament.</p>' : '') +
-    '<button class="btn ghost sm" style="margin-top:10px" data-action="open-plus">Vezi ofertele</button>';
+    (SELL ? '<button class="btn ghost sm" style="margin-top:10px" data-action="open-plus">Vezi ofertele</button>' : '');
 }
 function setSkin(id){
   applyTheme(id); lsSet('portia-skin', S.theme);
@@ -839,10 +928,10 @@ function renderConsent(){
     '<h3 class="cs-t">Înainte să începi</h3>' +
     '<p>Porția păstrează date despre sănătatea ta, așa că îți cerem acordul explicit. Nimic nu e bifat dinainte.</p>' +
     box('health', true, 'Datele despre alimentație și greutate', 'Sunt de acord ca Porția să-mi păstreze mesele, apa, greutatea, țintele și posturile, ca să-mi calculeze progresul. Le văd doar eu și le pot șterge oricând.') +
-    box('ai', false, 'Estimări cu AI', 'Sunt de acord ca textul și pozele meselor, plus totalurile zilelor pentru idei și raport, să fie trimise la Claude, un AI al companiei Anthropic, ca să estimeze caloriile. Fără numele sau e-mailul meu. Fără acest acord notez valorile manual.') +
+    (S.noSample ? '' : box('ai', false, 'Estimări cu AI', 'Sunt de acord ca textul și pozele meselor, plus totalurile zilelor pentru idei și raport, să fie trimise la Claude, un AI al companiei Anthropic, ca să estimeze caloriile. Fără numele sau e-mailul meu. Fără acest acord notez valorile manual.')) +
     box('age', true, 'Am cel puțin 16 ani', 'Porția nu e pentru copii.') +
     '<div class="medwarn"><b>Porția nu e un dispozitiv medical.</b> Nu înlocuiește sfatul unui medic sau nutriționist, iar estimările sunt aproximative. Dacă ai o afecțiune, ești însărcinată sau ai avut tulburări de alimentație, vorbește întâi cu medicul.</div>' +
-    '<p class="hint">Poți porni sau opri AI-ul și poți șterge totul oricând, din Profil → Datele tale.</p></div>' +
+    '<p class="hint">' + (S.noSample ? 'Poți șterge totul oricând, din Profil → Datele tale.' : 'Poți porni sau opri AI-ul și poți șterge totul oricând, din Profil → Datele tale.') + '</p></div>' +
     '<div class="sfoot"><button class="btn primary wide" data-action="consent-ok"' + (d.health && d.age ? '' : ' disabled') + '>Continuă</button></div>';
 }
 function acceptConsent(){
@@ -856,15 +945,15 @@ function acceptConsent(){
 /* ---------- your data: AI switch, account deletion ---------- */
 function dataSection(){
   const c = consentOf(), ai = aiConsentOn();
-  const where = S.mode === 'cloud' ? 'în contul tău Claude' : S.mode === 'local' ? 'doar în acest browser' : 'doar cât timp e deschisă pagina';
-  return '<h3>Datele tale</h3><p>Porția păstrează mesele, apa, greutatea, țintele, posturile și setările, ' + where + '. Când folosești AI, textul sau poza mesei merg la Claude (Anthropic) doar ca să fie estimate, fără numele sau e-mailul tău.</p>' +
-    '<div class="row" style="justify-content:space-between;margin-bottom:12px"><span class="hint">Estimări cu AI (Claude)</span><button class="chip" role="switch" data-action="consent-ai" aria-checked="' + ai + '"' + (S.noSample ? ' disabled' : '') + '>' + (ai ? 'Pornite' : 'Oprite') + '</button></div>' +
+  const where = S.mode === 'cloud' ? 'în contul tău Claude' : S.mode === 'local' ? 'doar ' + HERE : 'doar cât timp e deschisă pagina';
+  return '<h3>Datele tale</h3><p>Porția păstrează mesele, apa, greutatea, țintele, posturile și setările, ' + where + '.' + (S.noSample ? (NATIVE ? ' Nu le trimite nicăieri. Singura legătură la internet e căutarea unui cod de bare în Open Food Facts, care primește doar codul.' : '') : ' Când folosești AI, textul sau poza mesei merg la Claude (Anthropic) doar ca să fie estimate, fără numele sau e-mailul tău.') + '</p>' +
+    (S.noSample ? '' : '<div class="row" style="justify-content:space-between;margin-bottom:12px"><span class="hint">Estimări cu AI (Claude)</span><button class="chip" role="switch" data-action="consent-ai" aria-checked="' + ai + '">' + (ai ? 'Pornite' : 'Oprite') + '</button></div>') +
     (c ? '<p class="hint" style="margin-bottom:12px">Ai dat acordul pentru datele de sănătate pe ' + esc(new Date(c.health).toLocaleDateString('ro-RO', { day: 'numeric', month: 'long', year: 'numeric' })) + '. Ca să-l retragi, șterge contul, pentru că fără aceste date aplicația nu poate funcționa. Codul de backup de mai jos îți dă o copie a tuturor datelor.</p>' : '') +
     '<div id="delBox"><button class="btn danger-ghost" data-action="del-account">Șterge contul și toate datele</button></div>';
 }
 function delConfirmHtml(){
   return '<div class="confirm"><p><b>Ștergi definitiv contul și toate datele?</b> Mesele, greutatea, țintele, rețetele, favoritele, rapoartele și posturile dispar și nu mai pot fi recuperate. Dacă vrei să le păstrezi, generează întâi codul de backup.</p>' +
-    '<p class="hint">Dacă ai un abonament, ștergerea contului nu îl oprește. Plata continuă prin App Store sau Google Play până îl anulezi din Gestionează abonamentul.</p>' +
+    (SELL ? '<p class="hint">Dacă ai un abonament, ștergerea contului nu îl oprește. Plata continuă prin App Store sau Google Play până îl anulezi din Gestionează abonamentul.</p>' : '') +
     '<label class="lbl" for="delIn">Scrie ȘTERGE ca să confirmi</label><input type="text" id="delIn" autocomplete="off" autocapitalize="characters">' +
     '<div class="row"><button class="btn ghost" data-action="del-cancel">Renunță</button><button class="btn danger" data-action="del-confirm">Șterge definitiv</button></div><p class="ferr" id="delErr"></p></div>';
 }
@@ -887,7 +976,8 @@ async function deleteAccount(){
     if (btn){ btn.disabled = false; btn.textContent = 'Șterge definitiv'; }
     return;
   }
-  try { Object.keys(localStorage).filter(k => /^(mt-|portia-)/.test(k)).forEach(k => localStorage.removeItem(k)); } catch (e) {}
+  try { Object.keys(localStorage).filter(k => MIRROR_RX.test(k)).forEach(k => { localStorage.removeItem(k); mirrorDel(k); }); } catch (e) {}
+  if (NATIVE){ const r = await nat('Preferences', 'keys'); ((r && r.keys) || []).filter(k => MIRROR_RX.test(k)).forEach(k => nat('Preferences', 'remove', { key: k })); }
   S.profile = null; S.days = {}; S.library = normLibrary(null); S.draft = null; S.ideas = null; S.newBadge = null; S.adaptChecked = false;
   S.restoring = false;
   go('azi');
@@ -1348,7 +1438,7 @@ function renderFast(){
 }
 function fastSection(){
   const f = fastOf();
-  return '<h3>Post intermitent</h3><p>Panoul cu cronometrul de post apare pe pagina principală, sub apă.</p><div class="row"><button class="chip" role="switch" data-action="fast-show" aria-checked="' + !f.hide + '">' + (f.hide ? 'Ascuns' : 'Afișat') + '</button></div>';
+  return '<h3>Post intermitent</h3><p>Panoul cu cronometrul de post apare pe ecranul Azi, sub apă.</p><div class="row"><button class="chip" role="switch" data-action="fast-show" aria-checked="' + !f.hide + '">' + (f.hide ? 'Ascuns' : 'Afișat') + '</button></div>';
 }
 
 /* ---------- streaks and challenges ---------- */
@@ -1616,7 +1706,7 @@ function prodSection(){
   } else if (io && io.mode === 'export' && P.length){
     panel = '<div class="io"><p class="hint">Lista ta, cu ' + nProd(P.length) + '. O poți păstra, deschide în Excel sau trimite cuiva care o importă în Porția.</p>' +
       '<label class="sr" for="expText">Lista de produse</label><textarea id="expText" class="code" rows="6" readonly spellcheck="false">' + esc(productsCsv()) + '</textarea>' +
-      '<div class="row"><button class="btn soft" data-action="prod-copy">Copiază lista</button>' + (window.claude ? '' : '<button class="btn ghost" data-action="prod-download">Descarcă .csv</button>') + '</div></div>';
+      '<div class="row"><button class="btn soft" data-action="prod-copy">Copiază lista</button>' + (window.claude ? '' : '<button class="btn ghost" data-action="prod-download">' + (NATIVE ? 'Trimite .csv' : 'Descarcă .csv') + '</button>') + '</div></div>';
   }
   return '<section id="prodSec"><div class="panel-head" style="margin-bottom:8px"><h3>Produse cu cod de bare' + (P.length ? ' · ' + P.length : '') + '</h3><div class="row">' +
       '<button class="btn soft sm" data-action="prod-import" aria-pressed="' + !!(io && io.mode === 'import') + '">Importă o listă</button>' +
@@ -1913,7 +2003,7 @@ async function makeReport(){
 }
 
 /* ---------- barcode ---------- */
-const ZX_URLS = ['https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js', 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js'];
+const ZX_URLS = ['vendor/zxing.min.js', 'https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js', 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js'];
 let zxingPromise = null;
 function loadScript(src){
   return new Promise((res, rej) => {
@@ -2284,18 +2374,13 @@ function importProducts(){
   const n = add.length + upd, txt = nProd(n);
   toast(txt.charAt(0).toUpperCase() + txt.slice(1) + ' în bibliotecă' + (upd ? ', dintre care ' + upd + (upd === 1 ? ' actualizat' : ' actualizate') : '') + '.', 'Anulează', () => { S.library.products = before; libChanged(); });
 }
-function copyProducts(){
+async function copyProducts(){
   const ta = $('#expText'); if (!ta) return;
-  const fallback = () => { ta.focus(); ta.select(); toast('Lista e selectată. Copiaz-o din meniul telefonului.'); };
-  try { navigator.clipboard.writeText(ta.value).then(() => toast('Lista a fost copiată.'), fallback); } catch (e) { fallback(); }
+  if (await copyText(ta.value)){ toast('Lista a fost copiată.'); return; }
+  ta.focus(); ta.select(); toast('Lista e selectată. Copiaz-o din meniul telefonului.');
 }
-function downloadProducts(){
-  try {
-    const url = URL.createObjectURL(new Blob(['\uFEFF' + productsCsv()], { type: 'text/csv;charset=utf-8' }));
-    const a = document.createElement('a'); a.href = url; a.download = 'portia-produse.csv';
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 4000);
-  } catch (e) { copyProducts(); }
+async function downloadProducts(){
+  if (!await saveTextFile('portia-produse.csv', '\uFEFF' + productsCsv(), 'text/csv;charset=utf-8')) copyProducts();
 }
 
 /* ---------- voice dictation ---------- */
@@ -2591,7 +2676,7 @@ function renderSync(){
     const saving = S.restoring || anyBusy();
     st = S.syncErr ? 'err' : saving ? 'busy' : 'ok';
     txt = S.syncErr ? 'Problemă la salvare' : saving ? 'Se salvează…' : 'Salvat în contul tău';
-  } else if (S.mode === 'local'){ st = 'ok'; txt = 'Salvat în acest browser'; }
+  } else if (S.mode === 'local'){ st = 'ok'; txt = 'Salvat ' + HERE; }
   else if (S.mode === 'memory'){ st = 'err'; txt = 'Datele nu se pot salva aici'; }
   el.dataset.state = st; el.textContent = txt;
 }
@@ -2641,12 +2726,51 @@ function go(name){
   if (prev === 'add') stopVoice();
   S.screen = name;
   if (name !== 'add') S.lastMain = name;
+  // the new screen slides in from the side of its tab
+  document.documentElement.setAttribute('data-dir', prev && SCREENS.indexOf(name) < SCREENS.indexOf(prev) ? 'back' : 'fwd');
   $$('.screen').forEach(sc => { sc.hidden = sc.dataset.screen !== name; });
   $$('#tabbar [data-nav]').forEach(b => { if (b.dataset.nav === name) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   document.documentElement.setAttribute('data-screen', name);
+  moveTabInd(!prev);
   if (name === 'profil'){ if (S.profile) renderSettings(); else renderProfileEmpty(); }
-  window.scrollTo(0, name === 'add' ? 0 : (S.scrollY[name] || 0));
+  const q = name === 'azi' && CHEER.queued; CHEER.queued = null;
+  window.scrollTo(0, name === 'add' || q ? 0 : (S.scrollY[name] || 0));
   onScroll();
+  if (q) setTimeout(() => playCheer(q), 380);
+}
+/* Android's back button and back gesture: close what's on top, then step back towards Azi, then leave the app */
+function onBack(){
+  const open = $$('.sheet:not(.ghost)').filter(s => !s.hidden), top = open[open.length - 1];
+  if (top){
+    const locked = (top.id === 'setup' && S.setup && S.setup.first) || !CLOSERS[top.id];
+    if (locked) nat('App', 'minimizeApp'); else CLOSERS[top.id]();
+    return;
+  }
+  if (S.screen === 'profil' && S.profSec){ S.profSec = null; renderSettings(); window.scrollTo(0, S.profScroll || 0); return; }
+  if (S.screen === 'add'){ go(S.lastMain || 'azi'); return; }
+  if (S.screen !== 'azi'){ go('azi'); return; }
+  if (S.view !== todayKey()){ setDay(todayKey()); return; }
+  nat('App', 'minimizeApp');
+}
+function nativeInit(){
+  const root = document.documentElement;
+  if (!NATIVE){
+    // the web: hide the tab bar while the on-screen keyboard is up, so it doesn't ride on top of it
+    const vv = window.visualViewport; if (!vv) return;
+    const kb = () => { const t = document.activeElement, typing = !!t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName); root.classList.toggle('kb', typing && vv.height < window.innerHeight * 0.8); };
+    vv.addEventListener('resize', kb);
+    document.addEventListener('focusin', () => setTimeout(kb, 350));
+    document.addEventListener('focusout', () => setTimeout(kb, 120));
+    return;
+  }
+  root.setAttribute('data-native', PLATFORM);
+  natOn('App', 'backButton', onBack);
+  natOn('App', 'pause', mirrorFlush);
+  natOn('Keyboard', 'keyboardWillShow', () => root.classList.add('kb'));
+  natOn('Keyboard', 'keyboardWillHide', () => root.classList.remove('kb'));
+  document.addEventListener('visibilitychange', () => { if (document.hidden) mirrorFlush(); });
+  syncThemeColor();
+  requestAnimationFrame(() => nat('SplashScreen', 'hide', { fadeOutDuration: 250 }));
 }
 function renderProfileEmpty(){
   $('#settingsCard').innerHTML = '<div class="scr-head"><div><h1 id="setTitle" tabindex="-1">Profil</h1><p>Ținte, teme și datele tale</p></div></div>' +
@@ -2694,11 +2818,16 @@ function renderHero(){
     '<div class="hc-bars">' + macroBar('p', 'Proteine', t.protein, T.protein) + macroBar('c', 'Glucide', t.carbs, T.carbs) + macroBar('f', 'Grăsimi', t.fat, T.fat) + '</div>' +
     (showIdeas ? '<div class="hc-foot"><p>' + (remP > 0 ? 'Mai ai ' + fmt(remP) + ' g proteine de luat azi.' : 'Ai atins proteinele de azi.') + '</p><button class="btn hc-btn" data-action="ideas">Idei pentru ' + mealName(S.meal).toLowerCase() + '</button></div>' : '');
   const f3 = (e, t) => t ? Math.min(1, e / t) : 0;
-  heroTween(S.hero, { rem, pct, frac, f: [f3(t.protein, T.protein), f3(t.carbs, T.carbs), f3(t.fat, T.fat)] });
+  heroTween(S.hero, { k: S.view, rem, pct, frac, f: [f3(t.protein, T.protein), f3(t.carbs, T.carbs), f3(t.fat, T.fat)] });
 }
 // When the numbers change (a meal added, another day picked), count them and grow the ring and bars from where they were
 function heroTween(prev, cur){
   S.hero = cur;
+  // crossing a target by adding food today, not by opening another day
+  if (prev && prev.k === cur.k && cur.k === todayKey()){
+    if (prev.f[0] < 1 && cur.f[0] >= 1) cheer('protein');
+    else if (prev.pct < 95 && cur.pct >= 95 && cur.pct <= 105) cheer('kcal');
+  }
   if (!prev || reduceMotion()) return;
   const el = $('#hero'), num = el.querySelector('.big-num'), pc = el.querySelector('.ring-center b');
   if (prev.rem !== cur.rem || prev.pct !== cur.pct){
@@ -2726,9 +2855,6 @@ function heroTween(prev, cur){
     requestAnimationFrame(() => b.style.setProperty('--f', to));
   });
 }
-// a short tick on Android when something is saved (iPhone browsers ignore it)
-const BUZZ = { commit: 14, 'water-add': 10, 'water-set': 10, 'add-manual': 14, 'bc-add': 14, 'fav-add': 14, 'recipe-log': 14, nav: 6, 'quick-add': 6 };
-function buzz(ms){ try { if (navigator.vibrate && !reduceMotion()) navigator.vibrate(ms); } catch (e) {} }
 function macroBar(key, label, eaten, target){
   const f = target ? Math.min(1, eaten / target) : 0, over = target && eaten > target * 1.1;
   return '<div class="mbar m-' + key + (over ? ' is-over' : '') + '"><b>' + label + '</b><span class="mb-v">' + fmt(eaten) + '<small> / ' + fmt(target) + ' g</small></span><span class="mb-t"><span class="mb-f" style="--f:' + f.toFixed(3) + '"></span></span></div>';
@@ -2830,17 +2956,22 @@ function renderWater(){
   const w = getDay(S.view).water || 0;
   const cells = Math.min(16, Math.max(4, Math.round(target / 250)));
   const per = target / cells;
+  // glasses that just got water fill up from where they were; reaching the day's target gets a short shimmer
+  const was = S.waterPrev && S.waterPrev.k === S.view ? S.waterPrev.w : w;
+  S.waterPrev = { k: S.view, w };
+  const fillOf = (v, i) => v >= per*(i+1) - 0.5 ? 1 : (v > per*i ? (v - per*i)/per : 0);
   let g = '';
   for (let i = 0; i < cells; i++){
-    const lo = per*i, hi = per*(i+1);
-    const fill = w >= hi - 0.5 ? 1 : (w > lo ? (w - lo)/per : 0);
-    g += '<button class="glass' + (fill >= 1 ? ' on' : '') + '" style="--fill:' + fill.toFixed(2) + '" data-action="water-set" data-ml="' + Math.round(hi) + '" data-per="' + Math.round(per) + '" aria-label="Setează ' + fmt(hi) + ' ml"></button>';
+    const hi = per*(i+1), fill = fillOf(w, i), from = fillOf(was, i);
+    g += '<button class="glass' + (fill >= 1 ? ' on' : '') + (fill > from ? ' pour' : '') + '" style="--fill:' + fill.toFixed(2) + (fill > from ? ';--from:' + from.toFixed(2) + ';--i:' + Math.max(0, i - Math.floor(was / per)) : '') + '" data-action="water-set" data-ml="' + Math.round(hi) + '" data-per="' + Math.round(per) + '" aria-label="Setează ' + fmt(hi) + ' ml"></button>';
   }
+  const reached = was < target && w >= target;
+  if (reached && S.loaded) buzz('success');
   const left = Math.max(0, target - w);
   el.innerHTML = '<div class="ww-top"><span class="ww-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3.2c3.2 4 6 7.2 6 10.8a6 6 0 0 1-12 0c0-3.6 2.8-6.8 6-10.8z"/><path d="M9 14.2a3 3 0 0 0 3 3" stroke-linecap="round"/></svg></span>' +
       '<div class="ww-txt"><h2>Apă</h2><span>' + (left ? 'Mai ai ' + fmtL(left) + ' L' : 'Ținta de azi e atinsă') + '</span></div>' +
-      '<div class="ww-num"><b>' + fmtL(w) + '</b><span>din ' + fmtL(target) + ' L</span></div></div>' +
-    '<div class="glasses" style="--n:' + cells + '">' + g + '</div>' +
+      '<div class="ww-num"><b' + (w !== was ? ' class="bump"' : '') + '>' + fmtL(w) + '</b><span>din ' + fmtL(target) + ' L</span></div></div>' +
+    '<div class="glasses' + (reached ? ' full' : '') + '" style="--n:' + cells + '">' + g + '</div>' +
     '<div class="ww-btns"><button class="ww-b" data-action="water-add" data-ml="-250" aria-label="Scade 250 ml"' + (w <= 0 ? ' disabled' : '') + '><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 12h12"/></svg></button>' +
       '<button class="ww-b add" data-action="water-add" data-ml="250">+ 250 ml</button><button class="ww-b add" data-action="water-add" data-ml="500">+ 500 ml</button></div>';
 }
@@ -3073,7 +3204,7 @@ function profGroups(){
   return [
     ['Personalizare', [['appear', 'Aspect', { auto: 'Automat', light: 'Luminos', dark: 'Întunecat' }[S.appearance] || 'Automat'], ['theme', 'Teme de culori', (THEMES[S.theme] || {}).t || '']]],
     ['Nutriție', [['targets', 'Ținte zilnice', fmt(p.targets.kcal) + ' kcal'], ['cycle', 'Zile de sală și de pauză', c.on ? 'Activat' : 'Oprit'], ['fast', 'Post intermitent', f.hide ? 'Ascuns' : f.plan]]],
-    ['Cont', [['plan', 'Abonament', S.isOwner ? 'Proprietar' : 'Gratuit'], ['data', 'Datele tale', aiConsentOn() ? 'AI pornit' : 'AI oprit'], ['backup', 'Cod de backup', '']]],
+    ['Cont', (SELL ? [['plan', 'Abonament', S.isOwner ? 'Proprietar' : 'Gratuit']] : []).concat([['data', 'Datele tale', S.noSample ? '' : aiConsentOn() ? 'AI pornit' : 'AI oprit'], ['backup', 'Cod de backup', '']])],
     ['Despre', [['tips', 'Cum îl folosești cel mai bine', ''], ['about', 'Despre Porția', '']]]
   ];
 }
@@ -3086,7 +3217,7 @@ function renderSettingsInner(){
   const act = ACT.find(a => a.id === p.activity), g = GOALS.find(x => x.id === p.goal);
   const summary = [p.sex === 'f' ? 'Femeie' : p.sex === 'm' ? 'Bărbat' : null, p.age ? p.age + ' ani' : null, p.height ? p.height + ' cm' : null, p.weight ? fmt1(p.weight) + ' kg' : null, act ? act.t : null, g ? g.t : null].filter(Boolean).join(' · ');
   const store = S.mode === 'cloud' ? 'Datele se salvează în contul tău Claude și le vezi doar tu, pe orice dispozitiv.'
-    : S.mode === 'local' ? 'Datele se salvează doar în acest browser. Folosește codul de backup ca să nu le pierzi.'
+    : S.mode === 'local' ? 'Datele se salvează doar ' + HERE + '. Folosește codul de backup ca să nu le pierzi.'
     : 'Datele nu se pot salva aici. Copiază codul de backup înainte să închizi pagina.';
   const PLAN_HTML =
     '<section><h3>Abonament</h3><p>' + (S.isOwner ? 'Ai toate funcțiile și temele deblocate, ca proprietar.' : 'Folosești Porția gratuit. ' + FREE_FOREVER.replace(/\.$/, '') + ' rămân gratuite.') + '</p>' +
@@ -3101,7 +3232,7 @@ function renderSettingsInner(){
       '<li>Estimările din text și poze sunt aproximative. Contează să notezi constant, nu perfect.</li>' +
     '</ul></section>';
   const ABOUT_HTML =
-    '<section><h3>Despre Porția</h3><p>Porția e o aplicație de stil de viață, nu un dispozitiv medical. Nu înlocuiește sfatul unui medic sau nutriționist. Estimările, ideile de mese și raportul sunt generate de AI (Claude) și pot greși.</p></section>';
+    '<section><h3>Despre Porția</h3><p>Porția e o aplicație de stil de viață, nu un dispozitiv medical. Nu înlocuiește sfatul unui medic sau nutriționist.' + (S.noSample ? ' Valorile produselor cu cod de bare vin din Open Food Facts sau de la tine și pot avea greșeli: verifică eticheta.' : ' Estimările, ideile de mese și raportul sunt generate de AI (Claude) și pot greși.') + '</p>' + (NATIVE ? '<p><a href="https://sebastianciobotaru89-dev.github.io/fitnessapp/confidentialitate.html" target="_blank" rel="noopener">Politica de confidențialitate</a></p>' : '') + '</section>';
   const BACKUP_HTML =
     '<section><h3>Cod de backup</h3><p>Un cod care conține tot jurnalul și țintele. Păstrează-l într-o notiță și îl poți restaura oricând.</p>' +
       '<div class="row"><button class="btn soft" data-action="make-backup">Generează codul</button><button class="btn ghost" data-action="copy-backup" id="copyBtn" hidden>Copiază</button></div>' +
@@ -3180,12 +3311,10 @@ function makeBackup(){
   const n = Object.keys(S.days).length;
   toast('Cod generat pentru ' + n + (n === 1 ? ' zi' : ' zile') + '.');
 }
-function copyBackup(){
+async function copyBackup(){
   const ta = $('#bkOut'); const text = ta.value;
-  const fallback = () => { ta.focus(); ta.select(); toast('Codul e selectat. Copiază-l din meniul telefonului.'); };
-  try {
-    navigator.clipboard.writeText(text).then(() => toast('Codul a fost copiat.'), fallback);
-  } catch (e) { fallback(); }
+  if (await copyText(text)){ toast('Codul a fost copiat.'); return; }
+  ta.focus(); ta.select(); toast('Codul e selectat. Copiază-l din meniul telefonului.');
 }
 let pendingRestore = null;
 function checkRestore(){
@@ -3217,12 +3346,238 @@ async function doRestore(){
 function showSheet(sel){ $(sel).hidden = false; document.body.style.overflow = 'hidden'; }
 function closeSheet(sel){
   const el = $(sel); if (!el || el.hidden) return;
+  if (!reduceMotion()) sheetGhost(el);
   el.hidden = true;
+  const card = el.querySelector('.sheet-card'); if (card){ card.style.transform = ''; card.style.transition = ''; }
+  el.classList.remove('pulling'); el.style.removeProperty('--pull');
   if (!anySheetOpen()) document.body.style.overflow = '';
+}
+// The sheet itself closes at once, so the app's state stays simple; a copy without ids or actions slides away in its place
+let sheetDragY = 0;
+function sheetGhost(el){
+  const card = el.querySelector('.sheet-card'); if (!card) return;
+  const g = el.cloneNode(true);
+  g.removeAttribute('id'); g.removeAttribute('role'); g.setAttribute('aria-hidden', 'true'); g.classList.add('ghost');
+  g.querySelectorAll('[id]').forEach(n => n.removeAttribute('id'));
+  g.querySelectorAll('[data-action]').forEach(n => n.removeAttribute('data-action'));
+  g.style.setProperty('--from', sheetDragY + 'px'); sheetDragY = 0;
+  document.body.appendChild(g);
+  const gc = g.querySelector('.sheet-card'); if (gc){ gc.scrollTop = card.scrollTop; gc.style.transform = ''; }
+  setTimeout(() => g.remove(), 300);
 }
 function goToLogger(){
   go('add');
   if (S.tab === 'text' && !S.aiOff) $('#foodText').focus({ preventScroll: true });
+}
+
+/* ---------- moving between days ---------- */
+const mondayOf = k => addDays(k, -((parseKey(k).getDay() + 6) % 7));
+function setDay(k){
+  const t = todayKey(), min = addDays(t, -365);
+  if (k > t) k = t; if (k < min) k = min;
+  if (k === S.view) return false;
+  const dir = k > S.view ? 1 : -1, newWeek = mondayOf(k) !== mondayOf(S.view);
+  S.view = k; renderDayParts();
+  dayAnim(dir, newWeek);
+  return true;
+}
+// what slides when the day changes: the day's numbers, not the tab bar or the header
+function dayPanes(withWeek){
+  const sc = $('#scr-' + S.screen); if (!sc || (S.screen !== 'azi' && S.screen !== 'jurnal')) return [];
+  const sel = ['.scr-head > div', '#hero', '#mealsToday', '#water', '#fast', '#diary'];
+  if (withWeek) sel.push('.week');
+  return $$(sel.join(','), sc).filter(el => !el.hidden);
+}
+function dayAnim(dir, withWeek){
+  if (reduceMotion()) return;
+  dayPanes(withWeek).forEach((el, i) => {
+    el.style.transition = 'none';
+    el.style.transform = 'translateX(' + (dir * 34) + 'px)'; el.style.opacity = '0';
+    el.getBoundingClientRect();
+    const d = Math.min(i, 4) * 28;
+    el.style.transition = 'transform .36s cubic-bezier(.2,.8,.2,1) ' + d + 'ms, opacity .24s ease ' + d + 'ms';
+    el.style.transform = ''; el.style.opacity = '';
+    setTimeout(() => { el.style.transition = ''; }, 420 + d);
+  });
+}
+
+/* ---------- tab bar: the highlight slides to the tab you pick ---------- */
+function moveTabInd(instant){
+  const tb = $('#tabbar'); if (!tb) return;
+  let ind = tb.querySelector('.tab-ind');
+  if (!ind){ ind = document.createElement('span'); ind.className = 'tab-ind'; ind.setAttribute('aria-hidden', 'true'); tb.prepend(ind); instant = true; }
+  const cur = tb.querySelector('[aria-current="page"]');
+  const on = !!cur && !cur.classList.contains('tab-add');
+  ind.classList.toggle('off', !on);
+  if (!on) return;
+  const ti = cur.querySelector('.ti'), r = ti.getBoundingClientRect(), r0 = tb.getBoundingClientRect();
+  if (instant || reduceMotion()) ind.style.transition = 'none';
+  ind.style.width = r.width + 'px'; ind.style.height = r.height + 'px';
+  ind.style.transform = 'translate(' + (r.left - r0.left - tb.clientLeft) + 'px,' + (r.top - r0.top - tb.clientTop) + 'px)';
+  if (instant){ ind.getBoundingClientRect(); ind.style.transition = ''; }
+}
+window.addEventListener('resize', () => moveTabInd(true));
+
+/* ---------- gestures: swipe between days, swipe a food left to delete it, pull a sheet down to close it ---------- */
+const G = { on: false };
+let noClickUntil = 0;
+function gStart(ev){
+  if (ev.pointerType === 'mouse' || G.on || anySheetOpen()) return;
+  const t = ev.target;
+  if (!t.closest || t.closest('input, textarea, select, .glasses, .chips, .seg, .tabbar, [data-noswipe]')) return;
+  if (ev.clientX < 24 || ev.clientX > window.innerWidth - 24) return; // the screen edges belong to the phone's back gesture
+  const entry = t.closest('#diary .entry');
+  const days = (S.screen === 'azi' || S.screen === 'jurnal') && !!S.profile && S.loaded;
+  if (!entry && !days) return;
+  const week = t.closest('.week');
+  Object.assign(G, { on: true, id: ev.pointerId, x0: ev.clientX, y0: ev.clientY, t0: performance.now(), mode: null, entry, days, week, step: week ? 7 : 1, dx: 0, armed: false });
+}
+function gMove(ev){
+  if (!G.on || ev.pointerId !== G.id) return;
+  const dx = ev.clientX - G.x0, dy = ev.clientY - G.y0;
+  if (!G.mode){
+    if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+    if (Math.abs(dy) > Math.abs(dx) * 0.8){ G.on = false; return; }
+    G.mode = G.entry && dx < 0 ? 'entry' : G.days ? 'day' : null;
+    if (!G.mode){ G.on = false; return; }
+    G.canNext = S.view < todayKey(); G.canPrev = S.view > addDays(todayKey(), -365);
+    G.panes = G.mode !== 'day' ? [] : G.week ? [G.week] : dayPanes(false);
+    G.panes.forEach(el => { el.style.transition = 'none'; });
+    document.documentElement.classList.add('swiping');
+  }
+  G.dx = dx;
+  if (G.mode === 'entry'){
+    const w = G.entry.offsetWidth, x = Math.max(-w, Math.min(0, dx)), armed = -x > w * 0.36;
+    G.entry.classList.add('swiping'); G.entry.style.setProperty('--sx', x + 'px');
+    if (armed !== G.armed){ G.armed = armed; G.entry.classList.toggle('armed', armed); if (armed) buzz('tick'); }
+    return;
+  }
+  const blocked = (dx < 0 && !G.canNext) || (dx > 0 && !G.canPrev);
+  const x = blocked ? dx * 0.22 : dx * 0.9;
+  G.panes.forEach(el => { el.style.transform = 'translateX(' + x.toFixed(1) + 'px)'; el.style.opacity = String(1 - Math.min(0.55, Math.abs(x) / window.innerWidth)); });
+}
+function gEnd(ev){
+  if (!G.on || ev.pointerId !== G.id) return;
+  G.on = false;
+  document.documentElement.classList.remove('swiping');
+  if (!G.mode) return;
+  noClickUntil = performance.now() + 450; // the tap that ends a swipe opens nothing
+  const cancel = ev.type === 'pointercancel', v = G.dx / Math.max(1, performance.now() - G.t0);
+  if (G.mode === 'entry'){
+    const el = G.entry, w = el.offsetWidth, go = !cancel && (-G.dx > w * 0.36 || (v < -0.6 && -G.dx > 48));
+    if (go){
+      const btn = el.querySelector('[data-action="del"]'), id = btn && btn.dataset.id;
+      el.style.height = el.offsetHeight + 'px'; el.getBoundingClientRect();
+      el.classList.add('gone');
+      buzz('medium');
+      setTimeout(() => { if (id) delEntry(id); }, reduceMotion() ? 0 : 230);
+    } else {
+      el.classList.remove('armed'); el.classList.add('settle'); el.style.setProperty('--sx', '0px');
+      setTimeout(() => { el.classList.remove('swiping', 'settle'); el.style.removeProperty('--sx'); }, 260);
+    }
+    return;
+  }
+  const next = G.dx < 0, ok = next ? G.canNext : G.canPrev;
+  const go = !cancel && ok && (Math.abs(G.dx) > window.innerWidth * 0.22 || (Math.abs(v) > 0.45 && Math.abs(G.dx) > 36));
+  if (go){
+    buzz('tick');
+    if (G.week) G.panes.forEach(el => { el.style.transform = ''; el.style.opacity = ''; el.style.transition = ''; });
+    setDay(addDays(S.view, next ? G.step : -G.step));
+    return;
+  }
+  G.panes.forEach(el => {
+    el.style.transition = 'transform .32s cubic-bezier(.2,.8,.2,1), opacity .2s';
+    el.style.transform = ''; el.style.opacity = '';
+    setTimeout(() => { el.style.transition = ''; }, 340);
+  });
+}
+// Pulling a sheet down closes it. Touch events here, because the sheet scrolls and only they can stop that scroll.
+const SG = { on: false };
+function sTouchStart(ev){
+  if (ev.touches.length !== 1) return;
+  const card = ev.target.closest && ev.target.closest('.sheet:not(.full):not(.ghost) > .sheet-card'); if (!card) return;
+  const sheet = card.parentElement;
+  if (!CLOSERS[sheet.id] || ev.target.closest('input, textarea, select, [data-noswipe]')) return;
+  const p = ev.touches[0];
+  Object.assign(SG, { on: true, card, sheet, x0: p.clientX, y0: p.clientY, t0: performance.now(), mode: null, dy: 0, top: card.scrollTop <= 0 });
+}
+function sTouchMove(ev){
+  if (!SG.on) return;
+  const p = ev.touches[0], dx = p.clientX - SG.x0, dy = p.clientY - SG.y0;
+  if (!SG.mode){
+    if (Math.abs(dy) < 8 && Math.abs(dx) < 8) return;
+    if (!SG.top || dy <= 0 || Math.abs(dx) > Math.abs(dy)){ SG.on = false; return; }
+    SG.mode = 'drag'; SG.card.style.transition = 'none'; SG.sheet.classList.add('pulling');
+  }
+  ev.preventDefault();
+  SG.dy = Math.max(0, dy);
+  SG.card.style.transform = 'translateY(' + SG.dy.toFixed(1) + 'px)';
+  SG.sheet.style.setProperty('--pull', Math.max(0, 1 - SG.dy / (SG.card.offsetHeight || 600)).toFixed(3));
+}
+function sTouchEnd(){
+  if (!SG.on) return;
+  SG.on = false;
+  if (!SG.mode) return;
+  const v = SG.dy / Math.max(1, performance.now() - SG.t0), card = SG.card, sheet = SG.sheet;
+  if (SG.dy > Math.min(140, card.offsetHeight * 0.3) || (v > 0.55 && SG.dy > 40)){
+    sheetDragY = SG.dy; buzz('light');
+    if (CLOSERS[sheet.id]) CLOSERS[sheet.id]();
+    return;
+  }
+  card.style.transition = 'transform .3s cubic-bezier(.2,.8,.2,1)'; card.style.transform = '';
+  sheet.classList.remove('pulling'); sheet.style.removeProperty('--pull');
+  setTimeout(() => { card.style.transition = ''; }, 320);
+}
+function bindGestures(){
+  document.addEventListener('pointerdown', gStart, { passive: true });
+  document.addEventListener('pointermove', gMove, { passive: true });
+  document.addEventListener('pointerup', gEnd);
+  document.addEventListener('pointercancel', gEnd);
+  document.addEventListener('click', ev => { if (performance.now() < noClickUntil){ ev.stopPropagation(); ev.preventDefault(); } }, true);
+  document.addEventListener('touchstart', sTouchStart, { passive: true });
+  document.addEventListener('touchmove', sTouchMove, { passive: false });
+  document.addEventListener('touchend', sTouchEnd);
+  document.addEventListener('touchcancel', sTouchEnd);
+}
+
+/* ---------- moments: reaching today's protein or calorie target ---------- */
+const CHEER = { day: '', done: new Set() };
+function cheer(kind){
+  const t = todayKey();
+  if (CHEER.day !== t){ CHEER.day = t; CHEER.done = new Set(); }
+  if (CHEER.done.has(kind)) return;
+  CHEER.done.add(kind);
+  // added from another screen: the moment waits until Azi is in view
+  if (S.screen !== 'azi'){ CHEER.queued = kind; return; }
+  playCheer(kind);
+}
+function playCheer(kind){
+  buzz('success');
+  const hero = $('#hero'); if (!hero || reduceMotion()) return;
+  hero.classList.remove('cheer'); hero.getBoundingClientRect(); hero.classList.add('cheer');
+  setTimeout(() => hero.classList.remove('cheer'), 1600);
+  const wrap = hero.querySelector('.ringwrap');
+  if (wrap){
+    const burst = document.createElement('span'); burst.className = 'burst'; burst.setAttribute('aria-hidden', 'true');
+    for (let i = 0; i < 18; i++){
+      const a = (i / 18) * Math.PI * 2 + Math.random() * 0.3, r = 62 + Math.random() * 34;
+      const s = document.createElement('i');
+      s.style.setProperty('--dx', (Math.cos(a) * r).toFixed(1) + 'px'); s.style.setProperty('--dy', (Math.sin(a) * r).toFixed(1) + 'px');
+      s.style.setProperty('--d', Math.round(Math.random() * 90) + 'ms'); s.style.setProperty('--s', (0.6 + Math.random() * 0.7).toFixed(2));
+      s.className = 'b' + (i % 3);
+      burst.appendChild(s);
+    }
+    wrap.appendChild(burst);
+    setTimeout(() => burst.remove(), 1300);
+  }
+  // the card's own label says what happened, then goes back to what it was
+  const lab = hero.querySelector('.hc-label');
+  if (lab){
+    const was = lab.textContent;
+    lab.textContent = kind === 'protein' ? 'Proteine atinse' : 'Ținta atinsă';
+    lab.classList.add('cheering'); lab.setAttribute('role', 'status');
+    setTimeout(() => { if (lab.isConnected){ lab.textContent = was; lab.classList.remove('cheering'); lab.removeAttribute('role'); } }, 3200);
+  }
 }
 
 /* ---------- events ---------- */
@@ -3235,13 +3590,14 @@ const CLOSERS = {
   plusSheet: () => closePlus()
 };
 function bindStatic(){
+  bindGestures();
   document.addEventListener('click', ev => {
     const dayG = ev.target.closest && ev.target.closest('[data-day]');
-    if (dayG){ S.view = dayG.getAttribute('data-day'); renderDayParts(); return; }
+    if (dayG){ if (setDay(dayG.getAttribute('data-day'))) buzz('tick'); return; }
     const b = ev.target.closest && ev.target.closest('[data-action]');
     if (!b) return;
     const a = b.dataset.action;
-    if (BUZZ[a]) buzz(BUZZ[a]);
+    if (HAPTIC[a]) buzz(HAPTIC[a]);
     switch (a){
       case 'open-settings': openSettings(); break;
       case 'close-settings': go('azi'); break;
@@ -3250,9 +3606,9 @@ function bindStatic(){
       case 'open-setup': openSetup(false); break;
       case 'redo-setup': openSetup(false); break;
       case 'close-setup': if (!S.setup || !S.setup.first) closeSheet('#setup'); break;
-      case 'prev-day': S.view = addDays(S.view, -1); renderDayParts(); break;
-      case 'week-prev': S.view = addDays(S.view, -7); renderDayParts(); break;
-      case 'week-next': { const n = addDays(S.view, 7), t = todayKey(); S.view = n > t ? t : n; renderDayParts(); break; }
+      case 'prev-day': setDay(addDays(S.view, -1)); break;
+      case 'week-prev': setDay(addDays(S.view, -7)); break;
+      case 'week-next': setDay(addDays(S.view, 7)); break;
       case 'nav': if (b.dataset.nav === 'add' && S.screen === 'add') go(S.lastMain || 'azi'); else go(b.dataset.nav); break;
       case 'meal-open': {
         const m = b.dataset.meal, has = getDay(S.view).entries.some(e => e.meal === m);
@@ -3268,8 +3624,8 @@ function bindStatic(){
         else if (m === 'barcode') $('#bcCode').focus({ preventScroll: true });
         break;
       }
-      case 'next-day': if (S.view < todayKey()){ S.view = addDays(S.view, 1); renderDayParts(); } break;
-      case 'go-today': S.view = todayKey(); renderDayParts(); break;
+      case 'next-day': setDay(addDays(S.view, 1)); break;
+      case 'go-today': setDay(todayKey()); break;
       case 'tab': S.tab = b.dataset.tab; showErr(''); stopVoice(); renderTabs(); break;
       case 'mic': toggleVoice(b.dataset.target); break;
       case 'prod-import': if ($('#libSheet').hidden) openLib(); openProdIO('import'); break;
@@ -3395,10 +3751,10 @@ function bindStatic(){
       case 'report-open': openReport(); break;
       case 'theme-set': {
         const id = b.dataset.themeId, th = THEMES[id]; if (!th) break;
-        if (!th.free && !S.isOwner){ openPlus(id); break; }
+        if (!th.free && !S.isOwner){ if (SELL) openPlus(id); break; }
         setSkin(id); break;
       }
-      case 'open-plus': openPlus(null); break;
+      case 'open-plus': if (SELL) openPlus(null); break;
       case 'consent-ok': acceptConsent(); break;
       case 'consent-ai': {
         const c = consentOf(); if (!c) break;
@@ -3441,9 +3797,9 @@ function bindStatic(){
   document.addEventListener('keydown', ev => {
     if (ev.key === 'Enter' && ev.target && ev.target.id === 'askIn'){ ev.preventDefault(); const b = $('[data-action="ask-send"]'); if (b) b.click(); return; }
     const g = ev.target.closest && ev.target.closest('[data-day]');
-    if (g && (ev.key === 'Enter' || ev.key === ' ')){ ev.preventDefault(); S.view = g.getAttribute('data-day'); renderDayParts(); return; }
+    if (g && (ev.key === 'Enter' || ev.key === ' ')){ ev.preventDefault(); setDay(g.getAttribute('data-day')); return; }
     if (ev.key === 'Escape'){
-      const open = $$('.sheet').filter(s => !s.hidden), top = open[open.length - 1];
+      const open = $$('.sheet:not(.ghost)').filter(s => !s.hidden), top = open[open.length - 1];
       if (top && CLOSERS[top.id]) CLOSERS[top.id]();
     }
     if (ev.target.id === 'foodText' && ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)){ ev.preventDefault(); estimate('text'); }
