@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="Porția: tracker de calorii și macronutrienți, cu ținta zilnică calculată pentru tine.">
 <title>Porția</title>
+<meta name="theme-color" content="#EFF4F1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Porția">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -49,9 +57,9 @@
   <header class="appbar" id="appbar">
     <div class="brand">
       <span class="mark" id="brandMark" aria-hidden="true"></span>
-      <div class="brand-tx"><span class="wordmark">Porția</span><p class="sync" id="sync" data-state="idle">Se încarcă…</p></div>
+      <span class="bar-title" id="barTitle" aria-hidden="true"></span>
     </div>
-    <div class="appbar-r" id="appbarR"></div>
+    <div class="appbar-r"><p class="sync" id="sync" data-state="idle" role="status">Se încarcă…</p><span id="appbarR"></span></div>
   </header>
 
   <main class="screens">
@@ -77,11 +85,11 @@
     <section class="screen" id="scr-add" data-screen="add" hidden aria-labelledby="hAdd">
       <div class="scr-head"><div><h1 id="hAdd">Adaugă</h1><p id="subAdd"></p></div></div>
       <section class="panel" id="logger" aria-labelledby="hAdd">
-        <div class="seg" role="tablist" aria-label="Mod de adăugare">
-          <button role="tab" data-action="tab" data-tab="text" aria-selected="true">Scrie</button>
-          <button role="tab" data-action="tab" data-tab="photo" aria-selected="false">Poză</button>
-          <button role="tab" data-action="tab" data-tab="barcode" aria-selected="false">Cod de bare</button>
-          <button role="tab" data-action="tab" data-tab="manual" aria-selected="false">Manual</button>
+        <div class="seg modes" role="tablist" aria-label="Mod de adăugare">
+          <button role="tab" data-action="tab" data-tab="text" aria-selected="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19h4L19.5 8.5a2.1 2.1 0 0 0-3-3L6 16z"/><path d="M14.5 7.5l2 2"/></svg><span>Scrie</span></button>
+          <button role="tab" data-action="tab" data-tab="photo" aria-selected="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Poză</span></button>
+          <button role="tab" data-action="tab" data-tab="barcode" aria-selected="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6v12M10 6v12M15 6v12M20 6v12"/><path d="M7 6v12M12.5 6v12M17.5 6v12" stroke-width="1"/></svg><span>Cod de bare</span></button>
+          <button role="tab" data-action="tab" data-tab="manual" aria-selected="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h9"/></svg><span>Manual</span></button>
         </div>
         <div class="meals" id="meals" role="radiogroup" aria-label="Masa"></div>
 

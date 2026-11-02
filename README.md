@@ -5,10 +5,13 @@ Aplicație de calorii și macronutrienți, în română. Calculează ținta ziln
 ## Structura
 
 ```
-index.html      pagina aplicației (trebuie să stea în rădăcină pentru GitHub Pages)
-css/styles.css  stilurile și temele
-js/app.js       logica aplicației
-.nojekyll       spune GitHub Pages să servească fișierele exact cum sunt
+index.html            pagina aplicației (trebuie să stea în rădăcină pentru GitHub Pages)
+css/styles.css        stilurile și temele
+js/app.js             logica aplicației
+manifest.webmanifest  numele, culorile și iconițele pentru instalarea pe telefon
+icons/                iconițele aplicației
+tools/                verificarea de secrete și construirea versiunii pentru Claude
+.nojekyll             spune GitHub Pages să servească fișierele exact cum sunt
 ```
 
 Nu are pas de build și nici dependențe. Ce e în repository e exact ce se publică.
@@ -30,6 +33,10 @@ Apoi deschizi http://localhost:8000.
 3. Alegi branch-ul **main** și folderul **/ (root)**, apoi **Save**.
 
 După un minut, aplicația apare la `https://<utilizator>.github.io/fitnessapp/`. Fiecare push pe `main` o actualizează automat.
+
+## Instalează pe telefon
+
+Pe iPhone, deschide adresa aplicației în Safari, apasă **Partajează → Adaugă pe ecranul principal**. Porția apare cu iconița ei și se deschide pe tot ecranul, fără barele browserului. Pe Android, în Chrome, alegi **Instalează aplicația** din meniu.
 
 ## Cum salvezi o schimbare
 
