@@ -30,10 +30,9 @@ Apoi deschizi http://localhost:8000.
 ## Cum o publici pe GitHub Pages
 
 1. În repository: **Settings → Pages**.
-2. La **Source** alegi **Deploy from a branch**.
-3. Alegi branch-ul **main** și folderul **/ (root)**, apoi **Save**.
+2. La **Source** alegi **GitHub Actions**.
 
-După un minut, aplicația apare la `https://<utilizator>.github.io/fitnessapp/`. Fiecare push pe `main` o actualizează automat.
+Workflow-ul „Publicare pe GitHub Pages” publică aplicația la fiecare push pe `main`, după ce verifică să nu existe chei în fișiere. Publică doar fișierele aplicației, nu și uneltele. Îl poți porni și manual, din **Actions → Publicare pe GitHub Pages → Run workflow**. Aplicația apare la `https://<utilizator>.github.io/fitnessapp/`.
 
 ## Instalează pe telefon
 

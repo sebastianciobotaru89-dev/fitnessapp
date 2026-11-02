@@ -7,7 +7,7 @@
 - Înainte de fiecare commit și push rulează `node tools/check-secrets.mjs --all` și `node tools/check-secrets.mjs --history`. Hook-ul se pornește cu `git config core.hooksPath .githooks`.
 
 ## Structura
-- `index.html` în rădăcină, `css/styles.css`, `js/app.js`. Fără build. GitHub Pages servește ramura `main`.
+- `index.html` în rădăcină, `css/styles.css`, `js/app.js`. Fără build. GitHub Pages se publică prin workflow-ul `.github/workflows/pages.yml` (Source: GitHub Actions), la fiecare push pe `main`.
 - Interfața are cinci ecrane (`#scr-azi`, `#scr-jurnal`, `#scr-add`, `#scr-progres`, `#scr-profil`) și bara de taburi `#tabbar`; navigarea e funcția `go(name)` din `js/app.js`. Setările sunt ecranul Profil, nu o foaie.
 - Versiunea din Claude (artifact) e un singur fișier construit din aceste trei cu `python3 tools/build-artifact.py . <fișier>.html`. Schimbările se fac aici, apoi se reconstruiește și se republică artifactul.
 - În Claude, `window.claude` dă AI-ul (`sample`), baza de date (`db`) și utilizatorul (`user`). Pe GitHub Pages nu există, iar aplicația pornește în modul local.
