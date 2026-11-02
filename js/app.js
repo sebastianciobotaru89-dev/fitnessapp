@@ -834,8 +834,10 @@ function renderConsent(){
   const d = S.cdraft || {};
   const box = (k, req, title, sub) => '<label class="cbox"><input type="checkbox" data-consent="' + k + '"' + (d[k] ? ' checked' : '') + '><span><b>' + title + (req ? '' : ' <em>opțional</em>') + '</b><small>' + sub + '</small></span></label>';
   $('#consentCard').innerHTML =
-    '<div class="sbody"><h2 id="cTitle" tabindex="-1">Înainte să începi</h2>' +
-    '<p>Porția îți păstrează mesele, greutatea și țintele. Sunt date despre sănătatea ta, așa că îți cerem acordul explicit. Nimic nu e bifat dinainte.</p>' +
+    '<div class="sbody"><div class="welcome"><span class="wl-logo" aria-hidden="true">' + logoSvg(S.theme, 64) + '</span>' +
+      '<h2 id="cTitle" tabindex="-1">Bun venit în Porția</h2><p>Îți calculez ținta de calorii și macronutrienți, iar mesele le notezi în câteva secunde.</p></div>' +
+    '<h3 class="cs-t">Înainte să începi</h3>' +
+    '<p>Porția păstrează date despre sănătatea ta, așa că îți cerem acordul explicit. Nimic nu e bifat dinainte.</p>' +
     box('health', true, 'Datele despre alimentație și greutate', 'Sunt de acord ca Porția să-mi păstreze mesele, apa, greutatea, țintele și posturile, ca să-mi calculeze progresul. Le văd doar eu și le pot șterge oricând.') +
     box('ai', false, 'Estimări cu AI', 'Sunt de acord ca textul și pozele meselor, plus totalurile zilelor pentru idei și raport, să fie trimise la Claude, un AI al companiei Anthropic, ca să estimeze caloriile. Fără numele sau e-mailul meu. Fără acest acord notez valorile manual.') +
     box('age', true, 'Am cel puțin 16 ani', 'Porția nu e pentru copii.') +
@@ -2612,8 +2614,10 @@ function weekHtml(){
   for (let i = 0; i < 7; i++){
     const k = addDays(mon, i), fut = k > t, tot = dayTotals(S.days[k]), T = S.profile ? targetsFor(k) : null;
     const f = T && T.kcal ? Math.min(1, tot.kcal / T.kcal) : 0, over = T && tot.kcal > T.kcal * 1.05;
+    const RC = 2 * Math.PI * 17;
     h += '<button class="wd' + (k === t ? ' today' : '') + (over ? ' over' : '') + '" data-day="' + k + '" aria-pressed="' + (k === S.view) + '"' + (fut ? ' disabled' : '') +
-      ' aria-label="' + esc(cap(dateLine(k))) + (tot.n ? ', ' + fmt(tot.kcal) + ' kcal' : '') + '"><small>' + WD[i] + '</small><b>' + parseKey(k).getDate() + '</b><span class="wbar"><i style="--f:' + f.toFixed(2) + '"></i></span></button>';
+      ' aria-label="' + esc(cap(dateLine(k))) + (tot.n ? ', ' + fmt(tot.kcal) + ' kcal' : '') + '"><small>' + WD[i] + '</small><span class="wring"><svg viewBox="0 0 40 40" aria-hidden="true"><circle class="wr-t" cx="20" cy="20" r="17"/>' +
+      (f > 0 ? '<circle class="wr-v" cx="20" cy="20" r="17" stroke-dasharray="' + RC.toFixed(1) + '" stroke-dashoffset="' + (RC * (1 - f)).toFixed(1) + '"/>' : '') + '</svg><b>' + parseKey(k).getDate() + '</b></span></button>';
   }
   return h + '<button class="wk-arrow" data-action="week-next" aria-label="Săptămâna următoare"' + (addDays(mon, 7) > t ? ' disabled' : '') + '><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>';
 }
@@ -2856,7 +2860,7 @@ function renderDiary(){
   for (const m of MEALS){
     const list = day.entries.filter(e => e.meal === m.id).sort((a, b) => a.at - b.at);
     const mk = list.reduce((a, e) => a + e.kcal, 0);
-    html += '<section class="panel meal-card" aria-label="' + m.t + '"><header class="mc-head"><span class="mc-ic">' + MEAL_ICON[m.id] + '</span><h2>' + m.t + '</h2>' +
+    html += '<section class="panel meal-card" id="meal-' + m.id + '" aria-label="' + m.t + '"><header class="mc-head"><span class="mc-ic">' + MEAL_ICON[m.id] + '</span><h2>' + m.t + '</h2>' +
       (list.length ? '<span class="mc-k">' + fmt(mk) + ' kcal</span><button class="mc-fav" data-action="fav-save" data-meal="' + m.id + '" aria-label="Salvează ' + m.t.toLowerCase() + ' ca masă favorită">' + STAR_ICON + '</button>' : '') + '</header>' +
       (list.length ? '<ul class="entries">' + list.map(e =>
         '<li class="entry"><button class="e-main" data-action="edit" data-id="' + esc(e.id) + '" aria-label="Editează ' + esc(e.name) + '"><span class="nm">' + esc(e.name) + (AI_SRC.has(e.src) ? ' <span class="aitag" title="Estimat de AI">AI</span>' : '') + '</span><span class="mx"><span><i class="dot p"></i>' + fmt1(e.protein) + '</span><span><i class="dot c"></i>' + fmt1(e.carbs) + '</span><span><i class="dot f"></i>' + fmt1(e.fat) + '</span>' + (e.grams ? '<span>' + fmt(e.grams) + ' g</span>' : '') + '</span></button>' +
@@ -2865,6 +2869,16 @@ function renderDiary(){
   }
   if (t.n) html += '<p class="hint diary-hint">Atinge un aliment ca să-l corectezi.</p>';
   el.innerHTML = html;
+  renderMealsToday(day);
+}
+function renderMealsToday(day){
+  const el = $('#mealsToday'); if (!el) return;
+  el.hidden = !S.profile;
+  el.innerHTML = MEALS.map(m => {
+    const list = day.entries.filter(e => e.meal === m.id), k = list.reduce((a, e) => a + e.kcal, 0);
+    return '<button class="mt' + (list.length ? ' has' : '') + '" data-action="meal-open" data-meal="' + m.id + '" aria-label="' + m.t + (list.length ? ', ' + fmt(k) + ' kcal. Vezi în jurnal.' : '. Adaugă.') + '">' +
+      '<span class="mt-ic">' + MEAL_ICON[m.id] + '</span><b>' + m.t + '</b><span class="mt-k">' + (list.length ? fmt(k) + ' kcal' : '+ Adaugă') + '</span></button>';
+  }).join('');
 }
 function weightSeries(endKey, n){
   const pts = [];
@@ -2955,7 +2969,7 @@ function renderHistory(){
   const avgP = logged.length ? logged.reduce((a, d) => a + d.protein, 0) / logged.length : 0;
   const inT = T ? logged.filter(d => { const Td = targetsFor(d.k); return Math.abs(d.kcal - Td.kcal) <= Td.kcal * 0.1; }).length : 0;
   el.innerHTML = '<div class="panel-head"><h2>Ultimele 7 zile</h2>' + (T ? '<span class="meta tleg">' + (cycleDeltas() ? 'țintă medie ' : 'țintă ') + fmt(T.kcal) + ' kcal</span>' : '') + '</div>' +
-    '<div class="chart"><svg viewBox="0 0 ' + W_ + ' 150" role="group" aria-label="Calorii pe ultimele 7 zile. Atinge o zi ca s-o deschizi.">' + bars + tline + '</svg></div>' +
+    '<div class="chart"><svg viewBox="0 0 ' + W_ + ' 150" role="group" aria-label="Calorii pe ultimele 7 zile. Atinge o zi ca s-o deschizi."><defs><linearGradient id="barG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:color-mix(in srgb,var(--kcal) 62%,#FFFFFF)"/><stop offset="1" style="stop-color:var(--kcal)"/></linearGradient></defs>' + bars + tline + '</svg></div>' +
     '<dl class="hstats"><div><dt>Medie</dt><dd>' + (logged.length ? fmt(avgK) : '–') + '</dd></div><div><dt>Proteine/zi</dt><dd>' + (logged.length ? fmt(avgP) + ' g' : '–') + '</dd></div><div><dt>Zile în țintă</dt><dd>' + (T && logged.length ? inT + '/' + logged.length : '–') + '</dd></div></dl>' + reportRow();
 }
 
@@ -2989,7 +3003,9 @@ function renderSetup(){
   $('#sProg').innerHTML = [1,2,3,4,5].map(i => '<i class="' + (i <= s.step ? 'on' : '') + '"></i>').join('');
   let b = '';
   if (st === 'intro'){
-    b = '<h2 id="sTitle" tabindex="-1">Bun venit în Porția</h2><p>Cinci întrebări scurte. La final îți calculez caloriile, proteinele, glucidele, grăsimile și apa. Nu trebuie să știi niciun număr.</p>' + (S.profile ? '<p>Am completat deja ce știu despre tine. Verifică și corectează unde e cazul.</p>' : '');
+    const tick = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+    b = '<div class="intro-art" aria-hidden="true"><svg viewBox="0 0 160 160"><circle cx="80" cy="80" r="66" class="ia-t"/><circle cx="80" cy="80" r="66" class="ia-k" stroke-dasharray="414.7" stroke-dashoffset="120"/><circle cx="80" cy="80" r="50" class="ia-t"/><circle cx="80" cy="80" r="50" class="ia-p" stroke-dasharray="314.2" stroke-dashoffset="110"/><circle cx="80" cy="80" r="34" class="ia-t"/><circle cx="80" cy="80" r="34" class="ia-c" stroke-dasharray="213.6" stroke-dashoffset="60"/><circle cx="80" cy="80" r="18" class="ia-t"/><circle cx="80" cy="80" r="18" class="ia-f" stroke-dasharray="113.1" stroke-dashoffset="40"/></svg></div>' + '<h2 id="sTitle" tabindex="-1">Hai să-ți calculăm ținta</h2><p>Cinci întrebări scurte. La final îți calculez caloriile, proteinele, glucidele, grăsimile și apa.</p>' +
+      '<ul class="intro-list"><li>' + tick + 'Nu trebuie să știi niciun număr</li><li>' + tick + 'Durează cam un minut</li><li>' + tick + 'Poți schimba totul oricând, din Profil</li></ul>' + (S.profile ? '<p>Am completat deja ce știu despre tine. Verifică și corectează unde e cazul.</p>' : '');
   } else if (st === 'sex'){
     b = '<h2 id="sTitle" tabindex="-1">Sexul biologic</h2><p>Formula metabolismului diferă puțin între bărbați și femei.</p>' + optList('sex', [{ id:'m', t:'Bărbat' }, { id:'f', t:'Femeie' }]);
   } else if (st === 'age'){
@@ -3238,6 +3254,12 @@ function bindStatic(){
       case 'week-prev': S.view = addDays(S.view, -7); renderDayParts(); break;
       case 'week-next': { const n = addDays(S.view, 7), t = todayKey(); S.view = n > t ? t : n; renderDayParts(); break; }
       case 'nav': if (b.dataset.nav === 'add' && S.screen === 'add') go(S.lastMain || 'azi'); else go(b.dataset.nav); break;
+      case 'meal-open': {
+        const m = b.dataset.meal, has = getDay(S.view).entries.some(e => e.meal === m);
+        if (!has){ S.meal = m; renderMeals(); renderRecent(); goToLogger(); break; }
+        go('jurnal'); const card = $('#meal-' + m); if (card) card.scrollIntoView({ block: 'start', behavior: reduceMotion() ? 'auto' : 'smooth' });
+        break;
+      }
       case 'quick-add': {
         const m = b.dataset.mode;
         S.tab = m === 'text' ? (S.aiOff ? 'manual' : 'text') : m; showErr(''); renderTabs(); go('add');

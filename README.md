@@ -10,6 +10,7 @@ css/styles.css        stilurile și temele
 js/app.js             logica aplicației
 manifest.webmanifest  numele, culorile și iconițele pentru instalarea pe telefon
 icons/                iconițele aplicației
+fonts/                Archivo, Instrument Sans și Chakra Petch, incluse în aplicație (licență SIL OFL)
 tools/                verificarea de secrete și construirea versiunii pentru Claude
 .nojekyll             spune GitHub Pages să servească fișierele exact cum sunt
 ```

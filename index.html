@@ -14,9 +14,8 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Instrument+Sans:wght@400..700&family=Chakra+Petch:wght@500;600;700&display=swap">
+<link rel="preload" href="fonts/archivo.woff" as="font" type="font/woff" crossorigin>
+<link rel="preload" href="fonts/instrument-sans.woff" as="font" type="font/woff" crossorigin>
 <link rel="stylesheet" href="css/styles.css">
 <style id="themeStyle"></style>
 </head>
@@ -72,6 +71,7 @@
         <button class="ask-ic" data-action="quick-add" data-mode="photo" id="askPhoto" aria-label="Fă o poză mesei"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
         <button class="ask-ic" data-action="quick-add" data-mode="barcode" aria-label="Caută după codul de bare"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true"><path d="M4 6v12M10 6v12M15 6v12M20 6v12" stroke-width="1.9"/><path d="M7 6v12M12.5 6v12M17.5 6v12" stroke-width="1.1"/></svg></button>
       </div>
+      <div class="meals-today" id="mealsToday" aria-label="Mesele zilei" hidden></div>
       <section class="panel" id="water" aria-label="Apă"></section>
       <section class="panel" id="fast" aria-labelledby="fastTitle" hidden></section>
     </section>
