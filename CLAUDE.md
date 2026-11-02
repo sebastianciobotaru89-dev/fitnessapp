@@ -8,7 +8,8 @@
 
 ## Structura
 - `index.html` în rădăcină, `css/styles.css`, `js/app.js`. Fără build. GitHub Pages servește ramura `main`.
-- Versiunea din Claude (artifact) e un singur fișier construit din aceste trei. Schimbările se fac aici, apoi se reconstruiește artifactul.
+- Interfața are cinci ecrane (`#scr-azi`, `#scr-jurnal`, `#scr-add`, `#scr-progres`, `#scr-profil`) și bara de taburi `#tabbar`; navigarea e funcția `go(name)` din `js/app.js`. Setările sunt ecranul Profil, nu o foaie.
+- Versiunea din Claude (artifact) e un singur fișier construit din aceste trei cu `python3 tools/build-artifact.py . <fișier>.html`. Schimbările se fac aici, apoi se reconstruiește și se republică artifactul.
 - În Claude, `window.claude` dă AI-ul (`sample`), baza de date (`db`) și utilizatorul (`user`). Pe GitHub Pages nu există, iar aplicația pornește în modul local.
 
 ## AI

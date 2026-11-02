@@ -136,7 +136,7 @@ const TIERS = {
 };
 const TIER_IDS = ['plus', 'platinum', 'vip'];
 const FREE_FOREVER = 'Jurnalul, codul de bare, apa, greutatea, seriile, provocările și postul intermitent.';
-const PROMISES = ['7 zile gratuit: dacă anulezi înainte să se termine, nu plătești nimic', 'Vezi data primei plăți înainte să confirmi', 'Anulezi oricând, din Setări → Gestionează abonamentul'];
+const PROMISES = ['7 zile gratuit: dacă anulezi înainte să se termine, nu plătești nimic', 'Vezi data primei plăți înainte să confirmi', 'Anulezi oricând, din Profil → Gestionează abonamentul'];
 const SKINS_PRICE = 9.99;
 const LOCK_ICON = '<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
 const CHECK_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
@@ -457,7 +457,8 @@ const S = {
   setup: null, restoring: false, migrated: false, resub: {},
   theme: 'proaspat', isOwner: true, previewing: false, plan: 'year', tier: 'plus', unsubs: [],
   appearance: lsGet('portia-appearance') || 'auto', darkShade: lsGet('portia-dark') || 'noapte', hostTheme: null, modeSet: null,
-  library: { recipes: [], favorites: [], reports: [], products: [] }, bc: null, bcCtl: null, libRef: null, mini: null, rdraft: null, rctl: null, repCtl: null
+  library: { recipes: [], favorites: [], reports: [], products: [] }, bc: null, bcCtl: null, libRef: null, mini: null, rdraft: null, rctl: null, repCtl: null,
+  screen: '', lastMain: 'azi', scrollY: {}, heroDrawn: false
 };
 function fallbackToLocal(){
   if (S.mode !== 'cloud') return;
@@ -503,7 +504,7 @@ function queueWrite(key, refFn, dataFn){
 function writeError(e){
   const c = e && e.code;
   S.syncErr = true;
-  const msg = c === 'quota_exceeded' ? 'Spațiul de stocare e plin. Fă un cod de backup din Setări.'
+  const msg = c === 'quota_exceeded' ? 'Spațiul de stocare e plin. Fă un cod de backup din Profil.'
     : c === 'invalid_argument' ? 'Nu am putut salva. Verifică dacă ești autentificat în Claude.'
     : c === 'revoked' ? 'Accesul la date s-a oprit. Reîncarcă pagina.'
     : 'Ultima modificare nu s-a salvat. Reîncarcă pagina și încearcă din nou.';
@@ -594,6 +595,8 @@ async function boot(){
   loadCache();
   applyTheme(savedSkin());
   bindStatic();
+  go('azi');
+  window.addEventListener('scroll', onScroll, { passive: true });
   checkVoice();
   renderAll();
   setInterval(() => { const f = S.profile && S.profile.fast; if (f && f.start && !document.hidden) renderFast(); }, 30000);
@@ -831,7 +834,7 @@ function renderConsent(){
     box('ai', false, 'Estimări cu AI', 'Sunt de acord ca textul și pozele meselor, plus totalurile zilelor pentru idei și raport, să fie trimise la Claude, un AI al companiei Anthropic, ca să estimeze caloriile. Fără numele sau e-mailul meu. Fără acest acord notez valorile manual.') +
     box('age', true, 'Am cel puțin 16 ani', 'Porția nu e pentru copii.') +
     '<div class="medwarn"><b>Porția nu e un dispozitiv medical.</b> Nu înlocuiește sfatul unui medic sau nutriționist, iar estimările sunt aproximative. Dacă ai o afecțiune, ești însărcinată sau ai avut tulburări de alimentație, vorbește întâi cu medicul.</div>' +
-    '<p class="hint">Poți porni sau opri AI-ul și poți șterge totul oricând, din Setări → Datele tale.</p></div>' +
+    '<p class="hint">Poți porni sau opri AI-ul și poți șterge totul oricând, din Profil → Datele tale.</p></div>' +
     '<div class="sfoot"><button class="btn primary wide" data-action="consent-ok"' + (d.health && d.age ? '' : ' disabled') + '>Continuă</button></div>';
 }
 function acceptConsent(){
@@ -879,7 +882,7 @@ async function deleteAccount(){
   try { Object.keys(localStorage).filter(k => /^(mt-|portia-)/.test(k)).forEach(k => localStorage.removeItem(k)); } catch (e) {}
   S.profile = null; S.days = {}; S.library = normLibrary(null); S.draft = null; S.ideas = null; S.newBadge = null; S.adaptChecked = false;
   S.restoring = false;
-  closeSheet('#settings');
+  go('azi');
   applyTheme('proaspat'); syncConsent(); renderAll();
   toast('Contul și toate datele au fost șterse.');
   openConsent();
@@ -2585,60 +2588,98 @@ function renderSync(){
   el.dataset.state = st; el.textContent = txt;
 }
 function renderHeader(){
-  const t = todayKey();
-  $('#dayName').textContent = dayWord(S.view);
-  $('#dayDate').textContent = dateLine(S.view);
+  const t = todayKey(), isToday = S.view === t;
+  $('#hAzi').textContent = dayWord(S.view);
+  $('#subAzi').textContent = cap(dateLine(S.view));
   $('#toToday').hidden = S.view >= addDays(t, -1);
-  $('[data-action="next-day"]').disabled = S.view >= t;
-  $('[data-action="prev-day"]').disabled = S.view <= addDays(t, -365);
-  $('#logFor').textContent = S.view === t ? '' : 'se adaugă la ' + dayWord(S.view).toLowerCase();
+  $('#subJurnal').textContent = (isToday ? 'Azi, ' : dayWord(S.view) + ', ') + dateLine(S.view);
+  $('#subAdd').textContent = 'La ' + mealName(S.meal).toLowerCase() + (isToday ? ', azi' : ', ' + dayWord(S.view).toLowerCase());
+  const week = weekHtml();
+  $('#weekAzi').innerHTML = week; $('#weekJurnal').innerHTML = week;
+  renderAppbar();
 }
+// The week the selected day falls in, Monday first; each day shows how much of its target was eaten
+const WD = ['L', 'Ma', 'Mi', 'J', 'V', 'S', 'D'];
+function weekHtml(){
+  const t = todayKey(), d0 = parseKey(S.view), mon = addDays(S.view, -((d0.getDay() + 6) % 7));
+  let h = '<button class="wk-arrow" data-action="week-prev" aria-label="Săptămâna anterioară"' + (mon <= addDays(t, -365) ? ' disabled' : '') + '><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>';
+  for (let i = 0; i < 7; i++){
+    const k = addDays(mon, i), fut = k > t, tot = dayTotals(S.days[k]), T = S.profile ? targetsFor(k) : null;
+    const f = T && T.kcal ? Math.min(1, tot.kcal / T.kcal) : 0, over = T && tot.kcal > T.kcal * 1.05;
+    h += '<button class="wd' + (k === t ? ' today' : '') + (over ? ' over' : '') + '" data-day="' + k + '" aria-pressed="' + (k === S.view) + '"' + (fut ? ' disabled' : '') +
+      ' aria-label="' + esc(cap(dateLine(k))) + (tot.n ? ', ' + fmt(tot.kcal) + ' kcal' : '') + '"><small>' + WD[i] + '</small><b>' + parseKey(k).getDate() + '</b><span class="wbar"><i style="--f:' + f.toFixed(2) + '"></i></span></button>';
+  }
+  return h + '<button class="wk-arrow" data-action="week-next" aria-label="Săptămâna următoare"' + (addDays(mon, 7) > t ? ' disabled' : '') + '><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>';
+}
+function renderAppbar(){
+  const el = $('#appbarR'); if (!el) return;
+  if (!S.profile || !S.loaded){ el.innerHTML = ''; return; }
+  const sn = streakNow();
+  el.innerHTML = '<button class="streak' + (sn ? ' on' : '') + '" data-action="open-badges" aria-label="' + (sn ? 'Serie: ' + sn + (sn === 1 ? ' zi' : ' zile') + ' la rând. ' : '') + 'Vezi seriile și provocările.">' + bIcon(sn ? 'flame' : 'star', 16) + '<span>' + (sn ? sn + (sn === 1 ? ' zi' : ' zile') : 'Provocări') + '</span></button>';
+}
+
+/* ---------- screens ---------- */
+const SCREENS = ['azi', 'jurnal', 'add', 'progres', 'profil'];
+function go(name){
+  if (!SCREENS.includes(name)) return;
+  const prev = S.screen;
+  if (prev === name){ window.scrollTo({ top: 0, behavior: reduceMotion() ? 'auto' : 'smooth' }); return; }
+  if (prev) S.scrollY[prev] = window.scrollY;
+  if (prev === 'add') stopVoice();
+  S.screen = name;
+  if (name !== 'add') S.lastMain = name;
+  $$('.screen').forEach(sc => { sc.hidden = sc.dataset.screen !== name; });
+  $$('#tabbar [data-nav]').forEach(b => { if (b.dataset.nav === name) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+  document.documentElement.setAttribute('data-screen', name);
+  if (name === 'profil'){ if (S.profile) renderSettings(); else renderProfileEmpty(); }
+  window.scrollTo(0, name === 'add' ? 0 : (S.scrollY[name] || 0));
+  onScroll();
+}
+function renderProfileEmpty(){
+  $('#settingsCard').innerHTML = '<div class="scr-head"><div><h1 id="setTitle" tabindex="-1">Profil</h1><p>Ținte, teme și datele tale</p></div></div>' +
+    '<section class="panel"><h3>Încă nu ai un profil</h3><p>Răspunde la cinci întrebări scurte și îți calculez ținta zilnică de calorii și macronutrienți.</p><button class="btn primary" data-action="open-setup">Începe interviul</button></section>';
+}
+function onScroll(){ const a = $('#appbar'); if (a) a.classList.toggle('scrolled', window.scrollY > 4); }
 function renderHero(){
   const el = $('#hero'); const p = S.profile;
-  let ey = '<p class="eyebrow">Valori nutriționale · ' + esc(dayWord(S.view).toLowerCase()) + '</p>';
-  if (p && S.loaded){
-    checkBadges();
-    const sn = streakNow(), nb = S.newBadge && Date.now() < S.newBadge.until ? S.newBadge : null;
-    ey = '<div class="hero-head">' + ey + '<button class="streak' + (sn ? ' on' : '') + '" data-action="open-badges" aria-label="' + (sn ? 'Serie: ' + sn + (sn === 1 ? ' zi' : ' zile') + ' la rând. ' : '') + 'Vezi seriile și provocările.">' + bIcon(sn ? 'flame' : 'star', 16) + '<span>' + (sn ? sn + (sn === 1 ? ' zi' : ' zile') : 'Provocări') + '</span></button></div>' +
-      (nb ? '<button class="newbadge" data-action="open-badges">' + bIcon(nb.icon, 18) + '<span>' + (nb.many ? 'Ai îndeplinit <b>' + nb.many + ' provocări</b> noi' : 'Provocare îndeplinită: <b>' + esc(nb.t) + '</b>') + '</span><em>Vezi</em></button>' : '');
-  }
+  renderAppbar();
   if (!p){
-    el.className = 'panel';
-    el.innerHTML = ey + (S.loaded
-      ? '<div class="hero-empty"><h2>Hai să-ți calculăm ținta zilnică</h2><p class="muted">Cinci întrebări scurte. Calculez caloriile și macronutrienții pentru tine, nu trebuie să știi niciun număr.</p><button class="btn primary" data-action="open-setup">Începe interviul</button></div>'
-      : '<div class="hero-empty"><div class="skel" aria-hidden="true"></div><p class="muted">Se încarcă jurnalul tău…</p></div>');
+    el.className = 'hero-card is-empty';
+    el.innerHTML = S.loaded
+      ? '<p class="hc-label">Ținta ta zilnică</p><h2 class="hc-title">Hai să-ți calculăm caloriile și macronutrienții</h2><p class="hc-text">Cinci întrebări scurte. Nu trebuie să știi niciun număr.</p><button class="btn hc-cta" data-action="open-setup">Începe interviul</button>'
+      : '<div class="skel" aria-hidden="true"></div><p class="hc-text">Se încarcă jurnalul tău…</p>';
     return;
   }
+  if (S.loaded) checkBadges();
+  const nb = S.loaded && S.newBadge && Date.now() < S.newBadge.until ? S.newBadge : null;
   const T = targetsFor(S.view), t = dayTotals(S.days[S.view]);
-  const dayChip = T.type ? '<div class="dayrow"><button class="daytype ' + T.type + '" data-action="toggle-daytype" aria-label="' + (T.type === 'train' ? 'Zi de sală' : 'Zi de pauză') + '. Atinge ca să schimbi tipul zilei."><i></i>' + (T.type === 'train' ? 'Zi de sală · +' + fmt(T.delta) : 'Zi de pauză · −' + fmt(-T.delta)) + ' kcal</button><span class="hint">atinge ca să schimbi</span></div>' : '';
   const rem = T.kcal - t.kcal, over = rem < 0;
-  const R = 88, C = 2*Math.PI*R, frac = T.kcal ? Math.min(1, t.kcal/T.kcal) : 0;
+  const R = 52, C = 2 * Math.PI * R, frac = T.kcal ? Math.min(1, t.kcal / T.kcal) : 0;
   const pct = T.kcal ? Math.round(t.kcal / T.kcal * 100) : 0;
   const remP = Math.round(T.protein - t.protein);
   const showIdeas = !S.aiOff && S.view === todayKey() && rem > 150;
-  el.className = 'panel' + (over ? ' is-over' : '');
-  el.innerHTML = ey + dayChip +
-    '<div class="hero-top">' +
-      '<div class="ringwrap"><svg viewBox="0 0 200 200" aria-hidden="true"><circle class="r-trk" cx="100" cy="100" r="' + R + '"/>' +
-        (frac > 0 ? '<circle class="r-val" cx="100" cy="100" r="' + R + '" stroke-dasharray="' + C.toFixed(2) + '" stroke-dashoffset="' + (C*(1-frac)).toFixed(2) + '"/>' : '') +
-      '</svg><div class="ring-center"><span class="big-num">' + (over ? '+' : '') + fmt(Math.abs(rem)) + '</span><small>' + (over ? 'kcal peste țintă' : 'kcal rămase') + '</small></div></div>' +
-      '<dl class="kstats">' +
-        '<div><dt>Țintă</dt><dd>' + fmt(T.kcal) + '<small>kcal · ' + fmt(T.kcal*4.184) + ' kJ</small></dd></div>' +
-        '<div><dt>Mâncat</dt><dd>' + fmt(t.kcal) + '<small>kcal</small></dd></div>' +
-        '<div><dt>Din țintă</dt><dd>' + pct + '<small>%</small></dd></div>' +
-      '</dl>' +
+  const dayChip = T.type ? '<button class="hc-chip daytype ' + T.type + '" data-action="toggle-daytype" aria-label="' + (T.type === 'train' ? 'Zi de sală' : 'Zi de pauză') + '. Atinge ca să schimbi tipul zilei."><i></i>' + (T.type === 'train' ? 'Zi de sală · +' + fmt(T.delta) : 'Zi de pauză · −' + fmt(-T.delta)) + ' kcal</button>' : '';
+  const first = !S.heroDrawn && frac > 0; if (frac > 0) S.heroDrawn = true;
+  el.className = 'hero-card' + (over ? ' is-over' : '') + (first ? ' first' : '');
+  el.innerHTML =
+    '<div class="hc-top"><span class="hc-label">' + (over ? 'Peste țintă' : 'Calorii rămase') + '</span>' + dayChip + '</div>' +
+    (nb ? '<button class="newbadge" data-action="open-badges">' + bIcon(nb.icon, 18) + '<span>' + (nb.many ? 'Ai îndeplinit <b>' + nb.many + ' provocări</b> noi' : 'Provocare îndeplinită: <b>' + esc(nb.t) + '</b>') + '</span><em>Vezi</em></button>' : '') +
+    '<div class="hc-main">' +
+      '<div class="hc-num"><span class="big-num">' + (over ? '+' : '') + fmt(Math.abs(rem)) + '</span><span class="hc-sub"><b>' + fmt(t.kcal) + '</b> din <b>' + fmt(T.kcal) + '</b> kcal</span><span class="hc-kj">Ținta în kJ: ' + fmt(T.kcal * 4.184) + '</span></div>' +
+      '<div class="ringwrap"><svg viewBox="0 0 120 120" aria-hidden="true"><defs><linearGradient id="hcGrad" x1="0" y1="1" x2="1" y2="0"><stop offset="0" style="stop-color:var(--hc-acc2)"/><stop offset="1" style="stop-color:var(--hc-acc)"/></linearGradient></defs>' +
+        '<circle class="r-trk" cx="60" cy="60" r="' + R + '"/>' +
+        (frac > 0 ? '<circle class="r-val" cx="60" cy="60" r="' + R + '" stroke-dasharray="' + C.toFixed(2) + '" stroke-dashoffset="' + (C * (1 - frac)).toFixed(2) + '" style="--c0:' + C.toFixed(2) + '"/>' : '') +
+      '</svg><div class="ring-center"><b>' + pct + '<small>%</small></b><span>din țintă</span></div></div>' +
     '</div>' +
-    '<div class="macros">' + macroTile('p', 'Proteine', t.protein, T.protein) + macroTile('c', 'Glucide', t.carbs, T.carbs) + macroTile('f', 'Grăsimi', t.fat, T.fat) + '</div>' +
-    (showIdeas ? '<div class="hero-foot"><p>' + (remP > 0 ? 'Mai ai ' + fmt(remP) + ' g proteine de luat azi.' : 'Ai atins proteinele de azi.') + '</p><button class="btn soft sm" data-action="ideas">Idei pentru ' + mealName(S.meal).toLowerCase() + '</button></div>' : '');
+    '<div class="hc-bars">' + macroBar('p', 'Proteine', t.protein, T.protein) + macroBar('c', 'Glucide', t.carbs, T.carbs) + macroBar('f', 'Grăsimi', t.fat, T.fat) + '</div>' +
+    (showIdeas ? '<div class="hc-foot"><p>' + (remP > 0 ? 'Mai ai ' + fmt(remP) + ' g proteine de luat azi.' : 'Ai atins proteinele de azi.') + '</p><button class="btn hc-btn" data-action="ideas">Idei pentru ' + mealName(S.meal).toLowerCase() + '</button></div>' : '');
 }
-function macroTile(key, label, eaten, target){
-  const r = 27, C = 2*Math.PI*r, frac = target ? Math.min(1, eaten/target) : 0;
-  const over = target && eaten > target * 1.1;
-  return '<div class="macro m-' + key + (over ? ' is-over' : '') + '"><div class="mring"><svg viewBox="0 0 66 66" width="66" height="66" aria-hidden="true"><circle class="trk" cx="33" cy="33" r="' + r + '"/>' +
-    (frac > 0 ? '<circle class="val" cx="33" cy="33" r="' + r + '" stroke-dasharray="' + C.toFixed(2) + '" stroke-dashoffset="' + (C*(1-frac)).toFixed(2) + '"/>' : '') +
-    '</svg><span>' + fmt(eaten) + '</span></div><b>' + label + '</b><em>din ' + fmt(target) + ' g</em></div>';
+function macroBar(key, label, eaten, target){
+  const f = target ? Math.min(1, eaten / target) : 0, over = target && eaten > target * 1.1;
+  return '<div class="mbar m-' + key + (over ? ' is-over' : '') + '"><b>' + label + '</b><span class="mb-v">' + fmt(eaten) + '<small> / ' + fmt(target) + ' g</small></span><span class="mb-t"><span class="mb-f" style="--f:' + f.toFixed(3) + '"></span></span></div>';
 }
 function renderMeals(){
+  const sa = $('#subAdd'); if (sa) sa.textContent = 'La ' + mealName(S.meal).toLowerCase() + (S.view === todayKey() ? ', azi' : ', ' + dayWord(S.view).toLowerCase());
   $('#meals').innerHTML = MEALS.map(m => '<button class="chip" role="radio" data-action="meal" data-meal="' + m.id + '" aria-checked="' + (m.id === S.meal) + '">' + m.t + '</button>').join('');
 }
 function renderTabs(){
@@ -2648,8 +2689,9 @@ function renderTabs(){
     b.setAttribute('aria-selected', String(t === S.tab));
   });
   $$('#logger [data-pane]').forEach(p => p.hidden = p.dataset.pane !== S.tab);
+  const ap = $('#askPhoto'); if (ap) ap.hidden = S.aiOff || S.photoOff;
   $('#aiNote').hidden = !S.aiOff;
-  $('#aiNote').textContent = S.noSample ? 'Estimarea automată nu e disponibilă aici, așa că notezi valorile manual.' : 'Ai ales să nu trimiți mesele la AI, așa că notezi valorile manual. Poți porni estimările din Setări → Datele tale.';
+  $('#aiNote').textContent = S.noSample ? 'Estimarea automată nu e disponibilă aici, așa că notezi valorile manual.' : 'Ai ales să nu trimiți mesele la AI, așa că notezi valorile manual. Poți porni estimările din Profil → Datele tale.';
 }
 function renderRecent(){
   const el = $('#recent'); const list = recentFoods(); S._recent = list;
@@ -2676,6 +2718,7 @@ const AI_SRC = new Set(['text', 'photo', 'idea']);
 const CONF = { 'mare': { cls: 'hi', t: 'sigur', u: 0.07 }, 'medie': { cls: 'mid', t: 'estimat', u: 0.18 }, 'mică': { cls: 'lo', t: 'verifică', u: 0.35 } };
 function renderPreview(){
   const el = $('#preview'); const d = S.draft;
+  const plus = $('#tabbar .tab-add'); if (plus) plus.classList.toggle('has-draft', !!d);
   if (!d){ el.hidden = true; el.innerHTML = ''; return; }
   const tot = { kcal:0, protein:0, carbs:0, fat:0 }; let lo = 0, hi = 0, unsure = 0;
   const rows = d.items.map((it, i) => {
@@ -2742,25 +2785,30 @@ function renderWater(){
     '<div class="glasses" style="--n:' + cells + '">' + g + '</div>' +
     '<div class="row"><button class="btn ghost sm" data-action="water-add" data-ml="-250" ' + (w <= 0 ? 'disabled' : '') + '>−250 ml</button><button class="btn soft sm" data-action="water-add" data-ml="250">+250 ml</button><button class="btn soft sm" data-action="water-add" data-ml="500">+500 ml</button></div>';
 }
+const MEAL_ICON = {
+  breakfast: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 17h16M7.5 17a4.5 4.5 0 0 1 9 0M12 7.5V5M6.2 10.2 4.8 8.8M17.8 10.2l1.4-1.4"/><path d="M8 20.5h8"/></svg>',
+  lunch: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/></svg>',
+  snack: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7.5c-2-1.6-6-1.2-6.6 2.6-.5 3.4 1.6 9.4 4.4 9.4 1 0 1.4-.5 2.2-.5s1.2.5 2.2.5c2.8 0 4.9-6 4.4-9.4-.6-3.8-4.6-4.2-6.6-2.6z"/><path d="M12 7.5c0-1.8.8-3.2 2.4-4"/></svg>',
+  dinner: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 14.5A7.5 7.5 0 0 1 9.5 4.5a7.5 7.5 0 1 0 10 10z"/></svg>'
+};
+const STAR_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.8l2.5 5.2 5.6.8-4.1 3.9 1 5.6-5-2.7-5 2.7 1-5.6-4.1-3.9 5.6-.8z"/></svg>';
 function renderDiary(){
   const el = $('#diary'); const day = getDay(S.view); const t = dayTotals(day);
-  let html = '<div class="panel-head"><h2>Jurnal</h2><span class="meta">' + (t.n ? t.n + (t.n === 1 ? ' aliment' : ' alimente') + ' · <strong>' + fmt(t.kcal) + ' kcal</strong>' : '') + '</span></div>';
-  if (!t.n){
-    html += '<p class="empty"><b>' + (S.loaded ? 'Nimic notat ' + (S.view === todayKey() ? 'azi' : 'în ziua asta') : 'Se încarcă…') + '</b>Mesele apar aici, pe mic dejun, prânz, gustare și cină. Scrie ce ai mâncat sau fă o poză farfuriei. Atinge apoi orice aliment ca să-l corectezi.</p>';
-  } else {
-    html += '<div class="legend"><span><i class="dot p"></i>Proteine</span><span><i class="dot c"></i>Glucide</span><span><i class="dot f"></i>Grăsimi</span><span>atinge un aliment ca să-l editezi</span></div>';
-    for (const m of MEALS){
-      const list = day.entries.filter(e => e.meal === m.id).sort((a, b) => a.at - b.at);
-      if (!list.length){
-        html += '<div class="meal-group"><h3>' + m.t + '<button class="addhere" data-action="add-to" data-meal="' + m.id + '">+ Adaugă</button></h3></div>';
-        continue;
-      }
-      const mk = list.reduce((a, e) => a + e.kcal, 0);
-      html += '<div class="meal-group"><h3>' + m.t + '<span class="mg-r"><button class="addhere" data-action="fav-save" data-meal="' + m.id + '" aria-label="Salvează ' + m.t.toLowerCase() + ' ca masă favorită">☆ Salvează</button><span>' + fmt(mk) + ' kcal</span></span></h3><ul class="entries">' + list.map(e =>
+  const T = S.profile ? targetsFor(S.view) : null;
+  let html = '<div class="diary-sum"><div class="ds-main"><b>' + fmt(t.kcal) + '</b><span>' + (T ? 'din ' + fmt(T.kcal) + ' kcal' : 'kcal') + '</span></div>' +
+    '<span class="mx"><span><i class="dot p"></i>' + fmt(t.protein) + ' g</span><span><i class="dot c"></i>' + fmt(t.carbs) + ' g</span><span><i class="dot f"></i>' + fmt(t.fat) + ' g</span></span></div>';
+  if (!S.loaded){ el.innerHTML = html + '<div class="skel" aria-hidden="true"></div>'; return; }
+  for (const m of MEALS){
+    const list = day.entries.filter(e => e.meal === m.id).sort((a, b) => a.at - b.at);
+    const mk = list.reduce((a, e) => a + e.kcal, 0);
+    html += '<section class="panel meal-card" aria-label="' + m.t + '"><header class="mc-head"><span class="mc-ic">' + MEAL_ICON[m.id] + '</span><h2>' + m.t + '</h2>' +
+      (list.length ? '<span class="mc-k">' + fmt(mk) + ' kcal</span><button class="mc-fav" data-action="fav-save" data-meal="' + m.id + '" aria-label="Salvează ' + m.t.toLowerCase() + ' ca masă favorită">' + STAR_ICON + '</button>' : '') + '</header>' +
+      (list.length ? '<ul class="entries">' + list.map(e =>
         '<li class="entry"><button class="e-main" data-action="edit" data-id="' + esc(e.id) + '" aria-label="Editează ' + esc(e.name) + '"><span class="nm">' + esc(e.name) + (AI_SRC.has(e.src) ? ' <span class="aitag" title="Estimat de AI">AI</span>' : '') + '</span><span class="mx"><span><i class="dot p"></i>' + fmt1(e.protein) + '</span><span><i class="dot c"></i>' + fmt1(e.carbs) + '</span><span><i class="dot f"></i>' + fmt1(e.fat) + '</span>' + (e.grams ? '<span>' + fmt(e.grams) + ' g</span>' : '') + '</span></button>' +
-        '<span class="kc">' + fmt(e.kcal) + '</span><button class="del" data-action="del" data-id="' + esc(e.id) + '" aria-label="Șterge ' + esc(e.name) + '">' + X_ICON + '</button></li>').join('') + '</ul></div>';
-    }
+        '<span class="kc">' + fmt(e.kcal) + '</span><button class="del" data-action="del" data-id="' + esc(e.id) + '" aria-label="Șterge ' + esc(e.name) + '">' + X_ICON + '</button></li>').join('') + '</ul>' : '') +
+      '<button class="mc-add" data-action="add-to" data-meal="' + m.id + '">' + '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>' + (list.length ? 'Mai adaugă' : 'Adaugă la ' + m.t.toLowerCase()) + '</button></section>';
   }
+  if (t.n) html += '<p class="hint diary-hint">Atinge un aliment ca să-l corectezi.</p>';
   el.innerHTML = html;
 }
 function weightSeries(endKey, n){
@@ -2859,7 +2907,6 @@ function renderHistory(){
 /* ---------- setup interview ---------- */
 const STEPS = ['intro','sex','age','body','activity','goal','result'];
 function openSetup(first){
-  closeSheet('#settings');
   const base = S.profile ? S.profile : PREFILL;
   S.setup = {
     step: S.profile ? 1 : 0, first: !S.profile && !!first,
@@ -2887,7 +2934,7 @@ function renderSetup(){
   $('#sProg').innerHTML = [1,2,3,4,5].map(i => '<i class="' + (i <= s.step ? 'on' : '') + '"></i>').join('');
   let b = '';
   if (st === 'intro'){
-    b = '<h2 id="sTitle" tabindex="-1">Bun venit în Porția</h2><p>Cinci întrebări scurte. La final îți calculez caloriile, proteinele, glucidele, grăsimile și apa. Nu trebuie să știi niciun număr.</p><p>Am completat deja ce știu despre tine. Verifică și corectează unde e cazul.</p>';
+    b = '<h2 id="sTitle" tabindex="-1">Bun venit în Porția</h2><p>Cinci întrebări scurte. La final îți calculez caloriile, proteinele, glucidele, grăsimile și apa. Nu trebuie să știi niciun număr.</p>' + (S.profile ? '<p>Am completat deja ce știu despre tine. Verifică și corectează unde e cazul.</p>' : '');
   } else if (st === 'sex'){
     b = '<h2 id="sTitle" tabindex="-1">Sexul biologic</h2><p>Formula metabolismului diferă puțin între bărbați și femei.</p>' + optList('sex', [{ id:'m', t:'Bărbat' }, { id:'f', t:'Femeie' }]);
   } else if (st === 'age'){
@@ -2935,13 +2982,9 @@ function saveSetup(){
 }
 
 /* ---------- settings ---------- */
-function openSettings(){
-  if (!S.profile){ openSetup(true); return; }
-  renderSettings();
-  showSheet('#settings');
-  const h = $('#setTitle'); if (h) h.focus({ preventScroll: true });
-}
-function renderSettings(){
+function openSettings(){ go('profil'); }
+function renderSettings(){ renderSettingsInner(); $$('#settingsCard > section').forEach(x => x.classList.add('panel')); }
+function renderSettingsInner(){
   const p = S.profile, T = p.targets;
   const act = ACT.find(a => a.id === p.activity), g = GOALS.find(x => x.id === p.goal);
   const summary = [p.sex === 'f' ? 'Femeie' : p.sex === 'm' ? 'Bărbat' : null, p.age ? p.age + ' ani' : null, p.height ? p.height + ' cm' : null, p.weight ? fmt1(p.weight) + ' kg' : null, act ? act.t : null, g ? g.t : null].filter(Boolean).join(' · ');
@@ -2949,7 +2992,7 @@ function renderSettings(){
     : S.mode === 'local' ? 'Datele se salvează doar în acest browser. Folosește codul de backup ca să nu le pierzi.'
     : 'Datele nu se pot salva aici. Copiază codul de backup înainte să închizi pagina.';
   $('#settingsCard').innerHTML =
-    '<div class="sheet-head"><h2 id="setTitle" tabindex="-1">Setări</h2><button class="icon-btn" data-action="close-settings" aria-label="Închide">' + X_ICON + '</button></div>' +
+    '<div class="scr-head"><div><h1 id="setTitle" tabindex="-1">Profil</h1><p>' + esc(summary) + '</p></div></div>' +
     '<section id="appearSec">' + appearanceSection() + '</section>' +
     '<section id="themeSec">' + themeSection() + '</section>' +
     '<section><h3>Ținte zilnice</h3><p>' + (p.custom ? 'Ținte ajustate de tine.' : 'Calculate din interviu. Le poți ajusta manual.') + '</p>' +
@@ -2998,8 +3041,7 @@ function saveTargets(){
   err.textContent = '';
   S.profile = Object.assign(clone(S.profile), { custom: true, updatedAt: Date.now(), targets: { kcal: k, protein: p, carbs: c, fat: f, water: w } });
   saveProfile();
-  closeSheet('#settings');
-  renderAll();
+  renderAll(); renderSettings();
   toast('Țintele au fost salvate.');
 }
 function toB64(str){
@@ -3044,7 +3086,7 @@ function checkRestore(){
 async function doRestore(){
   if (!pendingRestore) return;
   S.profile = pendingRestore.profile; S.days = pendingRestore.days; S.library = pendingRestore.library; pendingRestore = null;
-  closeSheet('#settings');
+  go('azi');
   renderAll();
   toast('Se restaurează…');
   const ok = await uploadAll(true);
@@ -3060,14 +3102,13 @@ function closeSheet(sel){
   if (!anySheetOpen()) document.body.style.overflow = '';
 }
 function goToLogger(){
-  scrollTo($('#logger'));
-  if (S.tab === 'text' && !S.aiOff) setTimeout(() => $('#foodText').focus({ preventScroll: true }), reduceMotion() ? 0 : 350);
+  go('add');
+  if (S.tab === 'text' && !S.aiOff) $('#foodText').focus({ preventScroll: true });
 }
 
 /* ---------- events ---------- */
 const CLOSERS = {
   setup: () => { if (!S.setup || !S.setup.first) closeSheet('#setup'); },
-  settings: () => closeSheet('#settings'),
   editSheet: () => { closeSheet('#editSheet'); S.edit = null; },
   libSheet: () => closeSheet('#libSheet'),
   recipeSheet: () => closeRecipe(),
@@ -3083,11 +3124,22 @@ function bindStatic(){
     const a = b.dataset.action;
     switch (a){
       case 'open-settings': openSettings(); break;
-      case 'close-settings': closeSheet('#settings'); break;
+      case 'close-settings': go('azi'); break;
       case 'open-setup': openSetup(false); break;
       case 'redo-setup': openSetup(false); break;
       case 'close-setup': if (!S.setup || !S.setup.first) closeSheet('#setup'); break;
       case 'prev-day': S.view = addDays(S.view, -1); renderDayParts(); break;
+      case 'week-prev': S.view = addDays(S.view, -7); renderDayParts(); break;
+      case 'week-next': { const n = addDays(S.view, 7), t = todayKey(); S.view = n > t ? t : n; renderDayParts(); break; }
+      case 'nav': if (b.dataset.nav === 'add' && S.screen === 'add') go(S.lastMain || 'azi'); else go(b.dataset.nav); break;
+      case 'quick-add': {
+        const m = b.dataset.mode;
+        S.tab = m === 'text' ? (S.aiOff ? 'manual' : 'text') : m; showErr(''); renderTabs(); go('add');
+        if (m === 'photo') $('#photoInput').click();
+        else if (m === 'text') $(S.aiOff ? '#mName' : '#foodText').focus({ preventScroll: true });
+        else if (m === 'barcode') $('#bcCode').focus({ preventScroll: true });
+        break;
+      }
       case 'next-day': if (S.view < todayKey()){ S.view = addDays(S.view, 1); renderDayParts(); } break;
       case 'go-today': S.view = todayKey(); renderDayParts(); break;
       case 'tab': S.tab = b.dataset.tab; showErr(''); stopVoice(); renderTabs(); break;
@@ -3125,7 +3177,7 @@ function bindStatic(){
         estimate(d.src, (d.follow ? d.follow + '\n' : '') + 'Răspuns la întrebarea „' + d.question + '”: ' + ans.slice(0, 200));
         break;
       }
-      case 'ideas': getIdeas(); break;
+      case 'ideas': go('add'); getIdeas(); break;
       case 'stop-ideas': if (S.ideaCtl) S.ideaCtl.abort(); S.ideas = null; renderIdeas(); break;
       case 'close-ideas': if (S.ideaCtl) S.ideaCtl.abort(); S.ideas = null; renderIdeas(); break;
       case 'use-idea': {
@@ -3200,7 +3252,7 @@ function bindStatic(){
       case 'fast-start': startFast(false); break;
       case 'fast-start-last': startFast(true); break;
       case 'fast-stop': stopFast(false); break;
-      case 'fast-hide': setFast({ hide: true }); toast('Panoul de post e ascuns. Îl readuci din Setări.', 'Anulează', () => setFast({ hide: false })); break;
+      case 'fast-hide': setFast({ hide: true }); toast('Panoul de post e ascuns. Îl readuci din Profil.', 'Anulează', () => setFast({ hide: false })); break;
       case 'fast-show': setFast({ hide: b.getAttribute('aria-checked') === 'true' }); { const n = $('[data-action="fast-show"]'); if (n) n.focus(); } break;
       case 'rl-mode': {
         const v = recipeCalc(); if (!v) break;

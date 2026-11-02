@@ -43,7 +43,7 @@ git push
 
 Aplicația pornește în **modul local** când nu rulează în Claude:
 
-- Datele se salvează în browser, doar pe dispozitivul respectiv. Mutarea pe alt telefon se face cu codul de rezervă din Setări.
+- Datele se salvează în browser, doar pe dispozitivul respectiv. Mutarea pe alt telefon se face cu codul de rezervă din Profil.
 - Funcțiile cu Claude nu sunt disponibile: estimarea din text și poze, citirea etichetelor, ideile de mese și raportul săptămânal. Rămâne adăugarea manuală, codul de bare și biblioteca.
 - Sincronizarea în cloud nu e disponibilă.
 - Dictarea vocală merge în Safari și Chrome. În Claude, pagina de obicei nu primește microfonul, așa că acolo rămâne microfonul de pe tastatură.
