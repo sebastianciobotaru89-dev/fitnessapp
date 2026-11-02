@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Porția: tracker de calorii și macronutrienți, cu ținta zilnică calculată pentru tine.">
+<title>Porția</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Instrument+Sans:wght@400..700&family=Chakra+Petch:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="css/styles.css">
+<style id="themeStyle"></style>
+</head>
+<body>
+
+<div class="app" id="app">
+  <header class="top">
+    <div class="brand">
+      <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+        <defs>
+          <mask id="pMask" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
+            <path d="M 26 78 C 31 77 34 73 34 67 L 34 42 A 17 17 0 1 1 51 59" fill="none" stroke="#FFFFFF" stroke-width="18" stroke-linejoin="round"/>
+            <path d="M 26 78 C 31 77 34 73 34 67 L 34 42 A 17 17 0 1 1 51 59" fill="none" stroke="#000000" stroke-width="11" stroke-linejoin="round"/>
+            <path d="M 26 78 C 31 77 34 73 34 67 L 34 42 A 17 17 0 1 1 51 59" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linejoin="round"/>
+          </mask>
+          <linearGradient id="pSheen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".45"/><stop offset="1" stop-color="#FFFFFF" stop-opacity=".04"/></linearGradient>
+          <linearGradient id="pSheenSoft" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".22"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient>
+          <linearGradient id="pRim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".62"/><stop offset=".5" stop-color="#FFFFFF" stop-opacity="0"/><stop offset="1" stop-color="#000000" stop-opacity=".26"/></linearGradient>
+          <filter id="pBlur" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="2.2"/></filter>
+          <filter id="pGlow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="3.8"/></filter>
+          <radialGradient id="pGlint"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".9"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></radialGradient>
+          <filter id="pIceBlur" filterUnits="userSpaceOnUse" x="-10" y="-10" width="120" height="120"><feGaussianBlur stdDeviation="2.6"/></filter>
+          <radialGradient id="pIceDot" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".55" stop-color="#A6ECFB"/><stop offset="1" stop-color="#3AA3DA"/></radialGradient>
+          <filter id="pIceBlurApp" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="9"/></filter>
+          <linearGradient id="pShardGloss" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".9"/><stop offset=".6" stop-color="#FFFFFF" stop-opacity=".12"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient>
+          <linearGradient id="pSheenIce" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".66"/><stop offset="1" stop-color="#FFFFFF" stop-opacity=".06"/></linearGradient>
+          <linearGradient id="pRimIce" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".95"/><stop offset=".45" stop-color="#FFFFFF" stop-opacity="0"/><stop offset=".85" stop-color="#FFFFFF" stop-opacity=".1"/><stop offset="1" stop-color="#FFFFFF" stop-opacity=".45"/></linearGradient>
+          <filter id="pCrackBlur" filterUnits="userSpaceOnUse" x="-10" y="-10" width="120" height="120"><feGaussianBlur stdDeviation="1.1"/></filter>
+          <radialGradient id="pPearl" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".5" stop-color="#FFE3EC"/><stop offset="1" stop-color="#F48FB1"/></radialGradient>
+          <linearGradient id="pPetal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".55" stop-color="#FFD1DF"/><stop offset="1" stop-color="#FF8FB1"/></linearGradient>
+          <pattern id="pGrid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M10 0H0V10" fill="none" stroke="#00E5FF" stroke-opacity=".16" stroke-width=".5"/></pattern>
+          <pattern id="pScan" width="4" height="3" patternUnits="userSpaceOnUse"><rect width="4" height="1" fill="#FFFFFF" opacity=".06"/></pattern>
+          <clipPath id="pTile"><rect width="100" height="100" rx="22.5"/></clipPath>
+          <linearGradient id="pIcicle" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#C4F1FF" stop-opacity=".92"/></linearGradient>
+          <pattern id="pDots" width="5" height="5" patternUnits="userSpaceOnUse"><circle cx="2.5" cy="2.5" r="1.1" fill="#FFFFFF"/></pattern>
+          <linearGradient id="ringHolo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF9ECD"/><stop offset=".35" stop-color="#B9A6FF"/><stop offset=".7" stop-color="#7FE6FF"/><stop offset="1" stop-color="#A8FFCF"/></linearGradient>
+        </defs>
+      </svg>
+      <span class="mark" id="brandMark" aria-hidden="true"></span>
+      <div>
+        <h1>Porția</h1>
+        <p class="sync" id="sync" data-state="idle">Se încarcă…</p>
+      </div>
+    </div>
+    <button class="icon-btn" data-action="open-settings" aria-label="Setări, ținte și backup">
+      <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg>
+    </button>
+  </header>
+
+  <nav class="daynav" aria-label="Alege ziua">
+    <button class="icon-btn" data-action="prev-day" aria-label="Ziua anterioară">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+    <div class="daylabel" aria-live="polite"><strong id="dayName">Azi</strong><span id="dayDate"></span><button id="toToday" data-action="go-today" hidden>Înapoi la azi</button></div>
+    <button class="icon-btn" data-action="next-day" aria-label="Ziua următoare">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+    </button>
+  </nav>
+
+  <div class="grid">
+    <div class="col">
+      <section class="panel" id="hero" aria-label="Calorii și macronutrienți"></section>
+
+      <section class="panel" id="logger" aria-labelledby="logTitle">
+        <div class="panel-head"><h2 id="logTitle">Ce ai mâncat?</h2><span class="meta" id="logFor"></span></div>
+        <div class="seg" role="tablist" aria-label="Mod de adăugare">
+          <button role="tab" data-action="tab" data-tab="text" aria-selected="true">Scrie</button>
+          <button role="tab" data-action="tab" data-tab="photo" aria-selected="false">Poză</button>
+          <button role="tab" data-action="tab" data-tab="barcode" aria-selected="false">Cod de bare</button>
+          <button role="tab" data-action="tab" data-tab="manual" aria-selected="false">Manual</button>
+        </div>
+        <div class="meals" id="meals" role="radiogroup" aria-label="Masa"></div>
+
+        <div class="pane" data-pane="text">
+          <label class="sr" for="foodText">Descrie ce ai mâncat</label>
+          <textarea id="foodText" rows="3" placeholder="ex: 2 ouă ochiuri, o felie de pâine integrală și o cafea cu lapte"></textarea>
+          <button class="btn primary" data-action="estimate-text">Calculează caloriile</button>
+          <p class="hint">Merge și cu produse de marcă sau din restaurant, de exemplu „un meniu Big Mac mediu”.</p>
+        </div>
+
+        <div class="pane" data-pane="photo" hidden>
+          <label class="photo-pick" for="photoInput">
+            <input type="file" id="photoInput" accept="image/jpeg,image/png,image/webp,image/gif">
+            <span class="ph" id="photoThumb">
+              <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+            </span>
+            <span><b id="photoTitle">Fă o poză farfuriei</b><span id="photoSub">sau etichetei de pe ambalaj</span></span>
+          </label>
+          <label class="sr" for="photoNote">Detalii despre poză</label>
+          <input type="text" id="photoNote" placeholder="Detalii (opțional): ex. am mâncat doar jumătate">
+          <button class="btn primary" data-action="estimate-photo" id="photoBtn" disabled>Analizează poza</button>
+          <p class="hint">Pune o furculiță lângă farfurie, ca porția să fie estimată mai bine.</p>
+        </div>
+
+        <div class="pane" data-pane="barcode" hidden>
+          <label class="photo-pick" for="bcInput">
+            <input type="file" id="bcInput" accept="image/*">
+            <span class="ph"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true"><path d="M4 6v12M10 6v12M15 6v12M20 6v12" stroke-width="1.8"/><path d="M7 6v12M12.5 6v12M17.5 6v12" stroke-width="1"/></svg></span>
+            <span><b>Fotografiază codul de bare</b><span>de aproape, drept, cu lumină bună</span></span>
+          </label>
+          <div class="bc-row"><label class="sr" for="bcCode">Cifrele codului de bare</label><input type="text" id="bcCode" inputmode="numeric" placeholder="sau scrie cifrele de sub cod"><button class="btn soft" data-action="bc-lookup">Caută</button></div>
+          <div id="bcResult"></div>
+          <p class="hint">Prima dată salvezi produsul, cu poza etichetei. Data viitoare îl găsești instant după cod.</p>
+        </div>
+
+        <div class="pane" data-pane="manual" hidden>
+          <div class="mgrid">
+            <div class="full"><label class="lbl" for="mName">Aliment</label><input type="text" id="mName" placeholder="ex: Iaurt grecesc 2%, 150 g"></div>
+            <div class="half"><label class="lbl" for="mKcal">Calorii</label><div class="unit"><input type="text" id="mKcal" inputmode="decimal" placeholder="0"><em>kcal</em></div></div>
+            <div class="half"><label class="lbl" for="mGrams">Cantitate</label><div class="unit"><input type="text" id="mGrams" inputmode="decimal" placeholder="opțional"><em>g</em></div></div>
+            <div><label class="lbl" for="mP">Prot.</label><input type="text" id="mP" inputmode="decimal" placeholder="g"></div>
+            <div><label class="lbl" for="mC">Glucide</label><input type="text" id="mC" inputmode="decimal" placeholder="g"></div>
+            <div><label class="lbl" for="mF">Grăsimi</label><input type="text" id="mF" inputmode="decimal" placeholder="g"></div>
+            <div style="display:flex;align-items:flex-end"><button class="btn primary" style="width:100%" data-action="add-manual">Adaugă</button></div>
+          </div>
+          <p class="hint">Copiază valorile de pe etichetă. Dacă lași caloriile goale, le calculez din macronutrienți.</p>
+        </div>
+
+        <p class="hint" id="aiNote" hidden style="margin-top:10px">Estimarea automată nu e disponibilă aici, așa că notezi valorile manual.</p>
+        <div class="status" id="estStatus" hidden>
+          <span class="spin" aria-hidden="true"></span>
+          <p><span id="estMsg">Claude calculează…</span><small id="estElapsed"></small></p>
+          <button class="btn ghost sm" data-action="stop">Oprește</button>
+        </div>
+        <p class="err" id="estErr" role="alert" hidden></p>
+        <div class="recent" id="recent" hidden></div>
+      </section>
+
+      <section class="panel preview" id="preview" hidden aria-labelledby="pvTitle"></section>
+      <section class="panel" id="ideas" hidden aria-labelledby="idTitle"></section>
+    </div>
+
+    <div class="col">
+      <section class="panel" id="diary" aria-label="Jurnal alimentar"></section>
+      <section class="panel" id="water" aria-label="Apă"></section>
+      <section class="panel" id="fast" aria-labelledby="fastTitle" hidden></section>
+      <section class="panel" id="weight" aria-labelledby="wTitle">
+        <div class="panel-head"><h2 id="wTitle">Greutate</h2><span class="meta" id="wMeta"></span></div>
+        <div class="wrow">
+          <div class="unit"><label class="sr" for="wIn">Greutatea în kilograme</label><input type="text" id="wIn" inputmode="decimal" placeholder="0,0"><em>kg</em></div>
+          <button class="btn soft" data-action="w-save">Notează</button>
+        </div>
+        <p class="hint">Cântărește-te dimineața, înainte să mănânci. Contează tendința, nu o singură zi.</p>
+        <div id="wChart"></div>
+        <dl class="hstats" id="wStats" hidden></dl>
+        <div id="wBanner"></div>
+        <div id="adapt"></div>
+      </section>
+      <section class="panel" id="history" aria-label="Ultimele 7 zile"></section>
+    </div>
+  </div>
+</div>
+
+<div class="sheet full" id="setup" hidden role="dialog" aria-modal="true" aria-labelledby="sTitle">
+  <div class="sheet-card">
+    <div class="sheet-head">
+      <div class="prog" id="sProg" aria-hidden="true"></div>
+      <button class="icon-btn" data-action="close-setup" id="sClose" aria-label="Închide interviul">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="sbody" id="sBody"></div>
+    <div class="sfoot" id="sFoot"></div>
+  </div>
+</div>
+
+<div class="sheet full" id="consentSheet" hidden role="dialog" aria-modal="true" aria-labelledby="cTitle"><div class="sheet-card" id="consentCard"></div></div>
+
+<div class="sheet" id="settings" hidden role="dialog" aria-modal="true" aria-labelledby="setTitle">
+  <div class="sheet-card" id="settingsCard"></div>
+</div>
+
+<div class="sheet" id="editSheet" hidden role="dialog" aria-modal="true" aria-labelledby="edTitle">
+  <div class="sheet-card" id="editCard"></div>
+</div>
+
+<div class="sheet" id="libSheet" hidden role="dialog" aria-modal="true" aria-labelledby="libTitle"><div class="sheet-card" id="libCard"></div></div>
+<div class="sheet" id="recipeSheet" hidden role="dialog" aria-modal="true" aria-labelledby="recTitle"><div class="sheet-card" id="recipeCard"></div></div>
+<div class="sheet" id="miniSheet" hidden role="dialog" aria-modal="true" aria-labelledby="miniTitle"><div class="sheet-card" id="miniCard"></div></div>
+
+<div class="sheet" id="plusSheet" hidden role="dialog" aria-modal="true" aria-labelledby="plusTitle">
+  <div class="sheet-card" id="plusCard"></div>
+</div>
+
+<div class="toast" id="toast" hidden role="status" aria-live="polite"><span id="toastMsg"></span><button id="toastBtn" hidden></button></div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
