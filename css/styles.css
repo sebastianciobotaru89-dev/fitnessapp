@@ -1049,3 +1049,94 @@ h2{font-stretch:104%;font-weight:750}
 
 @media (min-width:900px){.dial{width:min(30vw,310px)}}
 @media (prefers-reduced-motion: reduce){.dial svg,.mring .mb-f,.d-center.swap{transition:none;animation:none}}
+
+/* ================= Adaugă: pick the meal, pick the way, one card to fill ================= */
+#logger{background:none;border:0;box-shadow:none;padding:0;border-radius:0;display:flex;flex-direction:column;gap:12px}
+#logger > .seg.modes{margin:0}
+.pane{background:var(--surface);border-radius:26px;box-shadow:var(--lift);padding:16px;gap:12px}
+:root[data-theme="dark"] .pane{border:1px solid var(--line)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .pane{border:1px solid var(--line)}}
+
+/* the meal: four tiles in the meals' own colours */
+.meals{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0}
+.ml{display:flex;flex-direction:column;align-items:center;gap:7px;padding:12px 4px 11px;border:0;border-radius:20px;background:var(--surface);box-shadow:var(--lift);color:var(--muted);font-size:13px;cursor:pointer;min-width:0;transition:transform .14s,background-color .2s,color .2s,box-shadow .2s}
+.ml:active{transform:scale(.95)}
+.ml b{font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.ml-ic{width:36px;height:36px;border-radius:12px;display:grid;place-items:center;background:var(--sunk);color:var(--muted);transition:background-color .2s,color .2s,transform .3s cubic-bezier(.3,1.5,.5,1)}
+.ml-breakfast{--mc:var(--m1);--mi:var(--m1i)} .ml-lunch{--mc:var(--m2);--mi:var(--m2i)} .ml-snack{--mc:var(--m3);--mi:var(--m3i)} .ml-dinner{--mc:var(--m4);--mi:var(--m4i)}
+.ml[aria-checked="true"]{background:var(--mc);color:var(--ink);box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--mi) 55%,transparent)}
+.ml[aria-checked="true"] .ml-ic{background:var(--surface);color:var(--mi);transform:scale(1.06)}
+:root[data-theme="dark"] .ml{border:1px solid var(--line)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .ml{border:1px solid var(--line)}}
+
+/* the ways to add: a pill switch */
+.seg.modes{background:var(--sunk);border-radius:18px;padding:4px}
+.seg.modes button{flex-direction:row;gap:7px;padding:10px 4px;font-size:13.5px;border-radius:14px}
+.seg.modes svg{width:19px;height:19px}
+
+/* manual: the name as a title, the numbers as tiles, then what it does to the day */
+.mname input{background:transparent;border:0;border-bottom:1.5px solid var(--line);border-radius:0;padding:6px 2px 12px;font-size:21px;font-weight:650;letter-spacing:-.01em}
+.mname input:focus{background:transparent;border-color:var(--act)}
+.dict.has-mic.mname input{padding-right:46px}
+.mtiles{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.mtile{grid-column:span 2;display:flex;flex-direction:column;gap:4px;padding:10px 12px 8px;border-radius:18px;background:var(--sunk);cursor:text;transition:box-shadow .15s,background-color .15s}
+.mtile.big{grid-column:span 4}
+.mtile:nth-child(2){grid-column:span 2}
+.mtile:focus-within{background:var(--surface);box-shadow:inset 0 0 0 1.5px var(--act)}
+.mt-l{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--muted)}
+.mtile.m-p .mt-l::before,.mtile.m-c .mt-l::before,.mtile.m-f .mt-l::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--c)}
+.mtile input[type="text"]{background:transparent;border:0;border-radius:0;padding:0 34px 0 0;font-family:var(--f-display);font-stretch:96%;font-weight:760;font-size:22px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.mtile.big input[type="text"]{font-size:30px}
+.mtile input[type="text"]:focus{background:transparent}
+.mtile .unit em{right:0;font-size:13px}
+.mfit{display:flex;flex-direction:column;gap:8px}
+.mfit:empty{display:none}
+.fit-bar{position:relative;display:flex;height:8px;border-radius:99px;background:var(--sunk);overflow:visible}
+.fit-bar i{display:block;height:100%}
+.fit-bar .fb-e{background:var(--kcal);border-radius:99px 0 0 99px;transition:width .4s cubic-bezier(.2,.8,.2,1)}
+.fit-bar .fb-n{background:var(--act);border-radius:0 99px 99px 0;transition:width .3s cubic-bezier(.2,.8,.2,1)}
+.fit-bar .fb-e:only-child{border-radius:99px}
+.fit-bar .fb-t{position:absolute;top:-4px;width:2px;height:16px;margin-left:-1px;border-radius:1px;background:var(--ink);opacity:.5}
+.mfit.is-over .fb-n{background:var(--over)}
+.mfit p{margin:0;font-size:13.5px;color:var(--muted)}
+.mfit p b{color:var(--ink);font-variant-numeric:tabular-nums}
+.btn.act{background:var(--act);color:var(--on-act);box-shadow:0 14px 26px -16px var(--act);width:100%;min-height:54px;font-size:16px;border-radius:18px}
+
+/* barcode: a viewfinder you tap to take the photo */
+.scan{position:relative;display:flex;flex-direction:column;align-items:center;gap:12px;padding:20px 16px 18px;border-radius:22px;background:#0E1412;color:#FFFFFF;cursor:pointer;overflow:hidden;text-align:center;transition:transform .14s}
+.scan:active{transform:scale(.985)}
+.scan input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.scan-vf{position:relative;width:170px;height:96px;display:grid;place-items:center;color:rgb(255 255 255 / .85)}
+.scan-vf i{position:absolute;width:22px;height:22px;border:2.5px solid var(--act)}
+.scan-vf i:nth-child(1){left:0;top:0;border-right:0;border-bottom:0;border-radius:10px 0 0 0}
+.scan-vf i:nth-child(2){right:0;top:0;border-left:0;border-bottom:0;border-radius:0 10px 0 0}
+.scan-vf i:nth-child(3){left:0;bottom:0;border-right:0;border-top:0;border-radius:0 0 0 10px}
+.scan-vf i:nth-child(4){right:0;bottom:0;border-left:0;border-top:0;border-radius:0 0 10px 0}
+.scan-line{position:absolute;left:12px;right:12px;top:50%;height:2px;border-radius:2px;background:var(--act);box-shadow:0 0 14px 2px color-mix(in srgb,var(--act) 70%,transparent);animation:scanMove 2.4s ease-in-out infinite alternate}
+@keyframes scanMove{from{transform:translateY(-34px)}to{transform:translateY(34px)}}
+.scan-t b{display:block;font-size:16.5px;font-weight:700}
+.scan-t span{font-size:13px;color:rgb(255 255 255 / .62)}
+.bc-row input{background:var(--sunk)}
+.bc-card{background:var(--sunk);border:0;border-radius:20px}
+
+/* the quick ways back to what you eat often: rows of cards you scroll sideways */
+.recent{margin-top:4px;padding-top:0;border-top:0;gap:14px}
+.recent .lbl{font-family:var(--f-display);font-stretch:104%;font-weight:750;font-size:15px;color:var(--ink);margin:0 2px}
+.recent .chips{gap:8px;padding:6px 2px 10px;margin:0 -2px;scroll-snap-type:x proximity;scrollbar-width:none}
+.recent .chips::-webkit-scrollbar{display:none}
+.recent .chip{scroll-snap-align:start;border:0;background:var(--surface);box-shadow:var(--lift);border-radius:16px;padding:11px 14px;font-weight:650}
+.recent .chip i{font-family:var(--f-display);font-stretch:92%;font-weight:700;color:var(--muted)}
+.recent .chip.accent{background:var(--kcal-soft);box-shadow:none}
+:root[data-theme="dark"] .recent .chip{border:1px solid var(--line)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .recent .chip{border:1px solid var(--line)}}
+
+/* text and photo, where Claude's estimates are on */
+.pane[data-pane="text"] textarea{min-height:120px;font-size:17px}
+.photo-pick{border:0;background:var(--sunk);border-radius:20px}
+
+@media (prefers-reduced-motion: reduce){.scan-line{animation:none}.ml-ic{transition:none}}
+.bc-card input[type="text"]{background:var(--surface)}
+.bc-card .chip{background:var(--surface);border-color:transparent}
+.bc-card .chip[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+/* every "add this food" button carries the main-action colour */
+.btn.primary:is([data-action="bc-add"],[data-action="commit"],[data-action="rl-add"]){background:var(--act);color:var(--on-act);box-shadow:0 14px 26px -16px var(--act)}

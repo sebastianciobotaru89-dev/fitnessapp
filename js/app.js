@@ -1245,6 +1245,7 @@ function addManual(){
   const k = S.view;
   mutateDay(k, day => day.entries.push(e));
   ['#mName','#mGrams','#mKcal','#mP','#mC','#mF'].forEach(s => $(s).value = '');
+  renderManualFit();
   toast('Adăugat la ' + mealName(e.meal) + ' · ' + fmt(e.kcal) + ' kcal', 'Anulează', () => mutateDay(k, day => { day.entries = day.entries.filter(x => x.id !== e.id); }));
 }
 function recentFoods(){
@@ -2674,7 +2675,7 @@ function toast(msg, label, fn){
 
 /* ---------- render ---------- */
 function renderAll(){ renderSync(); renderHeader(); renderHero(); renderMeals(); renderTabs(); renderRecent(); renderPreview(); renderIdeas(); renderDiary(); renderWater(); renderFast(); renderWeight(); renderHistory(); }
-function renderDayParts(){ renderHeader(); renderHero(); renderRecent(); renderDiary(); renderWater(); renderFast(); renderWeight(); renderHistory(); renderPreview(); }
+function renderDayParts(){ renderHeader(); renderHero(); renderRecent(); renderManualFit(); renderDiary(); renderWater(); renderFast(); renderWeight(); renderHistory(); renderPreview(); }
 function renderSync(){
   const el = $('#sync'); let st = 'idle', txt = 'Se încarcă…';
   if (S.mode === 'cloud'){
@@ -2691,7 +2692,7 @@ function renderHeader(){
   $('#subAzi').textContent = cap(dateLine(S.view));
   $('#toToday').hidden = S.view >= addDays(t, -1);
   $('#subJurnal').textContent = (isToday ? 'Azi, ' : dayWord(S.view) + ', ') + dateLine(S.view);
-  $('#subAdd').textContent = 'La ' + mealName(S.meal).toLowerCase() + (isToday ? ', azi' : ', ' + dayWord(S.view).toLowerCase());
+  $('#subAdd').textContent = addSub();
   const week = weekHtml();
   $('#weekAzi').innerHTML = week; $('#weekJurnal').innerHTML = week;
   renderAppbar();
@@ -2902,9 +2903,28 @@ function macroRing(key, label, eaten, target){
     '<span class="mr-dial" aria-hidden="true"><svg viewBox="0 0 48 48"><circle class="mr-t" cx="24" cy="24" r="20"/><circle class="mb-f" cx="24" cy="24" r="20" style="--f:' + f.toFixed(3) + '"/></svg><b>' + fmt(eaten) + '</b></span>' +
     '<span class="mr-txt" aria-hidden="true"><b>' + label + '</b><small>din ' + fmt(target) + ' g</small></span></div>';
 }
+const addSub = () => (S.view === todayKey() ? 'Azi, ' : dayWord(S.view) + ', ') + dateLine(S.view);
+// The manual card says, while you type, what this food does to the day, and the button names the meal it goes to
+function renderManualFit(){
+  const el = $('#mFit'), btn = $('#mAdd'); if (!el || !btn) return;
+  const v = id => { const n = num(($('#' + id) || {}).value); return n > 0 ? n : 0; };
+  const kc = v('mKcal') || (v('mP') * 4 + v('mC') * 4 + v('mF') * 9);
+  const meal = mealName(S.meal).toLowerCase();
+  btn.textContent = kc > 0 ? 'Adaugă ' + fmt(kc) + ' kcal la ' + meal : 'Adaugă la ' + meal;
+  if (!S.profile){ el.innerHTML = ''; return; }
+  const T = targetsFor(S.view), eaten = dayTotals(S.days[S.view]).kcal, after = eaten + kc, cap = Math.max(T.kcal, after) || 1;
+  const pe = Math.min(100, eaten / cap * 100), pn = Math.min(100 - pe, kc / cap * 100), mark = Math.min(100, T.kcal / cap * 100);
+  const txt = !kc ? 'Ai mâncat <b>' + fmt(eaten) + '</b> din <b>' + fmt(T.kcal) + '</b> kcal ' + (S.view === todayKey() ? 'azi' : 'în ziua aleasă') + '.'
+    : after <= T.kcal ? 'După asta îți mai rămân <b>' + fmt(T.kcal - after) + '</b> din <b>' + fmt(T.kcal) + '</b> kcal.'
+    : 'Cu asta ajungi la <b>' + fmt(after) + '</b> kcal, cu <b>' + fmt(after - T.kcal) + '</b> peste țintă.';
+  el.classList.toggle('is-over', after > T.kcal);
+  el.innerHTML = '<span class="fit-bar" aria-hidden="true"><i class="fb-e" style="width:' + pe.toFixed(1) + '%"></i><i class="fb-n" style="width:' + pn.toFixed(1) + '%"></i><i class="fb-t" style="left:' + mark.toFixed(1) + '%"></i></span><p>' + txt + '</p>';
+}
 function renderMeals(){
-  const sa = $('#subAdd'); if (sa) sa.textContent = 'La ' + mealName(S.meal).toLowerCase() + (S.view === todayKey() ? ', azi' : ', ' + dayWord(S.view).toLowerCase());
-  $('#meals').innerHTML = MEALS.map(m => '<button class="chip" role="radio" data-action="meal" data-meal="' + m.id + '" aria-checked="' + (m.id === S.meal) + '">' + m.t + '</button>').join('');
+  const sa = $('#subAdd'); if (sa) sa.textContent = addSub();
+  // the four meals as tiles in their own colours, the chosen one filled
+  $('#meals').innerHTML = MEALS.map(m => '<button class="ml ml-' + m.id + '" role="radio" data-action="meal" data-meal="' + m.id + '" aria-checked="' + (m.id === S.meal) + '"><span class="ml-ic">' + MEAL_ICON[m.id] + '</span><b>' + m.t + '</b></button>').join('');
+  renderManualFit();
 }
 function renderTabs(){
   $$('#logger [data-tab]').forEach(b => {
@@ -3862,6 +3882,7 @@ function bindStatic(){
     const t = ev.target;
     if (t.closest('#sBody') && t.dataset.field) setupInput(t.dataset.field, t.value);
     if (/^t[KPCFW]$/.test(t.id)) updateTargetSum();
+    if (/^m(Kcal|P|C|F)$/.test(t.id)) renderManualFit();
     if (S.rdraft && t.id === 'rName') S.rdraft.name = t.value;
     if (S.rdraft && t.id === 'rServ'){ const v = Math.round(num(t.value)); if (v >= 1 && v <= 50){ S.rdraft.servings = v; renderRecipeItems(); } }
     if (S.rdraft && t.id === 'rWeight'){ const v = num(t.value); S.rdraft.totalGrams = v > 0 ? Math.round(v) : null; }

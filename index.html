@@ -89,13 +89,13 @@
     <section class="screen" id="scr-add" data-screen="add" hidden aria-labelledby="hAdd">
       <div class="scr-head"><div><h1 id="hAdd">Adaugă</h1><p id="subAdd"></p></div></div>
       <section class="panel" id="logger" aria-labelledby="hAdd">
+        <div class="meals" id="meals" role="radiogroup" aria-label="Masa"></div>
         <div class="seg modes" role="tablist" aria-label="Mod de adăugare">
           <button role="tab" data-action="tab" data-tab="text" aria-selected="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19h4L19.5 8.5a2.1 2.1 0 0 0-3-3L6 16z"/><path d="M14.5 7.5l2 2"/></svg><span>Scrie</span></button>
           <button role="tab" data-action="tab" data-tab="photo" aria-selected="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Poză</span></button>
           <button role="tab" data-action="tab" data-tab="barcode" aria-selected="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6v12M10 6v12M15 6v12M20 6v12"/><path d="M7 6v12M12.5 6v12M17.5 6v12" stroke-width="1"/></svg><span>Cod de bare</span></button>
           <button role="tab" data-action="tab" data-tab="manual" aria-selected="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h9"/></svg><span>Manual</span></button>
         </div>
-        <div class="meals" id="meals" role="radiogroup" aria-label="Masa"></div>
 
         <div class="pane" data-pane="text">
           <label class="sr" for="foodText">Descrie ce ai mâncat</label>
@@ -119,10 +119,10 @@
         </div>
 
         <div class="pane" data-pane="barcode" hidden>
-          <label class="photo-pick" for="bcInput">
+          <label class="scan" for="bcInput">
             <input type="file" id="bcInput" accept="image/*">
-            <span class="ph"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true"><path d="M4 6v12M10 6v12M15 6v12M20 6v12" stroke-width="1.8"/><path d="M7 6v12M12.5 6v12M17.5 6v12" stroke-width="1"/></svg></span>
-            <span><b>Fotografiază codul de bare</b><span>de aproape, drept, cu lumină bună</span></span>
+            <span class="scan-vf" aria-hidden="true"><i></i><i></i><i></i><i></i><svg viewBox="0 0 64 40" width="76" height="48" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M6 4v32M20 4v32M34 4v32M50 4v32" stroke-width="3.2"/><path d="M12 4v32M27 4v32M42 4v32M57 4v32" stroke-width="1.6"/></svg><span class="scan-line"></span></span>
+            <span class="scan-t"><b>Fotografiază codul de bare</b><span>De aproape, drept și cu lumină bună</span></span>
           </label>
           <div class="bc-row"><label class="sr" for="bcCode">Cifrele codului de bare</label><input type="text" id="bcCode" inputmode="numeric" placeholder="sau scrie cifrele de sub cod"><button class="btn soft" data-action="bc-lookup">Caută</button></div>
           <div id="bcResult"></div>
@@ -131,15 +131,17 @@
         </div>
 
         <div class="pane" data-pane="manual" hidden>
-          <div class="mgrid">
-            <div class="full"><label class="lbl" for="mName">Aliment</label><div class="dict"><input type="text" id="mName" placeholder="ex: Iaurt grecesc 2%, 150 g"><button type="button" class="mic" data-action="mic" data-target="mName" aria-label="Dictează" aria-pressed="false" hidden><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg></button></div></div>
-            <div class="half"><label class="lbl" for="mKcal">Calorii</label><div class="unit"><input type="text" id="mKcal" inputmode="decimal" placeholder="0"><em>kcal</em></div></div>
-            <div class="half"><label class="lbl" for="mGrams">Cantitate</label><div class="unit"><input type="text" id="mGrams" inputmode="decimal" placeholder="opțional"><em>g</em></div></div>
-            <div><label class="lbl" for="mP">Prot.</label><input type="text" id="mP" inputmode="decimal" placeholder="g"></div>
-            <div><label class="lbl" for="mC">Glucide</label><input type="text" id="mC" inputmode="decimal" placeholder="g"></div>
-            <div><label class="lbl" for="mF">Grăsimi</label><input type="text" id="mF" inputmode="decimal" placeholder="g"></div>
-            <div style="display:flex;align-items:flex-end"><button class="btn primary" style="width:100%" data-action="add-manual">Adaugă</button></div>
+          <label class="sr" for="mName">Aliment</label>
+          <div class="dict mname"><input type="text" id="mName" placeholder="Numele alimentului" autocomplete="off" enterkeyhint="next"><button type="button" class="mic" data-action="mic" data-target="mName" aria-label="Dictează" aria-pressed="false" hidden><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg></button></div>
+          <div class="mtiles">
+            <label class="mtile big"><span class="mt-l">Calorii</span><span class="unit"><input type="text" id="mKcal" inputmode="decimal" placeholder="0"><em>kcal</em></span></label>
+            <label class="mtile"><span class="mt-l">Cantitate</span><span class="unit"><input type="text" id="mGrams" inputmode="decimal" placeholder="—"><em>g</em></span></label>
+            <label class="mtile m-p"><span class="mt-l">Proteine</span><span class="unit"><input type="text" id="mP" inputmode="decimal" placeholder="0"><em>g</em></span></label>
+            <label class="mtile m-c"><span class="mt-l">Glucide</span><span class="unit"><input type="text" id="mC" inputmode="decimal" placeholder="0"><em>g</em></span></label>
+            <label class="mtile m-f"><span class="mt-l">Grăsimi</span><span class="unit"><input type="text" id="mF" inputmode="decimal" placeholder="0"><em>g</em></span></label>
           </div>
+          <div class="mfit" id="mFit" aria-live="polite"></div>
+          <button class="btn act" data-action="add-manual" id="mAdd">Adaugă</button>
           <p class="hint">Copiază valorile de pe etichetă. Dacă lași caloriile goale, le calculez din macronutrienți.</p>
         </div>
 
