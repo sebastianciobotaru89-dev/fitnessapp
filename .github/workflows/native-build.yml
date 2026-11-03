@@ -92,7 +92,7 @@ jobs:
           retention-days: 14
 
   ios:
-    runs-on: macos-26
+    runs-on: macos-26-intel
     steps:
       - uses: actions/checkout@v5
       - name: Există proiectul iOS?
