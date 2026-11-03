@@ -147,6 +147,8 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   info('evenimente la glisare: ' + await page.ev(`__ev.filter((x, i, a) => a.indexOf(x) === i).join(' ') + ' (' + __ev.length + ')'`));
   ok('glisarea spre dreapta deschide ziua de ieri', /^Ieri/.test(await page.ev(`document.querySelector('#hAzi').textContent`)), await page.ev(`document.querySelector('#hAzi').textContent`));
   shot('3-ieri');
+  const vw = await page.ev(`({ w: innerWidth, sw: document.documentElement.scrollWidth, scale: visualViewport ? visualViewport.scale : 1 })`);
+  ok('pagina nu se micșorează după glisare', vw.w === iw && vw.sw <= iw + 1 && Math.abs(vw.scale - 1) < 0.01, vw);
   if (await page.ev(`document.querySelector('#hAzi').textContent`) === 'Azi') await act('prev-day');
   await sleep(500);
   back(); await sleep(900);
@@ -203,7 +205,7 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   writeFileSync(`${OUT}/logcat.txt`, log);
   // Capacitor's own script that writes the safe-area values can run before the page exists; it retries on its own
   const ours = l => !/favicon|Error injecting safe area CSS/.test(l);
-  const jsErr = log.split('\n').filter(l => /Capacitor\/Console.*(Uncaught|Error|error)|Uncaught/.test(l) && ours(l));
+  const jsErr = log.split('\n').filter(l => /Capacitor\/Console/.test(l) && /Uncaught|Error|error/.test(l) && ours(l));
   const seenOurs = seen.filter(ours);
   ok('nicio eroare JavaScript', !jsErr.length && !seenOurs.length, jsErr.slice(0, 5).concat(seenOurs.slice(0, 5)));
   ok('aplicația nu s-a oprit', !/FATAL EXCEPTION/.test(log));

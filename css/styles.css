@@ -832,6 +832,9 @@ html[data-dir="fwd"] .screen{animation-name:scrFwd}
 html[data-dir="back"] .screen{animation-name:scrBack}
 @keyframes scrFwd{from{opacity:0;transform:translateX(22px)}}
 @keyframes scrBack{from{opacity:0;transform:translateX(-22px)}}
+/* nothing may stick out sideways, not even a day sliding out: on Android the web view would zoom the page out to fit it */
+body{overflow-x:hidden}
+.app{overflow-x:clip}
 /* swiping between days: the browser keeps vertical scrolling, the app takes the horizontal drag */
 #scr-azi,#scr-jurnal{touch-action:pan-y pinch-zoom}
 html.swiping,html.swiping *{-webkit-user-select:none;user-select:none}
