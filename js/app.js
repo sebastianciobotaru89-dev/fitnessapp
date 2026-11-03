@@ -2756,15 +2756,20 @@ function onBack(){
 }
 function nativeInit(){
   const root = document.documentElement;
-  if (!NATIVE){
-    // the web: hide the tab bar while the on-screen keyboard is up, so it doesn't ride on top of it
-    const vv = window.visualViewport; if (!vv) return;
-    const kb = () => { const t = document.activeElement, typing = !!t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName); root.classList.toggle('kb', typing && vv.height < window.innerHeight * 0.8); };
-    vv.addEventListener('resize', kb);
-    document.addEventListener('focusin', () => setTimeout(kb, 350));
-    document.addEventListener('focusout', () => setTimeout(kb, 120));
-    return;
-  }
+  // The tab bar steps aside while the on-screen keyboard is up, so it doesn't ride on top of it.
+  // Measured from the page's own height, which shrinks under the keyboard; the Keyboard plugin below says it sooner.
+  let full = Math.max(window.innerHeight, window.visualViewport ? visualViewport.height : 0);
+  const kb = () => {
+    const t = document.activeElement, typing = !!t && (/^(TEXTAREA|SELECT)$/.test(t.tagName) || (t.tagName === 'INPUT' && !/^(checkbox|radio|button|submit|file|range)$/.test(t.type)));
+    const h = Math.min(window.innerHeight, window.visualViewport ? visualViewport.height : window.innerHeight);
+    if (!typing) full = Math.max(window.innerHeight, h);
+    root.classList.toggle('kb', typing && h < full * 0.8);
+  };
+  if (window.visualViewport) visualViewport.addEventListener('resize', kb);
+  window.addEventListener('resize', kb);
+  document.addEventListener('focusin', () => setTimeout(kb, 350));
+  document.addEventListener('focusout', () => setTimeout(kb, 120));
+  if (!NATIVE) return;
   root.setAttribute('data-native', PLATFORM);
   natOn('App', 'backButton', onBack);
   natOn('App', 'pause', mirrorFlush);
@@ -3423,20 +3428,23 @@ window.addEventListener('resize', () => moveTabInd(true));
 /* ---------- gestures: swipe between days, swipe a food left to delete it, pull a sheet down to close it ---------- */
 const G = { on: false };
 let noClickUntil = 0;
+// Touch events, not pointer events: once a drag is clearly sideways the app takes it and stops the page from
+// scrolling, so the phone's web view never cancels it halfway (Android does that to pointer events).
 function gStart(ev){
-  if (ev.pointerType === 'mouse' || G.on || anySheetOpen()) return;
-  const t = ev.target;
+  if (G.on || anySheetOpen() || ev.touches.length !== 1) return;
+  const t = ev.target, p = ev.touches[0];
   if (!t.closest || t.closest('input, textarea, select, .glasses, .chips, .seg, .tabbar, [data-noswipe]')) return;
-  if (ev.clientX < 24 || ev.clientX > window.innerWidth - 24) return; // the screen edges belong to the phone's back gesture
+  if (p.clientX < 24 || p.clientX > window.innerWidth - 24) return; // the screen edges belong to the phone's back gesture
   const entry = t.closest('#diary .entry');
   const days = (S.screen === 'azi' || S.screen === 'jurnal') && !!S.profile && S.loaded;
   if (!entry && !days) return;
   const week = t.closest('.week');
-  Object.assign(G, { on: true, id: ev.pointerId, x0: ev.clientX, y0: ev.clientY, t0: performance.now(), mode: null, entry, days, week, step: week ? 7 : 1, dx: 0, armed: false });
+  Object.assign(G, { on: true, x0: p.clientX, y0: p.clientY, t0: performance.now(), mode: null, entry, days, week, step: week ? 7 : 1, dx: 0, armed: false });
 }
 function gMove(ev){
-  if (!G.on || ev.pointerId !== G.id) return;
-  const dx = ev.clientX - G.x0, dy = ev.clientY - G.y0;
+  if (!G.on) return;
+  if (ev.touches.length !== 1){ gEnd({ type: 'touchcancel' }); return; }
+  const p = ev.touches[0], dx = p.clientX - G.x0, dy = p.clientY - G.y0;
   if (!G.mode){
     if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
     if (Math.abs(dy) > Math.abs(dx) * 0.8){ G.on = false; return; }
@@ -3447,6 +3455,7 @@ function gMove(ev){
     G.panes.forEach(el => { el.style.transition = 'none'; });
     document.documentElement.classList.add('swiping');
   }
+  if (ev.cancelable) ev.preventDefault();
   G.dx = dx;
   if (G.mode === 'entry'){
     const w = G.entry.offsetWidth, x = Math.max(-w, Math.min(0, dx)), armed = -x > w * 0.36;
@@ -3459,12 +3468,12 @@ function gMove(ev){
   G.panes.forEach(el => { el.style.transform = 'translateX(' + x.toFixed(1) + 'px)'; el.style.opacity = String(1 - Math.min(0.55, Math.abs(x) / window.innerWidth)); });
 }
 function gEnd(ev){
-  if (!G.on || ev.pointerId !== G.id) return;
+  if (!G.on) return;
   G.on = false;
   document.documentElement.classList.remove('swiping');
   if (!G.mode) return;
   noClickUntil = performance.now() + 450; // the tap that ends a swipe opens nothing
-  const cancel = ev.type === 'pointercancel', v = G.dx / Math.max(1, performance.now() - G.t0);
+  const cancel = ev.type === 'touchcancel', v = G.dx / Math.max(1, performance.now() - G.t0);
   if (G.mode === 'entry'){
     const el = G.entry, w = el.offsetWidth, go = !cancel && (-G.dx > w * 0.36 || (v < -0.6 && -G.dx > 48));
     if (go){
@@ -3531,10 +3540,10 @@ function sTouchEnd(){
   setTimeout(() => { card.style.transition = ''; }, 320);
 }
 function bindGestures(){
-  document.addEventListener('pointerdown', gStart, { passive: true });
-  document.addEventListener('pointermove', gMove, { passive: true });
-  document.addEventListener('pointerup', gEnd);
-  document.addEventListener('pointercancel', gEnd);
+  document.addEventListener('touchstart', gStart, { passive: true });
+  document.addEventListener('touchmove', gMove, { passive: false });
+  document.addEventListener('touchend', gEnd);
+  document.addEventListener('touchcancel', gEnd);
   document.addEventListener('click', ev => { if (performance.now() < noClickUntil){ ev.stopPropagation(); ev.preventDefault(); } }, true);
   document.addEventListener('touchstart', sTouchStart, { passive: true });
   document.addEventListener('touchmove', sTouchMove, { passive: false });

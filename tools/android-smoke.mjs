@@ -191,8 +191,11 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   page.close(); page = await connect(); await sleep(1500);
   ok('datele rămân după închiderea aplicației', await page.ev(`!document.querySelector('#hero.is-empty') && document.querySelectorAll('#mealsToday .mt.has').length === 2`));
   // iOS and Android can clear a web view's storage; the native copy brings the journal back
-  await page.ev(`localStorage.clear(); location.reload(); true`); await sleep(4000);
-  ok('jurnalul revine din memoria nativă', await page.ev(`!!JSON.parse(localStorage.getItem('mt-local') || 'null') && !document.querySelector('#hero.is-empty')`));
+  await page.ev(`localStorage.clear(); location.reload(); true`); await sleep(3000);
+  const restored = `!!JSON.parse(localStorage.getItem('mt-local') || 'null') && !document.querySelector('#hero.is-empty')`;
+  let back2 = false;
+  for (let i = 0; i < 10 && !back2; i++){ try { back2 = await page.ev(restored); } catch {} if (!back2) await sleep(1000); }
+  ok('jurnalul revine din memoria nativă', back2, back2 ? undefined : await page.ev(`({ keys: Object.keys(localStorage), hero: document.querySelector('#hero').className })`).catch(e => String(e)));
 
   const seen = page.seen.slice();
   page.close();
