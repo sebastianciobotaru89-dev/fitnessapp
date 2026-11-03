@@ -790,6 +790,8 @@ function modeNote(){
   if (S.appearance === 'dark') return 'Porția rămâne întunecată, orice ar fi pe telefon.';
   return 'Automat copiază telefonul, care acum e pe ' + ph + ', de aceea arată ca ' + (ph === 'luminos' ? 'Luminos' : 'Întunecat') + '. Când telefonul trece pe ' + (ph === 'luminos' ? 'întunecat' : 'luminos') + ', Porția trece singură.';
 }
+// An on/off switch with its words; tapping the words flips it too
+const swRow = (label, action, on) => '<label class="sw-row"><span>' + label + '</span><button class="switch" role="switch" data-action="' + action + '" aria-checked="' + !!on + '"><i></i></button></label>';
 function appearanceSection(){
   const now = phoneMode() === 'dark' ? 'întunecat' : 'luminos';
   const opts = [['auto', 'Automat <span class="chip-sub">· ' + now + '</span>'], ['light', 'Luminos'], ['dark', 'Întunecat']];
@@ -843,9 +845,9 @@ function themeSection(){
   const xmas = !!(THEMES[S.theme] && THEMES[S.theme].logo.fx === 'xmas'), snowOn = lsGet('portia-snow') !== false;
   return '<h3>Teme de culori</h3><p>' + (SELL ? 'Proaspăt și Crăciun sunt gratuite. Celelalte se deblochează cu Porția Plus, Premium sau Ultra. ' : '') + 'Tema se aplică imediat, cu tot cu logo și efecte.</p>' +
     '<div class="tgroups">' + themeOpts() + '</div>' +
-    (ice ? '<div class="row" style="margin-top:14px;justify-content:space-between"><span class="hint">Crăpături în gheață</span><button class="chip" role="switch" data-action="cracks-toggle" aria-checked="' + iceCracksOn() + '">' + (iceCracksOn() ? 'Pornite' : 'Oprite') + '</button></div>' : '') +
-    (bloom ? '<div class="row" style="margin-top:14px;justify-content:space-between"><span class="hint">Petale în aplicație</span><button class="chip" role="switch" data-action="petals-toggle" aria-checked="' + petalsOn + '">' + (petalsOn ? 'Pornite' : 'Oprite') + '</button></div>' : '') +
-    (xmas ? '<div class="row" style="margin-top:14px;justify-content:space-between"><span class="hint">Ninsoare în aplicație</span><button class="chip" role="switch" data-action="snow-toggle" aria-checked="' + snowOn + '">' + (snowOn ? 'Pornită' : 'Oprită') + '</button></div>' : '') +
+    (ice ? swRow('Crăpături în gheață', 'cracks-toggle', iceCracksOn()) : '') +
+    (bloom ? swRow('Petale în aplicație', 'petals-toggle', petalsOn) : '') +
+    (xmas ? swRow('Ninsoare în aplicație', 'snow-toggle', snowOn) : '') +
     (S.isOwner ? '<p class="hint" style="margin-top:10px">Ca proprietar, le ai pe toate deblocate. Clienții le vor debloca prin abonament.</p>' : '') +
     (SELL ? '<button class="btn ghost sm" style="margin-top:10px" data-action="open-plus">Vezi ofertele</button>' : '');
 }
@@ -952,7 +954,7 @@ function dataSection(){
   const c = consentOf(), ai = aiConsentOn();
   const where = S.mode === 'cloud' ? 'în contul tău Claude' : S.mode === 'local' ? 'doar ' + HERE : 'doar cât timp e deschisă pagina';
   return '<h3>Datele tale</h3><p>Porția păstrează mesele, apa, greutatea, țintele, posturile și setările, ' + where + '.' + (S.noSample ? (NATIVE ? ' Nu le trimite nicăieri. Singura legătură la internet e căutarea unui cod de bare în Open Food Facts, care primește doar codul.' : '') : ' Când folosești AI, textul sau poza mesei merg la Claude (Anthropic) doar ca să fie estimate, fără numele sau e-mailul tău.') + '</p>' +
-    (S.noSample ? '' : '<div class="row" style="justify-content:space-between;margin-bottom:12px"><span class="hint">Estimări cu AI (Claude)</span><button class="chip" role="switch" data-action="consent-ai" aria-checked="' + ai + '">' + (ai ? 'Pornite' : 'Oprite') + '</button></div>') +
+    (S.noSample ? '' : swRow('Estimări cu AI (Claude)', 'consent-ai', ai)) +
     (c ? '<p class="hint" style="margin-bottom:12px">Ai dat acordul pentru datele de sănătate pe ' + esc(new Date(c.health).toLocaleDateString('ro-RO', { day: 'numeric', month: 'long', year: 'numeric' })) + '. Ca să-l retragi, șterge contul, pentru că fără aceste date aplicația nu poate funcționa. Codul de backup de mai jos îți dă o copie a tuturor datelor.</p>' : '') +
     '<div id="delBox"><button class="btn danger-ghost" data-action="del-account">Șterge contul și toate datele</button></div>';
 }
@@ -1392,7 +1394,7 @@ function renderAdapt(){
           '<div class="row"><button class="btn primary sm" data-action="adapt-apply">Aplică ' + fmt(A.kcal) + ' kcal</button></div>'
         : '<p>Ținta ta de acum, ' + fmt(A.cur) + ' kcal, e potrivită pentru ' + esc(A.goal.t.toLowerCase()) + '.</p>');
   el.innerHTML = '<div class="adapt">' + head + body +
-    '<div class="row adapt-auto"><span class="hint">Automat, în fiecare săptămână</span><button class="chip" role="switch" data-action="adapt-auto" aria-checked="' + auto + '">' + (auto ? 'Pornit' : 'Oprit') + '</button></div>' +
+    swRow('Ajustează automat, săptămânal', 'adapt-auto', auto) +
     '<p class="hint">Proteinele rămân la fel. Se schimbă glucidele și grăsimile.</p></div>';
 }
 
@@ -1444,7 +1446,7 @@ function renderFast(){
 }
 function fastSection(){
   const f = fastOf();
-  return '<h3>Post intermitent</h3><p>Panoul cu cronometrul de post apare pe ecranul Azi, sub apă.</p><div class="row"><button class="chip" role="switch" data-action="fast-show" aria-checked="' + !f.hide + '">' + (f.hide ? 'Ascuns' : 'Afișat') + '</button></div>';
+  return '<h3>Post intermitent</h3><p>Panoul cu cronometrul de post apare pe ecranul Azi, sub apă.</p>' + swRow('Arată panoul pe ecranul Azi', 'fast-show', !f.hide);
 }
 
 /* ---------- streaks and challenges ---------- */
@@ -1613,7 +1615,7 @@ function toggleDayType(){
 function cycleSection(){
   const c = cycleOf(), dl = cycleDeltas(), b = S.profile.targets;
   return '<h3>Zile de sală și de pauză</h3><p>În zilele de sală primești mai multe glucide, în cele de pauză mai puține. Media pe săptămână rămâne ' + fmt(b.kcal) + ' kcal.</p>' +
-    '<div class="row" style="margin-bottom:12px"><button class="chip" role="switch" data-action="cycle-on" aria-checked="' + c.on + '">' + (c.on ? 'Activat' : 'Dezactivat') + '</button></div>' +
+    swRow('Ținte diferite în zilele de sală', 'cycle-on', c.on) +
     (c.on
       ? '<span class="lbl">Zilele tale de sală</span><div class="row" style="margin-bottom:12px">' + WD_ORDER.map(d => '<button class="chip" data-action="cycle-day" data-d="' + d + '" aria-pressed="' + c.days.includes(d) + '">' + WD_NAME[d] + '</button>').join('') + '</div>' +
         '<span class="lbl">În plus în zilele de sală</span><div class="row" style="margin-bottom:12px">' + [150, 200, 300].map(x => '<button class="chip" data-action="cycle-extra" data-x="' + x + '" aria-pressed="' + (c.extra === x) + '">+' + x + ' kcal</button>').join('') + '</div>' +
@@ -2739,6 +2741,7 @@ function go(name){
   document.documentElement.setAttribute('data-screen', name);
   moveTabInd(!prev);
   if (name === 'profil'){ if (S.profile) renderSettings(); else renderProfileEmpty(); }
+  if (name === 'progres' && (S.histPick || S.wPick)){ S.histPick = null; S.wPick = null; histPaint(); wPaint(); }
   const q = name === 'azi' && CHEER.queued; CHEER.queued = null;
   window.scrollTo(0, name === 'add' || q ? 0 : (S.scrollY[name] || 0));
   onScroll();
@@ -3089,11 +3092,30 @@ function weightSeries(endKey, n){
   for (let i = n - 1; i >= 0; i--){ const k = addDays(endKey, -i); const w = S.days[k] && S.days[k].weight; if (w) pts.push({ k, x: n - 1 - i, w }); }
   return pts;
 }
+// A smooth line through the points that never overshoots them (monotone cubic), so a curve never shows a weight nobody had
+function smoothPath(P){
+  const n = P.length, f = v => v.toFixed(1);
+  if (n < 3) return P.map((p, i) => (i ? 'L' : 'M') + f(p[0]) + ' ' + f(p[1])).join(' ');
+  const dx = [], m = [], t = [];
+  for (let i = 0; i < n - 1; i++){ dx[i] = P[i + 1][0] - P[i][0] || 1e-6; m[i] = (P[i + 1][1] - P[i][1]) / dx[i]; }
+  t[0] = m[0]; t[n - 1] = m[n - 2];
+  for (let i = 1; i < n - 1; i++) t[i] = m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2;
+  for (let i = 0; i < n - 1; i++){
+    if (m[i] === 0){ t[i] = 0; t[i + 1] = 0; continue; }
+    const a = t[i] / m[i], b = t[i + 1] / m[i], s = a * a + b * b;
+    if (s > 9){ const k = 3 / Math.sqrt(s); t[i] = k * a * m[i]; t[i + 1] = k * b * m[i]; }
+  }
+  let d = 'M' + f(P[0][0]) + ' ' + f(P[0][1]);
+  for (let i = 0; i < n - 1; i++){ const h = dx[i] / 3; d += 'C' + f(P[i][0] + h) + ' ' + f(P[i][1] + t[i] * h) + ' ' + f(P[i + 1][0] - h) + ' ' + f(P[i + 1][1] - t[i + 1] * h) + ' ' + f(P[i + 1][0]) + ' ' + f(P[i + 1][1]); }
+  return d;
+}
+const longDay = k => cap(parseKey(k).toLocaleDateString('ro-RO', { weekday: 'long', day: 'numeric', month: 'long' }));
+const signed1 = v => (v > 0.04 ? '+' : v < -0.04 ? '−' : '') + fmt1(Math.abs(v));
 function renderWeight(){
   const today = todayKey(); const cur = getDay(S.view).weight || null;
   $('#wMeta').innerHTML = cur
-    ? esc(dayWord(S.view)) + ': <strong>' + fmt1(cur) + ' kg</strong> <button class="rm" data-action="w-del" aria-label="Șterge greutatea notată">șterge</button>'
-    : esc(dayWord(S.view)) + ': nenotată';
+    ? '<b>' + esc(dayWord(S.view)) + '</b> ai notat ' + fmt1(cur) + ' kg <button class="rm" data-action="w-del" aria-label="Șterge greutatea notată">șterge</button>'
+    : '<b>' + esc(dayWord(S.view)) + '</b> nu ai notat greutatea';
   let lastW = null;
   const keys = Object.keys(S.days).filter(k => S.days[k].weight && k <= S.view).sort();
   if (keys.length) lastW = S.days[keys[keys.length - 1]].weight;
@@ -3102,6 +3124,9 @@ function renderWeight(){
 
   const N = 30, pts = weightSeries(today, N);
   const chart = $('#wChart'), stats = $('#wStats'), banner = $('#wBanner');
+  // the line is the 7-day average (the trend); each morning's weigh-in is a small dot around it
+  pts.forEach(p => { const win = pts.filter(q => q.x <= p.x && q.x > p.x - 7); p.t = win.reduce((a, q) => a + q.w, 0) / win.length; });
+  S.wGeo = null;
   if (pts.length < 2){
     chart.innerHTML = '<p class="wempty">' + (pts.length ? 'Ai o greutate notată. După încă câteva dimineți apare aici graficul tendinței.' : 'Notează-ți greutatea câteva dimineți la rând și aici apare tendința pe 30 de zile.') + '</p>';
   } else {
@@ -3109,31 +3134,31 @@ function renderWeight(){
     let lo = Math.min(...ws), hi = Math.max(...ws);
     if (hi - lo < 2){ const mid = (hi + lo)/2; lo = mid - 1; hi = mid + 1; }
     lo -= 0.3; hi += 0.3;
-    const Wd = 336, top = 18, base = 96, left = 34, right = 326;
+    const Wd = 336, top = 14, base = 108, left = 30, right = 326;
     const x = i => left + (right - left) * (i / (N - 1));
     const y = v => base - (v - lo) / (hi - lo) * (base - top);
-    const line = pts.map((p, i) => (i ? 'L' : 'M') + x(p.x).toFixed(1) + ' ' + y(p.w).toFixed(1)).join(' ');
+    const line = smoothPath(pts.map(p => [x(p.x), y(p.t)]));
     const area = line + ' L' + x(pts[pts.length-1].x).toFixed(1) + ' ' + base + ' L' + x(pts[0].x).toFixed(1) + ' ' + base + ' Z';
     const last = pts[pts.length - 1];
-    const lx = x(last.x), ly = y(last.w);
-    chart.innerHTML = '<div class="chart"><svg viewBox="0 0 ' + Wd + ' 122" role="img" aria-label="Greutatea în ultimele 30 de zile, de la ' + fmt1(pts[0].w) + ' la ' + fmt1(last.w) + ' kg">' +
+    S.wGeo = { pts, x: pts.map(p => x(p.x)), y: pts.map(p => y(p.w)), Wd, top, base };
+    chart.innerHTML = '<div class="chart wchart" data-scrub="weight"><svg viewBox="0 0 ' + Wd + ' 132" role="img" aria-label="Greutatea în ultimele 30 de zile, de la ' + fmt1(pts[0].w) + ' la ' + fmt1(last.w) + ' kg. Linia arată media pe 7 zile.">' +
+      '<defs><linearGradient id="wG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--kcal);stop-opacity:.26"/><stop offset="1" style="stop-color:var(--kcal);stop-opacity:0"/></linearGradient></defs>' +
       '<line class="wgrid" x1="' + left + '" x2="' + right + '" y1="' + top + '" y2="' + top + '"/><line class="wgrid" x1="' + left + '" x2="' + right + '" y1="' + base + '" y2="' + base + '"/>' +
       '<text x="' + (left - 6) + '" y="' + (top + 4) + '" text-anchor="end">' + fmt1(hi) + '</text><text x="' + (left - 6) + '" y="' + (base + 4) + '" text-anchor="end">' + fmt1(lo) + '</text>' +
-      '<path class="warea" d="' + area + '" opacity=".6"/><path class="wline" d="' + line + '"/>' +
-      pts.slice(0, -1).map(p => '<circle class="wdot" cx="' + x(p.x).toFixed(1) + '" cy="' + y(p.w).toFixed(1) + '" r="2.6"/>').join('') +
-      '<circle class="wlast" cx="' + lx.toFixed(1) + '" cy="' + ly.toFixed(1) + '" r="4.5"/>' +
-      '<text class="wv" x="' + (lx - 8).toFixed(1) + '" y="' + Math.max(12, ly - 9).toFixed(1) + '" text-anchor="end">' + fmt1(last.w) + '</text>' +
-      '<text x="' + left + '" y="116">' + esc(shortDate(addDays(today, -(N - 1)))) + '</text><text x="' + right + '" y="116" text-anchor="end">azi</text>' +
+      '<path class="warea" d="' + area + '" fill="url(#wG)"/>' +
+      pts.map((p, i) => '<circle class="wdot" cx="' + S.wGeo.x[i].toFixed(1) + '" cy="' + S.wGeo.y[i].toFixed(1) + '" r="2.4"/>').join('') +
+      '<path class="wline" d="' + line + '"/>' +
+      '<line class="wguide" x1="0" x2="0" y1="' + (top - 6) + '" y2="' + base + '"/><circle class="wpick" r="5.5" cx="0" cy="0"/>' +
+      '<circle class="wlast-halo" cx="' + x(last.x).toFixed(1) + '" cy="' + y(last.t).toFixed(1) + '" r="9"/><circle class="wlast" cx="' + x(last.x).toFixed(1) + '" cy="' + y(last.t).toFixed(1) + '" r="4.5"/>' +
+      '<text x="' + left + '" y="126">' + esc(shortDate(addDays(today, -(N - 1)))) + '</text><text x="' + right + '" y="126" text-anchor="end">azi</text>' +
       '</svg></div>';
   }
   if (pts.length){
     const recent = pts.filter(p => p.x >= N - 7);
     const avg7 = recent.length ? recent.reduce((a, p) => a + p.w, 0) / recent.length : null;
-    const change = pts.length >= 2 ? pts[pts.length - 1].w - pts[0].w : null;
     stats.hidden = false;
-    stats.innerHTML = '<div><dt>Medie 7 zile</dt><dd>' + (avg7 ? fmt1(avg7) + ' kg' : '–') + '</dd></div>' +
-      '<div><dt>În 30 de zile</dt><dd>' + (change == null ? '–' : (change > 0 ? '+' : change < 0 ? '−' : '') + fmt1(Math.abs(change)) + ' kg') + '</dd></div>' +
-      '<div><dt>În profil</dt><dd>' + (S.profile && S.profile.weight ? fmt1(S.profile.weight) + ' kg' : '–') + '</dd></div>';
+    stats.innerHTML = '<div><dt>Media pe 7 zile</dt><dd>' + (avg7 ? fmt1(avg7) + '<small> kg</small>' : '–') + '</dd></div>' +
+      '<div><dt>În profil</dt><dd>' + (S.profile && S.profile.weight ? fmt1(S.profile.weight) + '<small> kg</small>' : '–') + '</dd></div>';
     const p = S.profile;
     const AI_ = adaptInfo();
     if (p && !p.custom && p.weight && p.sex && p.activity && p.goal && recent.length >= 3 && Math.abs(avg7 - p.weight) >= 2 && !(AI_ && AI_.ready)){
@@ -3141,29 +3166,88 @@ function renderWeight(){
       banner.innerHTML = '<div class="banner"><p>Media ta din ultimele zile e ' + fmt1(avg7) + ' kg, cu ' + fmt1(Math.abs(diff)) + ' kg ' + (diff < 0 ? 'sub' : 'peste') + ' greutatea din profil. Recalculează țintele ca să rămână potrivite.</p><button class="btn primary sm" data-action="w-recalc" data-w="' + r1(avg7) + '">Recalculează țintele</button></div>';
     } else banner.innerHTML = '';
   } else { stats.hidden = true; stats.innerHTML = ''; banner.innerHTML = ''; }
+  wPaint();
   renderAdapt();
+}
+const ARROW_DN = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3v10M3.5 8.5 8 13l4.5-4.5"/></svg>';
+const CLOSE_SM = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>';
+// The big number above the weight chart: the last weigh-in, or the morning you touch on the chart
+function wPaint(){
+  const el = $('#wRead'); if (!el) return;
+  const G = S.wGeo, pts = G ? G.pts : weightSeries(todayKey(), 30), t = todayKey();
+  if (!pts.length){ el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+  const i = G && S.wPick ? G.pts.findIndex(p => p.k === S.wPick) : -1;
+  const p = i >= 0 ? pts[i] : pts[pts.length - 1];
+  let side = '', sub;
+  if (i >= 0){
+    sub = esc(longDay(p.k)) + (p.t && Math.abs(p.t - p.w) >= 0.05 ? '. Media pe 7 zile era ' + fmt1(p.t) + ' kg.' : '');
+    side = '<button class="r-x" data-action="w-unpick" aria-label="Înapoi la ultima cântărire">' + CLOSE_SM + '</button>';
+  } else {
+    sub = 'Ultima cântărire, ' + (p.k === t ? 'azi' : p.k === addDays(t, -1) ? 'ieri' : esc(shortDate(p.k)));
+    if (pts.length >= 2){
+      const ch = pts[pts.length - 1].w - pts[0].w, dir = ch < -0.04 ? 'down' : ch > 0.04 ? 'up' : 'flat';
+      const g = S.profile && S.profile.goal, good = dir === 'flat' ? g === 'keep' : dir === 'down' ? (g === 'cut' || g === 'recomp') : g === 'bulk';
+      side = '<span class="wchip' + (good ? ' good' : '') + '" data-dir="' + dir + '">' + (dir === 'flat' ? '' : ARROW_DN) + signed1(ch) + ' kg din ' + esc(shortDate(pts[0].k)) + '</span>';
+    }
+  }
+  el.innerHTML = '<div class="r-top"><p class="r-num"><b>' + fmt1(p.w) + '</b><span>kg</span></p>' + side + '</div><p class="r-sub">' + sub + '</p>';
+  const wc = $('#wChart .wchart'); if (!wc) return;
+  wc.classList.toggle('picking', i >= 0);
+  if (i >= 0){
+    const gx = G.x[i].toFixed(1), gy = G.y[i].toFixed(1);
+    const gl = wc.querySelector('.wguide'), pc = wc.querySelector('.wpick');
+    gl.setAttribute('x1', gx); gl.setAttribute('x2', gx); pc.setAttribute('cx', gx); pc.setAttribute('cy', gy);
+  }
+}
+// Touching a chart: one bar or one morning at a time; dragging along it reads them one after another
+function scrubAt(el, clientX, toggle){
+  const svg = el.querySelector('svg'); if (!svg) return;
+  const r = svg.getBoundingClientRect(), fx = (clientX - r.left) / Math.max(1, r.width);
+  if (el.dataset.scrub === 'hist'){
+    const H = S.hGeo; if (!H) return;
+    const k = H.days[Math.max(0, Math.min(H.days.length - 1, Math.floor(fx * H.days.length)))].k;
+    if (toggle && k === S.histPick){ S.histPick = null; histPaint(); return; }
+    if (k !== S.histPick){ S.histPick = k; histPaint(); buzz('tick'); }
+    return;
+  }
+  const W = S.wGeo; if (!W) return;
+  const X = fx * W.Wd; let bi = 0;
+  W.x.forEach((v, j) => { if (Math.abs(v - X) < Math.abs(W.x[bi] - X)) bi = j; });
+  const k = W.pts[bi].k;
+  if (toggle && k === S.wPick){ S.wPick = null; wPaint(); return; }
+  if (k !== S.wPick){ S.wPick = k; wPaint(); buzz('tick'); }
+}
+function scrubStep(el, d){
+  if (el.dataset.scrub === 'hist'){
+    const H = S.hGeo; if (!H) return;
+    const i = H.days.findIndex(x => x.k === S.histPick), j = Math.max(0, Math.min(H.days.length - 1, (i < 0 ? H.days.length : i) + d));
+    S.histPick = H.days[j].k; histPaint(); return;
+  }
+  const W = S.wGeo; if (!W) return;
+  const i = W.pts.findIndex(x => x.k === S.wPick), j = Math.max(0, Math.min(W.pts.length - 1, (i < 0 ? W.pts.length : i) + d));
+  S.wPick = W.pts[j].k; wPaint();
 }
 function renderHistory(){
   const el = $('#history'); const today = todayKey();
   const T = S.profile ? S.profile.targets : null;
   const days = [];
   for (let i = 6; i >= 0; i--){ const k = addDays(today, -i); const t = dayTotals(S.days[k]); days.push(Object.assign({ k }, t)); }
-  const W_ = 336, top = 24, base = 112, left = 4, right = 332;
-  const maxV = Math.max(T ? T.kcal * 1.2 : 2500, ...days.map(d => d.kcal * 1.08), 1);
+  if (S.histPick && !days.some(d => d.k === S.histPick)) S.histPick = null;
+  const W_ = 336, top = 8, base = 112, left = 4, right = 332;
+  const maxV = Math.max(T ? T.kcal * 1.2 : 2500, ...days.map(d => d.kcal * 1.06), 1);
   const y = v => base - (v / maxV) * (base - top);
-  const slot = (right - left) / 7, bw = Math.min(22, slot * 0.46);
+  const slot = (right - left) / 7, bw = Math.min(26, slot * 0.54);
   let bars = '';
   days.forEach((d, i) => {
     const cx = left + slot*i + slot/2;
     const Td = targetsFor(d.k);
     const over = Td && d.kcal > Td.kcal * 1.1;
-    const sel = d.k === S.view;
     const dt = parseKey(d.k);
-    bars += '<g data-day="' + d.k + '" class="' + (sel ? 'sel' : '') + '" role="button" tabindex="0" aria-label="' + esc(dateLine(d.k)) + ': ' + fmt(d.kcal) + ' kcal">' +
+    bars += '<g data-day="' + d.k + '" class="' + (d.k === today ? 'today' : '') + '" role="button" tabindex="0" aria-pressed="false" aria-label="' + esc(dateLine(d.k)) + ': ' + fmt(d.kcal) + ' kcal">' +
       '<rect class="hit" x="' + (cx - slot/2).toFixed(1) + '" y="0" width="' + slot.toFixed(1) + '" height="150"/>' +
       '<rect class="track" x="' + (cx - bw/2).toFixed(1) + '" y="' + top + '" width="' + bw.toFixed(1) + '" height="' + (base - top) + '" rx="' + (bw / 2).toFixed(1) + '"/>' +
-      (d.kcal > 0 ? '<rect class="' + (over ? 'b-over' : 'b-ok') + '" x="' + (cx - bw/2).toFixed(1) + '" y="' + Math.min(base - 4, y(d.kcal)).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(bw, base - y(d.kcal)).toFixed(1) + '" rx="' + (bw / 2).toFixed(1) + '"/>' +
-        '<text class="hv" x="' + cx.toFixed(1) + '" y="' + (Math.min(base - 4, y(d.kcal)) - 6).toFixed(1) + '" text-anchor="middle">' + fmt(d.kcal) + '</text>' : '') +
+      (d.kcal > 0 ? '<rect class="' + (over ? 'b-over' : 'b-ok') + '" x="' + (cx - bw/2).toFixed(1) + '" y="' + Math.min(base - 4, y(d.kcal)).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(bw, base - y(d.kcal)).toFixed(1) + '" rx="' + (bw / 2).toFixed(1) + '"/>' : '') +
       '<text class="hl" x="' + cx.toFixed(1) + '" y="' + (base + 18) + '" text-anchor="middle">' + DAY_ABBR[dt.getDay()] + '</text>' +
       '<text class="hd" x="' + cx.toFixed(1) + '" y="' + (base + 32) + '" text-anchor="middle">' + dt.getDate() + '</text></g>';
   });
@@ -3172,9 +3256,34 @@ function renderHistory(){
   const avgK = logged.length ? logged.reduce((a, d) => a + d.kcal, 0) / logged.length : 0;
   const avgP = logged.length ? logged.reduce((a, d) => a + d.protein, 0) / logged.length : 0;
   const inT = T ? logged.filter(d => { const Td = targetsFor(d.k); return Math.abs(d.kcal - Td.kcal) <= Td.kcal * 0.1; }).length : 0;
+  S.hGeo = { days, avgK, logged: logged.length };
   el.innerHTML = '<div class="panel-head"><h2>Ultimele 7 zile</h2>' + (T ? '<span class="meta tleg">' + (cycleDeltas() ? 'țintă medie ' : 'țintă ') + fmt(T.kcal) + ' kcal</span>' : '') + '</div>' +
-    '<div class="chart"><svg viewBox="0 0 ' + W_ + ' 150" role="group" aria-label="Calorii pe ultimele 7 zile. Atinge o zi ca s-o deschizi."><defs><linearGradient id="barG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:color-mix(in srgb,var(--kcal) 62%,#FFFFFF)"/><stop offset="1" style="stop-color:var(--kcal)"/></linearGradient></defs>' + bars + tline + '</svg></div>' +
-    '<dl class="hstats"><div><dt>Medie</dt><dd>' + (logged.length ? fmt(avgK) : '–') + '</dd></div><div><dt>Proteine/zi</dt><dd>' + (logged.length ? fmt(avgP) + ' g' : '–') + '</dd></div><div><dt>Zile în țintă</dt><dd>' + (T && logged.length ? inT + '/' + logged.length : '–') + '</dd></div></dl>' + reportRow();
+    '<div class="h-read" id="hRead" aria-live="polite"></div>' +
+    '<div class="chart hchart" data-scrub="hist"><svg viewBox="0 0 ' + W_ + ' 150" role="group" aria-label="Calorii pe ultimele 7 zile. Atinge o zi ca să-i vezi cifrele."><defs><linearGradient id="barG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:color-mix(in srgb,var(--kcal) 62%,#FFFFFF)"/><stop offset="1" style="stop-color:var(--kcal)"/></linearGradient></defs>' + bars + tline + '</svg></div>' +
+    '<dl class="hstats"><div><dt>Proteine pe zi</dt><dd>' + (logged.length ? fmt(avgP) + '<small> g</small>' : '–') + '</dd></div><div><dt>Zile în țintă</dt><dd>' + (T && logged.length ? inT + '<small> din ' + logged.length + '</small>' : '–') + '</dd></div></dl>' + reportRow();
+  histPaint();
+}
+// The number above the bars: the week's average, or the day you touch
+function histPaint(){
+  const el = $('#hRead'), H = S.hGeo; if (!el || !H) return;
+  const d = S.histPick ? H.days.find(x => x.k === S.histPick) : null, t = todayKey();
+  $$('#history g[data-day]').forEach(g => { const on = !!d && g.getAttribute('data-day') === d.k; g.classList.toggle('sel', on); g.setAttribute('aria-pressed', String(on)); });
+  const ch = $('#history .hchart'); if (ch) ch.classList.toggle('picking', !!d);
+  if (!d){
+    el.innerHTML = H.logged
+      ? '<div class="r-top"><p class="r-num"><b>' + fmt(H.avgK) + '</b><span>kcal pe zi</span></p></div><p class="r-sub">' + (H.logged === 1 ? 'Din singura zi notată' : 'Media celor ' + H.logged + ' zile notate') + '. Atinge o zi pentru detalii.</p>'
+      : '<div class="r-top"><p class="r-num"><b>–</b></p></div><p class="r-sub">Notează mesele câteva zile și aici apare media.</p>';
+    return;
+  }
+  const Td = targetsFor(d.k), diff = Td ? d.kcal - Td.kcal : 0;
+  let st = '';
+  if (!d.n) st = '<span class="hstat">Nimic notat</span>';
+  else if (Td && Math.abs(diff) <= Td.kcal * 0.1) st = '<span class="hstat ok">În țintă</span>';
+  else if (Td && diff > 0) st = '<span class="hstat over">Cu ' + fmt(diff) + ' kcal peste țintă</span>';
+  else if (Td) st = '<span class="hstat">' + (d.k === t ? 'Mai ai ' + fmt(-diff) + ' kcal' : 'Cu ' + fmt(-diff) + ' kcal sub țintă') + '</span>';
+  el.innerHTML = '<div class="r-top"><p class="r-num"><b>' + fmt(d.kcal) + '</b><span>kcal</span></p><button class="r-x" data-action="hist-unpick" aria-label="Înapoi la medie">' + CLOSE_SM + '</button></div>' +
+    '<p class="r-sub">' + esc(longDay(d.k)) + (d.n ? ', ' + fmt(d.protein) + ' g proteine' : '') + '</p>' +
+    '<div class="r-row">' + st + '<button class="btn soft sm" data-action="hist-open" data-k="' + d.k + '">Deschide ziua</button></div>';
 }
 
 /* ---------- setup interview ---------- */
@@ -3288,7 +3397,7 @@ function renderSettings(){
 function renderSettingsInner(){
   const p = S.profile, T = p.targets;
   const act = ACT.find(a => a.id === p.activity), g = GOALS.find(x => x.id === p.goal);
-  const summary = [p.sex === 'f' ? 'Femeie' : p.sex === 'm' ? 'Bărbat' : null, p.age ? p.age + ' ani' : null, p.height ? p.height + ' cm' : null, p.weight ? fmt1(p.weight) + ' kg' : null, act ? act.t : null, g ? g.t : null].filter(Boolean).join(' · ');
+  const facts = [p.sex === 'f' ? 'Femeie' : p.sex === 'm' ? 'Bărbat' : null, p.age ? p.age + ' ani' : null, p.height ? p.height + ' cm' : null, p.weight ? fmt1(p.weight) + ' kg' : null, act ? act.t : null].filter(Boolean);
   const store = S.mode === 'cloud' ? 'Datele se salvează în contul tău Claude și le vezi doar tu, pe orice dispozitiv.'
     : S.mode === 'local' ? 'Datele se salvează doar ' + HERE + '. Folosește codul de backup ca să nu le pierzi.'
     : 'Datele nu se pot salva aici. Copiază codul de backup înainte să închizi pagina.';
@@ -3340,12 +3449,32 @@ function renderSettingsInner(){
   }
   $('#settingsCard').innerHTML =
     '<div class="scr-head"><div><h1 id="setTitle" tabindex="-1">Profil</h1></div></div>' +
-    '<section class="prof-card"><div class="pc-top"><span class="pc-av" aria-hidden="true">' + logoSvg(S.theme, 56) + '</span><div class="pc-id"><b>Profilul tău</b><span>' + esc(summary || 'Fără date de profil') + '</span></div></div>' +
-      '<dl class="pc-stats"><div><dt>Țintă</dt><dd>' + fmt(T.kcal) + '<small> kcal</small></dd></div><div><dt>Proteine</dt><dd>' + fmt(T.protein) + '<small> g</small></dd></div><div><dt>Obiectiv</dt><dd class="txt">' + esc(g ? g.t : '–') + '</dd></div></dl>' +
+    '<section class="prof-card"><div class="pc-top"><span class="pc-av" aria-hidden="true">' + logoSvg(S.theme, 56) + '</span><div class="pc-id"><b>Profilul tău</b>' + (g ? '<span class="pc-goal">' + esc(g.t) + '</span>' : '') + '</div></div>' +
+      (facts.length ? '<ul class="pc-facts" aria-label="Datele din interviu">' + facts.map(f => '<li>' + esc(f) + '</li>').join('') + '</ul>' : '') +
+      '<button class="pc-targets" data-action="prof-open" data-sec="targets" aria-label="Ținte zilnice: ' + fmt(T.kcal) + ' kcal, ' + fmt(T.protein) + ' g proteine, ' + fmt(T.carbs) + ' g glucide, ' + fmt(T.fat) + ' g grăsimi. Ajustează-le.">' +
+        '<span class="pt-k"><b>' + fmt(T.kcal) + '</b><small>kcal pe zi</small><em>Ajustează' + CHEVRON + '</em></span>' +
+        [['p', 'Proteine', T.protein], ['c', 'Glucide', T.carbs], ['f', 'Grăsimi', T.fat]].map(m => '<span class="pt-m"><b>' + fmt(m[2]) + '<small> g</small></b><small><i class="dot ' + m[0] + '"></i>' + m[1] + '</small></span>').join('') +
+      '</button>' +
       '<button class="btn ghost sm" data-action="redo-setup">Refă interviul</button></section>' +
-    profGroups().map(gr => '<div class="pgroup"><h2 class="pg-t">' + gr[0] + '</h2><div class="pg-list">' + gr[1].map(r =>
-      '<button class="prow" data-action="prof-open" data-sec="' + r[0] + '"><span class="pr-ic">' + pIcon(r[0]) + '</span><span class="pr-t">' + r[1] + '</span>' + (r[2] ? '<span class="pr-v">' + esc(r[2]) + '</span>' : '') + CHEVRON + '</button>').join('') + '</div></div>').join('') +
+    profGroups().map(gr => '<div class="pgroup"><h2 class="pg-t">' + gr[0] + '</h2><div class="pg-list">' + gr[1].map(profRow).join('') + '</div></div>').join('') +
     '<p class="foot">' + store + '</p>';
+}
+// Each row's icon sits on its own soft colour, the same four colours the meals use
+const PTINT = { appear: 4, theme: 3, targets: 2, cycle: 1, fast: 4, plan: 1, data: 2, backup: 4, tips: 1, about: 0 };
+const SEG_ICON = {
+  light: '<circle cx="12" cy="12" r="4"/><path d="M12 2.8v2M12 19.2v2M2.8 12h2M19.2 12h2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M5.5 18.5l1.4-1.4M17.1 6.9l1.4-1.4"/>',
+  auto: '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/>',
+  dark: '<path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z"/>'
+};
+function profRow(r){
+  const ic = '<span class="pr-ic pt-' + PTINT[r[0]] + '">' + pIcon(r[0]) + '</span>';
+  if (r[0] === 'appear'){
+    const seg = [['light', 'Luminos'], ['auto', 'Automat, după telefon'], ['dark', 'Întunecat']].map(o => '<button role="radio" data-action="appearance" data-v="' + o[0] + '" aria-checked="' + (S.appearance === o[0]) + '" aria-label="' + o[1] + '"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">' + SEG_ICON[o[0]] + '</svg></button>').join('');
+    return '<div class="prow prow-seg" data-sec="appear"><button class="pr-open" data-action="prof-open" data-sec="appear">' + ic + '<span class="pr-t">' + r[1] + '</span></button><div class="aseg" role="radiogroup" aria-label="Aspect">' + seg + '</div></div>';
+  }
+  let v = r[2] ? '<span class="pr-v">' + esc(r[2]) + '</span>' : '';
+  if (r[0] === 'theme'){ const lg = (THEMES[S.theme] || THEMES.proaspat).logo; v = '<span class="pr-v"><span class="pr-sw" aria-hidden="true"><i style="background:' + (lg.bg1 || '#888') + '"></i><i style="background:' + (lg.bg2 || '#444') + '"></i><i style="background:' + (lg.dot || '#F60') + '"></i></span>' + esc(r[2]) + '</span>'; }
+  return '<button class="prow" data-action="prof-open" data-sec="' + r[0] + '">' + ic + '<span class="pr-t">' + r[1] + '</span>' + v + CHEVRON + '</button>';
 }
 function tField(id, label, val, unit){
   return '<div><label class="lbl" for="' + id + '">' + label + '</label><div class="unit"><input type="text" inputmode="numeric" id="' + id + '" value="' + esc(val) + '"><em>' + unit + '</em></div></div>';
@@ -3501,11 +3630,13 @@ function gStart(ev){
   const t = ev.target, p = ev.touches[0];
   if (!t.closest || t.closest('input, textarea, select, .glasses, .chips, .seg, .tabbar, [data-noswipe]')) return;
   if (p.clientX < 24 || p.clientX > window.innerWidth - 24) return; // the screen edges belong to the phone's back gesture
+  const scrub = t.closest('[data-scrub]');
+  if (scrub){ Object.assign(G, { on: true, x0: p.clientX, y0: p.clientY, t0: performance.now(), mode: null, scrub, entry: null, days: false, week: null, dx: 0, armed: false }); return; }
   const entry = t.closest('#diary .entry');
   const days = (S.screen === 'azi' || S.screen === 'jurnal') && !!S.profile && S.loaded;
   if (!entry && !days) return;
   const week = t.closest('.week');
-  Object.assign(G, { on: true, x0: p.clientX, y0: p.clientY, t0: performance.now(), mode: null, entry, days, week, step: week ? 7 : 1, dx: 0, armed: false });
+  Object.assign(G, { on: true, x0: p.clientX, y0: p.clientY, t0: performance.now(), mode: null, scrub: null, entry, days, week, step: week ? 7 : 1, dx: 0, armed: false });
 }
 function gMove(ev){
   if (!G.on) return;
@@ -3514,7 +3645,7 @@ function gMove(ev){
   if (!G.mode){
     if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
     if (Math.abs(dy) > Math.abs(dx) * 0.8){ G.on = false; return; }
-    G.mode = G.entry && dx < 0 ? 'entry' : G.days ? 'day' : null;
+    G.mode = G.scrub ? 'scrub' : G.entry && dx < 0 ? 'entry' : G.days ? 'day' : null;
     if (!G.mode){ G.on = false; return; }
     G.canNext = S.view < todayKey(); G.canPrev = S.view > addDays(todayKey(), -365);
     G.panes = G.mode !== 'day' ? [] : G.week ? [G.week] : dayPanes(false);
@@ -3523,6 +3654,7 @@ function gMove(ev){
   }
   if (ev.cancelable) ev.preventDefault();
   G.dx = dx;
+  if (G.mode === 'scrub'){ scrubAt(G.scrub, p.clientX, false); return; }
   if (G.mode === 'entry'){
     const w = G.entry.offsetWidth, x = Math.max(-w, Math.min(0, dx)), armed = -x > w * 0.36;
     G.entry.classList.add('swiping'); G.entry.style.setProperty('--sx', x + 'px');
@@ -3538,7 +3670,8 @@ function gEnd(ev){
   G.on = false;
   document.documentElement.classList.remove('swiping');
   if (!G.mode) return;
-  noClickUntil = performance.now() + 450; // the tap that ends a swipe opens nothing
+  noClickUntil = performance.now() + (G.mode === 'scrub' ? 320 : 450); // the tap that ends a swipe opens nothing
+  if (G.mode === 'scrub'){ G.scrub = null; return; }
   const cancel = ev.type === 'touchcancel', v = G.dx / Math.max(1, performance.now() - G.t0);
   if (G.mode === 'entry'){
     const el = G.entry, w = el.offsetWidth, go = !cancel && (-G.dx > w * 0.36 || (v < -0.6 && -G.dx > 48));
@@ -3673,6 +3806,8 @@ const CLOSERS = {
 function bindStatic(){
   bindGestures();
   document.addEventListener('click', ev => {
+    const sc = ev.target.closest && ev.target.closest('[data-scrub]');
+    if (sc){ scrubAt(sc, ev.clientX, true); return; }
     const dayG = ev.target.closest && ev.target.closest('[data-day]');
     if (dayG){ if (setDay(dayG.getAttribute('data-day'))) buzz('tick'); return; }
     const b = ev.target.closest && ev.target.closest('[data-action]');
@@ -3761,6 +3896,14 @@ function bindStatic(){
       case 'water-add': waterAdd(Number(b.dataset.ml)); break;
       case 'water-set': waterSet(Number(b.dataset.ml), Number(b.dataset.per)); break;
       case 'w-save': saveWeight(); break;
+      case 'w-step': {
+        const inp = $('#wIn'), cur = num(inp.value) || num(inp.placeholder) || 0;
+        const v = Math.min(300, Math.max(30, Math.round((cur + Number(b.dataset.d)) * 10) / 10));
+        inp.value = fmt1(v); buzz('tick'); break;
+      }
+      case 'w-unpick': S.wPick = null; wPaint(); break;
+      case 'hist-unpick': S.histPick = null; histPaint(); break;
+      case 'hist-open': { const k = b.dataset.k; setDay(k); go('jurnal'); break; }
       case 'w-del': delWeight(); break;
       case 'w-recalc': recalcFromWeight(Number(b.dataset.w)); break;
       case 'adapt-apply': applyAdapt(false); break;
@@ -3853,6 +3996,7 @@ function bindStatic(){
       case 'close-plus': closePlus(); break;
       case 'appearance': {
         S.appearance = b.dataset.v; lsSet('portia-appearance', S.appearance); applyMode(); refreshAppear();
+        $$('.aseg [data-action="appearance"]').forEach(x => x.setAttribute('aria-checked', String(x.dataset.v === S.appearance))); buzz('tick');
         break;
       }
       case 'dark-shade': {
@@ -3879,6 +4023,10 @@ function bindStatic(){
   document.addEventListener('keydown', ev => {
     if (ev.key === 'Enter' && ev.target && ev.target.id === 'askIn'){ ev.preventDefault(); const b = $('[data-action="ask-send"]'); if (b) b.click(); return; }
     const g = ev.target.closest && ev.target.closest('[data-day]');
+    const hg = g && g.closest('#history');
+    if (hg && (ev.key === 'Enter' || ev.key === ' ')){ ev.preventDefault(); const k = g.getAttribute('data-day'); S.histPick = S.histPick === k ? null : k; histPaint(); return; }
+    const scr = ev.target.closest && ev.target.closest('[data-scrub]');
+    if (scr && (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight')){ ev.preventDefault(); scrubStep(scr, ev.key === 'ArrowLeft' ? -1 : 1); if (hg){ const n = scr.querySelector('g[data-day="' + S.histPick + '"]'); if (n) n.focus(); } return; }
     if (g && (ev.key === 'Enter' || ev.key === ' ')){ ev.preventDefault(); setDay(g.getAttribute('data-day')); return; }
     if (ev.key === 'Escape'){
       const open = $$('.sheet:not(.ghost)').filter(s => !s.hidden), top = open[open.length - 1];

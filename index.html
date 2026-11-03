@@ -162,14 +162,20 @@
       <div class="scr-head"><div><h1 id="hProg">Progres</h1><p>Ultimele 7 zile, greutatea și ținta</p></div></div>
       <section class="panel" id="history" aria-label="Ultimele 7 zile"></section>
       <section class="panel" id="weight" aria-labelledby="wTitle">
-        <div class="panel-head"><h2 id="wTitle">Greutate</h2><span class="meta" id="wMeta"></span></div>
-        <div class="wrow">
-          <div class="unit"><label class="sr" for="wIn">Greutatea în kilograme</label><input type="text" id="wIn" inputmode="decimal" placeholder="0,0"><em>kg</em></div>
-          <button class="btn soft" data-action="w-save">Notează</button>
-        </div>
-        <p class="hint">Cântărește-te dimineața, înainte să mănânci. Contează tendința, nu o singură zi.</p>
+        <div class="panel-head"><h2 id="wTitle">Greutate</h2></div>
+        <div class="w-read" id="wRead" aria-live="polite"></div>
         <div id="wChart"></div>
         <dl class="hstats" id="wStats" hidden></dl>
+        <div class="wlog">
+          <p class="wlog-t" id="wMeta"></p>
+          <div class="wrow">
+            <button class="wstep" data-action="w-step" data-d="-0.1" aria-label="Scade cu 0,1 kg"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 12h12"/></svg></button>
+            <div class="unit"><label class="sr" for="wIn">Greutatea în kilograme</label><input type="text" id="wIn" inputmode="decimal" placeholder="0,0"><em>kg</em></div>
+            <button class="wstep" data-action="w-step" data-d="0.1" aria-label="Crește cu 0,1 kg"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 6v12M6 12h12"/></svg></button>
+            <button class="btn soft" data-action="w-save">Notează</button>
+          </div>
+          <p class="hint">Cântărește-te dimineața, înainte să mănânci. Contează tendința, nu o singură zi.</p>
+        </div>
         <div id="wBanner"></div>
         <div id="adapt"></div>
       </section>
