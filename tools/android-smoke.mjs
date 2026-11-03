@@ -11,12 +11,15 @@ const OUT = 'smoke';
 mkdirSync(OUT, { recursive: true });
 const sh = c => execSync(c, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 << 20 });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const errors = [];
+// GitHub keeps only 10 annotations of each kind per step: failures are errors, findings are warnings,
+// and everything that passed goes into one notice at the end
+const errors = [], passed = [];
 const ok = (name, cond, extra) => {
   const line = (cond ? 'OK  ' : 'EȘEC ') + name + (extra !== undefined ? ' — ' + JSON.stringify(extra) : '');
-  console.log(cond ? '::notice::' + line : '::error::' + line);
-  if (!cond) errors.push(name);
+  console.log(cond ? line : '::error::' + line);
+  if (cond) passed.push(name); else errors.push(name);
 };
+const info = msg => console.log('::warning::' + msg);
 const shot = name => writeFileSync(`${OUT}/android-${name}.png`, execSync('adb exec-out screencap -p', { maxBuffer: 64 << 20 }));
 
 // one day of food, to see the screens with content
@@ -84,8 +87,11 @@ const tap = async (page, sel) => {
   const r = await page.ev(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); if (!el) return null; el.scrollIntoView({ block: 'nearest' }); const b = el.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; })()`);
   if (!r){ ok('găsesc ' + sel, false); return; }
   const p = toScreen(r.x, r.y);
+  await page.ev(`window.__tap = null; document.addEventListener('click', e => { window.__tap = (e.target.closest('[data-action],[data-nav],[id]') || e.target).outerHTML.slice(0, 80); }, { capture: true, once: true }); true`);
   sh(`adb shell input tap ${p.x} ${p.y}`); await sleep(800);
+  if (taps++ < 3) info('atingere pe ' + sel + ' la ' + JSON.stringify(r) + ' → ecran ' + JSON.stringify(p) + ', a ajuns la: ' + await page.ev('window.__tap'));
 };
+let taps = 0;
 const swipe = (a, b, ms = 260) => sh(`adb shell input swipe ${a.x} ${a.y} ${b.x} ${b.y} ${ms}`);
 const back = () => sh('adb shell input keyevent 4');
 const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity activities').split('\n').filter(l => /mResumedActivity|topResumedActivity|ResumedActivity:/.test(l)).join('\n'));
@@ -99,9 +105,10 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   await sleep(1500);
   shot('1-bun-venit');
 
-  const info = await page.ev(`({ native: Capacitor.isNativePlatform(), platform: Capacitor.getPlatform(), plugins: Object.keys(Capacitor.Plugins).sort(), mark: document.documentElement.getAttribute('data-native'), top: getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-top').trim(), bottom: getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-bottom').trim() })`);
-  ok('rulează ca aplicație nativă Android', info.native && info.platform === 'android' && info.mark === 'android', info);
-  for (const p of ['App', 'Clipboard', 'Filesystem', 'Haptics', 'Keyboard', 'Preferences', 'Share', 'SplashScreen', 'SystemBars']) ok('pluginul ' + p + ' e disponibil', info.plugins.includes(p));
+  const nfo = await page.ev(`({ native: Capacitor.isNativePlatform(), platform: Capacitor.getPlatform(), plugins: Object.keys(Capacitor.Plugins).sort(), mark: document.documentElement.getAttribute('data-native'), top: getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-top').trim(), bottom: getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-bottom').trim() })`);
+  ok('rulează ca aplicație nativă Android', nfo.native && nfo.platform === 'android' && nfo.mark === 'android');
+  info('aplicația: ' + JSON.stringify(nfo));
+  for (const p of ['App', 'Clipboard', 'Filesystem', 'Haptics', 'Keyboard', 'Preferences', 'Share', 'SplashScreen', 'SystemBars', 'PortiaWindow']) ok('pluginul ' + p + ' e disponibil', nfo.plugins.includes(p));
   ok('primul ecran e bun venit', await page.ev(`!document.querySelector('#consentSheet').hidden`));
   ok('fără bifa pentru AI când nu există AI', await page.ev(`!document.querySelector('[data-consent="ai"]')`));
   back(); await sleep(1200);
@@ -116,46 +123,67 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   shot('2-azi');
   const box = webviewBox(), iw = await page.ev('innerWidth'), ih = await page.ev('innerHeight');
   VIEW = box ? Object.assign(box, { k: box.w / iw }) : { x: 0, y: 0, k: await page.ev('devicePixelRatio') };
-  console.log('::notice::web view pe ecran: ' + JSON.stringify(VIEW) + ', pagina ' + iw + '×' + ih);
+  info('web view pe ecran: ' + JSON.stringify(VIEW) + ', pagina ' + iw + '×' + ih);
   const mirrored = await page.ev(`new Promise(r => setTimeout(async () => { const v = await Capacitor.Plugins.Preferences.get({ key: 'mt-local' }); r(!!(v && v.value && JSON.parse(v.value).profile)); }, 900))`);
   ok('jurnalul are copie în memoria nativă', mirrored);
   ok('vibrațiile răspund', await page.ev(`Capacitor.Plugins.Haptics.impact({ style: 'LIGHT' }).then(() => true, e => String(e))`) === true);
 
-  // real touches: swipe to yesterday and back, through the system's input
-  await page.ev(`window.__ev = []; ['pointerdown', 'pointermove', 'pointerup', 'pointercancel'].forEach(t => document.addEventListener(t, e => { if (__ev.length < 60) __ev.push(t.slice(7) + ':' + e.pointerType); }, true)); true`);
+  // real touches through Android's input system. Each check starts from a known state,
+  // so one failure doesn't leave the next checks tapping somewhere else.
+  const screenNow = () => page.ev(`document.documentElement.dataset.screen`);
+  const front = async () => { if (!resumed()){ start(); await sleep(2000); } };
+  const act = a => page.ev(`(() => { const b = document.createElement('button'); b.dataset.action = ${JSON.stringify(a)}; b.hidden = true; document.body.append(b); b.click(); b.remove(); return true; })()`);
+  const nav = async name => {
+    await front();
+    await tap(page, `#tabbar [data-nav="${name}"]`);
+    const okTap = await screenNow() === name;
+    if (!okTap) await page.ev(`document.querySelector('#tabbar [data-nav="${name}"]').click(); true`), await sleep(500);
+    return okTap;
+  };
+
+  await page.ev(`window.__ev = []; ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'click'].forEach(t => document.addEventListener(t, e => { if (__ev.length < 80) __ev.push(t.replace('pointer', '') + ':' + (e.pointerType || '')); }, true)); true`);
   const hr = await page.ev(`(() => { const b = document.querySelector('#hero').getBoundingClientRect(); return { l: b.left, r: b.right, y: b.top + b.height * 0.45 }; })()`);
   swipe(toScreen(hr.l + 60, hr.y), toScreen(hr.r - 20, hr.y + 4)); await sleep(1000);
-  console.log('::notice::evenimente la glisare: ' + await page.ev(`__ev.filter((x, i, a) => a.indexOf(x) === i).join(' ') + ' (' + __ev.length + ')'`));
+  info('evenimente la glisare: ' + await page.ev(`__ev.filter((x, i, a) => a.indexOf(x) === i).join(' ') + ' (' + __ev.length + ')'`));
   ok('glisarea spre dreapta deschide ziua de ieri', /^Ieri/.test(await page.ev(`document.querySelector('#hAzi').textContent`)), await page.ev(`document.querySelector('#hAzi').textContent`));
   shot('3-ieri');
-  back(); await sleep(800);
-  ok('Înapoi pe o zi trecută revine la azi', await page.ev(`document.querySelector('#hAzi').textContent`) === 'Azi');
+  if (await page.ev(`document.querySelector('#hAzi').textContent`) === 'Azi') await act('prev-day');
+  await sleep(500);
+  back(); await sleep(900);
+  ok('Înapoi pe o zi trecută revine la azi', resumed() && await page.ev(`document.querySelector('#hAzi').textContent`) === 'Azi');
 
-  await tap(page, '#tabbar [data-nav="jurnal"]'); shot('4-jurnal');
+  ok('atingerea pe tabul Jurnal', await nav('jurnal'));
+  shot('4-jurnal');
   await tap(page, '#meal-lunch .entry .e-main');
   ok('foaia de editare se deschide', await page.ev(`!document.querySelector('#editSheet').hidden`));
+  if (await page.ev(`document.querySelector('#editSheet').hidden`)) await page.ev(`document.querySelector('#meal-lunch .entry .e-main').click(); true`), await sleep(600);
   shot('5-editare');
-  back(); await sleep(700);
-  ok('Înapoi închide foaia', await page.ev(`document.querySelector('#editSheet').hidden`));
-  back(); await sleep(700);
-  ok('Înapoi din Jurnal duce la Azi', await page.ev(`document.documentElement.dataset.screen`) === 'azi');
+  back(); await sleep(800);
+  ok('Înapoi închide foaia', resumed() && await page.ev(`document.querySelector('#editSheet').hidden`));
+  await front();
+  back(); await sleep(800);
+  ok('Înapoi din Jurnal duce la Azi', resumed() && await screenNow() === 'azi');
 
-  await tap(page, '#tabbar [data-nav="add"]');
+  await front();
+  ok('atingerea pe butonul Adaugă', await nav('add'));
   await tap(page, '#logger [data-tab="manual"]');
+  await page.ev(`document.querySelector('#logger [data-tab="manual"]').click(); true`);
   await tap(page, '#mName');
-  await sleep(1200);
+  await sleep(1500);
   ok('tastatura ascunde bara de taburi', await page.ev(`document.documentElement.classList.contains('kb')`));
   shot('6-adauga-tastatura');
-  back(); await sleep(600);
-  await page.ev(`document.activeElement && document.activeElement.blur(); true`); await sleep(600);
-  await tap(page, '#tabbar [data-nav="progres"]'); shot('7-progres');
-  await tap(page, '#tabbar [data-nav="profil"]'); shot('8-profil');
+  await page.ev(`document.activeElement && document.activeElement.blur(); true`); await sleep(900);
+  ok('fără tastatură, bara de taburi revine', !await page.ev(`document.documentElement.classList.contains('kb')`));
+  await nav('progres'); await sleep(400); shot('7-progres');
+  await nav('profil'); await sleep(400); shot('8-profil');
   ok('fără abonamente în aplicația din magazin', await page.ev(`!document.querySelector('.prow[data-sec="plan"]')`));
 
-  sh('adb shell cmd uimode night yes'); await sleep(2500);
-  await tap(page, '#tabbar [data-nav="azi"]'); shot('9-azi-intunecat');
-  ok('bara de stare urmează tema', true);
-  sh('adb shell cmd uimode night no'); await sleep(1500);
+  await nav('azi');
+  sh('adb shell cmd uimode night yes'); await sleep(3000);
+  await front(); shot('9-azi-intunecat');
+  const darkBg = await page.ev(`getComputedStyle(document.body).backgroundColor`);
+  ok('modul întunecat al telefonului schimbă aplicația', /rgb\((\d+), (\d+), (\d+)\)/.test(darkBg) && darkBg.match(/\d+/g).slice(0, 3).every(n => +n < 60), darkBg);
+  sh('adb shell cmd uimode night no'); await sleep(2000);
 
   // closing and reopening the app keeps everything
   await sleep(2500);
@@ -176,6 +204,6 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   const seenOurs = seen.filter(ours);
   ok('nicio eroare JavaScript', !jsErr.length && !seenOurs.length, jsErr.slice(0, 5).concat(seenOurs.slice(0, 5)));
   ok('aplicația nu s-a oprit', !/FATAL EXCEPTION/.test(log));
+  console.log('::notice::' + passed.length + ' verificări au trecut: ' + passed.join('; '));
   if (errors.length){ console.log('::error::' + errors.length + ' verificări au eșuat: ' + errors.join('; ')); process.exit(1); }
-  console.log('Toate verificările au trecut.');
 })().catch(e => { console.log('::error::' + e.message); try { writeFileSync(`${OUT}/logcat.txt`, sh('adb logcat -d')); } catch {} process.exit(1); });
