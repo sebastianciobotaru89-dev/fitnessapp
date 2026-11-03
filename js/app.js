@@ -1536,22 +1536,22 @@ function openEdit(id){
   const b = S.edit.base;
   $('#editCard').innerHTML =
     '<div class="sheet-head"><h2 id="edTitle" tabindex="-1">Editează alimentul</h2><button class="icon-btn" data-action="close-edit" aria-label="Închide">' + X_ICON + '</button></div>' +
-    '<div class="mgrid">' +
-      '<div class="full"><label class="lbl" for="eName">Aliment</label><input type="text" id="eName" value="' + esc(b.name) + '"></div>' +
-      '<div class="half"><label class="lbl" for="eK">Calorii</label><div class="unit"><input type="text" inputmode="decimal" id="eK" value="' + inVal(b.kcal) + '"><em>kcal</em></div></div>' +
-      '<div class="half"><label class="lbl" for="eG">Cantitate</label><div class="unit"><input type="text" inputmode="decimal" id="eG" value="' + inVal(b.grams) + '" placeholder="opțional"><em>g</em></div></div>' +
-      '<div class="half"><label class="lbl" for="eP">Proteine</label><div class="unit"><input type="text" inputmode="decimal" id="eP" value="' + inVal(b.protein) + '"><em>g</em></div></div>' +
-      '<div class="half"><label class="lbl" for="eC">Glucide</label><div class="unit"><input type="text" inputmode="decimal" id="eC" value="' + inVal(b.carbs) + '"><em>g</em></div></div>' +
-      '<div class="half"><label class="lbl" for="eF">Grăsimi</label><div class="unit"><input type="text" inputmode="decimal" id="eF" value="' + inVal(b.fat) + '"><em>g</em></div></div>' +
+    '<label class="sr" for="eName">Aliment</label><div class="dict mname"><input type="text" id="eName" value="' + esc(b.name) + '" autocomplete="off"></div>' +
+    '<div class="mtiles">' +
+      '<label class="mtile big"><span class="mt-l">Calorii</span><span class="unit"><input type="text" inputmode="decimal" id="eK" value="' + inVal(b.kcal) + '"><em>kcal</em></span></label>' +
+      '<label class="mtile"><span class="mt-l">Cantitate</span><span class="unit"><input type="text" inputmode="decimal" id="eG" value="' + inVal(b.grams) + '" placeholder="—"><em>g</em></span></label>' +
+      '<label class="mtile m-p"><span class="mt-l">Proteine</span><span class="unit"><input type="text" inputmode="decimal" id="eP" value="' + inVal(b.protein) + '"><em>g</em></span></label>' +
+      '<label class="mtile m-c"><span class="mt-l">Glucide</span><span class="unit"><input type="text" inputmode="decimal" id="eC" value="' + inVal(b.carbs) + '"><em>g</em></span></label>' +
+      '<label class="mtile m-f"><span class="mt-l">Grăsimi</span><span class="unit"><input type="text" inputmode="decimal" id="eF" value="' + inVal(b.fat) + '"><em>g</em></span></label>' +
     '</div>' +
-    '<div class="edit-block"><span class="lbl">Porție față de cea notată</span><div class="row">' +
-      [[0.5,'½'],[0.75,'¾'],[1,'1×'],[1.5,'1½'],[2,'2×']].map(x => '<button class="chip" data-action="e-scale" data-m="' + x[0] + '" aria-pressed="' + (x[0] === 1) + '">' + x[1] + '</button>').join('') +
+    '<div class="edit-block"><span class="lbl">Porție față de cea notată</span><div class="portion" role="group" aria-label="Porție">' +
+      [[0.5,'½'],[0.75,'¾'],[1,'1×'],[1.5,'1½'],[2,'2×']].map(x => '<button data-action="e-scale" data-m="' + x[0] + '" aria-pressed="' + (x[0] === 1) + '">' + x[1] + '</button>').join('') +
     '</div></div>' +
-    '<div class="edit-block"><span class="lbl">Masa</span><div class="row" role="radiogroup" aria-label="Masa">' +
-      MEALS.map(m => '<button class="chip" role="radio" data-action="e-meal" data-meal="' + m.id + '" aria-checked="' + (m.id === b.meal) + '">' + m.t + '</button>').join('') +
+    '<div class="edit-block"><span class="lbl">Masa</span><div class="meals" role="radiogroup" aria-label="Masa">' +
+      MEALS.map(m => '<button class="ml ml-' + m.id + '" role="radio" data-action="e-meal" data-meal="' + m.id + '" aria-checked="' + (m.id === b.meal) + '"><span class="ml-ic">' + MEAL_ICON[m.id] + '</span><b>' + m.t + '</b></button>').join('') +
     '</div></div>' +
     '<p class="ferr" id="eErr" style="margin-top:12px"></p>' +
-    '<div class="row"><button class="btn danger-ghost" data-action="e-del">Șterge</button><button class="btn primary wide" data-action="e-save">Salvează</button></div>';
+    '<div class="row ebtns"><button class="btn danger-ghost" data-action="e-del">Șterge</button><button class="btn act wide" data-action="e-save">Salvează</button></div>';
   showSheet('#editSheet');
   $('#edTitle').focus({ preventScroll: true });
 }
@@ -3048,20 +3048,30 @@ const STAR_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" s
 function renderDiary(){
   const el = $('#diary'); const day = getDay(S.view); const t = dayTotals(day);
   const T = S.profile ? targetsFor(S.view) : null;
-  let html = '<div class="diary-sum"><div class="ds-main"><b>' + fmt(t.kcal) + '</b><span>' + (T ? 'din ' + fmt(T.kcal) + ' kcal' : 'kcal') + '</span></div>' +
-    '<span class="mx"><span><i class="dot p"></i>' + fmt(t.protein) + ' g</span><span><i class="dot c"></i>' + fmt(t.carbs) + ' g</span><span><i class="dot f"></i>' + fmt(t.fat) + ' g</span></span></div>';
+  // the day at the top: what was eaten, and a bar showing which meal brought how much
+  const byMeal = MEALS.map(m => day.entries.filter(e => e.meal === m.id).reduce((a, e) => a + e.kcal, 0));
+  const cap = Math.max(T ? T.kcal : 0, t.kcal) || 1;
+  let html = '<section class="panel diary-sum"><div class="ds-top"><div class="ds-main"><b>' + fmt(t.kcal) + '</b><span>' + (T ? 'din ' + fmt(T.kcal) + ' kcal' : 'kcal') + '</span></div>' +
+    '<span class="mx"><span><i class="dot p"></i>' + fmt(t.protein) + ' g</span><span><i class="dot c"></i>' + fmt(t.carbs) + ' g</span><span><i class="dot f"></i>' + fmt(t.fat) + ' g</span></span></div>' +
+    '<span class="ds-bar' + (T && t.kcal > T.kcal ? ' is-over' : '') + '" aria-hidden="true">' + MEALS.map((m, i) => byMeal[i] ? '<i class="ml-' + m.id + '" style="width:' + (byMeal[i] / cap * 100).toFixed(2) + '%"></i>' : '').join('') +
+      (T ? '<b class="ds-t" style="left:' + Math.min(100, T.kcal / cap * 100).toFixed(2) + '%"></b>' : '') + '</span></section>';
   if (!S.loaded){ el.innerHTML = html + '<div class="skel" aria-hidden="true"></div>'; return; }
   for (const m of MEALS){
     const list = day.entries.filter(e => e.meal === m.id).sort((a, b) => a.at - b.at);
     const mk = list.reduce((a, e) => a + e.kcal, 0);
-    html += '<section class="panel meal-card" id="meal-' + m.id + '" aria-label="' + m.t + '"><header class="mc-head"><span class="mc-ic">' + MEAL_ICON[m.id] + '</span><h2>' + m.t + '</h2>' +
-      (list.length ? '<span class="mc-k">' + fmt(mk) + ' kcal</span><button class="mc-fav" data-action="fav-save" data-meal="' + m.id + '" aria-label="Salvează ' + m.t.toLowerCase() + ' ca masă favorită">' + STAR_ICON + '</button>' : '') + '</header>' +
-      (list.length ? '<ul class="entries">' + list.map(e =>
-        '<li class="entry"><button class="e-main" data-action="edit" data-id="' + esc(e.id) + '" aria-label="Editează ' + esc(e.name) + '"><span class="nm">' + esc(e.name) + (AI_SRC.has(e.src) ? ' <span class="aitag" title="Estimat de AI">AI</span>' : '') + '</span><span class="mx"><span><i class="dot p"></i>' + fmt1(e.protein) + '</span><span><i class="dot c"></i>' + fmt1(e.carbs) + '</span><span><i class="dot f"></i>' + fmt1(e.fat) + '</span>' + (e.grams ? '<span>' + fmt(e.grams) + ' g</span>' : '') + '</span></button>' +
-        '<span class="kc">' + fmt(e.kcal) + '</span><button class="del" data-action="del" data-id="' + esc(e.id) + '" aria-label="Șterge ' + esc(e.name) + '">' + X_ICON + '</button></li>').join('') + '</ul>' : '') +
-      '<button class="mc-add" data-action="add-to" data-meal="' + m.id + '">' + '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>' + (list.length ? 'Mai adaugă' : 'Adaugă la ' + m.t.toLowerCase()) + '</button></section>';
+    if (!list.length){
+      // an empty meal is one slim row that adds to it
+      html += '<section class="panel meal-card is-empty ml-' + m.id + '" id="meal-' + m.id + '" aria-label="' + m.t + '"><button class="mc-row" data-action="add-to" data-meal="' + m.id + '"><span class="mc-ic">' + MEAL_ICON[m.id] + '</span><h2>' + m.t + '</h2><span class="mc-plus">Adaugă</span></button></section>';
+      continue;
+    }
+    html += '<section class="panel meal-card ml-' + m.id + '" id="meal-' + m.id + '" aria-label="' + m.t + '"><header class="mc-head"><span class="mc-ic">' + MEAL_ICON[m.id] + '</span><h2>' + m.t + '</h2>' +
+      '<span class="mc-k">' + fmt(mk) + ' <small>kcal</small></span><button class="mc-fav" data-action="fav-save" data-meal="' + m.id + '" aria-label="Salvează ' + m.t.toLowerCase() + ' ca masă favorită">' + STAR_ICON + '</button></header>' +
+      '<ul class="entries">' + list.map(e =>
+        '<li class="entry"><button class="e-main" data-action="edit" data-id="' + esc(e.id) + '" aria-label="Editează ' + esc(e.name) + '"><span class="nm">' + esc(e.name) + (AI_SRC.has(e.src) ? ' <span class="aitag" title="Estimat de AI">AI</span>' : '') + '</span><span class="mx">' + (e.grams ? '<span class="g">' + fmt(e.grams) + ' g</span>' : '') + '<span><i class="dot p"></i>' + fmt1(e.protein) + '</span><span><i class="dot c"></i>' + fmt1(e.carbs) + '</span><span><i class="dot f"></i>' + fmt1(e.fat) + '</span></span></button>' +
+        '<span class="kc">' + fmt(e.kcal) + '</span><button class="del" data-action="del" data-id="' + esc(e.id) + '" aria-label="Șterge ' + esc(e.name) + '">' + X_ICON + '</button></li>').join('') + '</ul>' +
+      '<button class="mc-add" data-action="add-to" data-meal="' + m.id + '"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Mai adaugă</button></section>';
   }
-  if (t.n) html += '<p class="hint diary-hint">Atinge un aliment ca să-l corectezi.</p>';
+  if (t.n) html += '<p class="hint diary-hint">Atinge un aliment ca să-l corectezi. Glisează-l spre stânga ca să-l ștergi.</p>';
   el.innerHTML = html;
   renderMealsToday(day);
 }

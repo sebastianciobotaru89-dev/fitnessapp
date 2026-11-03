@@ -1140,3 +1140,50 @@ h2{font-stretch:104%;font-weight:750}
 .bc-card .chip[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
 /* every "add this food" button carries the main-action colour */
 .btn.primary:is([data-action="bc-add"],[data-action="commit"],[data-action="rl-add"]){background:var(--act);color:var(--on-act);box-shadow:0 14px 26px -16px var(--act)}
+
+/* ================= Jurnal: the day on one card, then the meals ================= */
+.ml-breakfast{--mc:var(--m1);--mi:var(--m1i)} .ml-lunch{--mc:var(--m2);--mi:var(--m2i)} .ml-snack{--mc:var(--m3);--mi:var(--m3i)} .ml-dinner{--mc:var(--m4);--mi:var(--m4i)}
+.diary-sum{display:flex;flex-direction:column;align-items:stretch;gap:14px;padding:16px 18px 18px}
+.ds-top{display:flex;align-items:flex-end;justify-content:space-between;gap:8px 14px;flex-wrap:wrap}
+.ds-main b{font-stretch:96%;font-weight:820;font-size:34px;letter-spacing:-.035em}
+/* which meal brought how much, in the meals' colours, against the day's target */
+.ds-bar{position:relative;display:flex;gap:3px;height:10px;border-radius:99px;background:var(--sunk)}
+.ds-bar i{display:block;height:100%;border-radius:99px;background:var(--mi);min-width:6px;transition:width .5s cubic-bezier(.2,.8,.2,1)}
+.ds-bar .ds-t{position:absolute;top:-4px;width:2px;height:18px;margin-left:-1px;border-radius:1px;background:var(--ink);opacity:.45}
+.meal-card{padding:12px 14px 4px}
+.meal-card .mc-ic,.meal-card.is-empty .mc-ic{background:var(--mc);color:var(--mi)}
+.mc-head{gap:12px}
+.mc-head h2{font-size:17px}
+.mc-k{font-stretch:96%;font-weight:800;font-size:18px;letter-spacing:-.02em}
+.mc-k small{font-family:var(--f-body);font-size:12px;font-weight:600;color:var(--muted);letter-spacing:0}
+.meal-card .entries{margin-top:6px}
+.entry{border-top:1px solid var(--line);padding:10px 0;gap:2px 10px;background:var(--surface)}
+.entry .nm{font-weight:620;font-size:15.5px}
+.entry .mx{margin-top:3px}
+.entry .mx .g{color:var(--ink);font-weight:600}
+.entry .kc{font-stretch:96%;font-weight:780;font-size:17px;letter-spacing:-.01em}
+.mc-add{color:var(--mi);border-top:1px solid var(--line);padding:12px 2px 12px}
+/* an empty meal is one slim row */
+.meal-card.is-empty{padding:0}
+.mc-row{display:flex;align-items:center;gap:12px;width:100%;padding:10px 14px;border:0;background:none;color:var(--ink);cursor:pointer;text-align:left;border-radius:inherit}
+.mc-row h2{flex:1;font-size:16px;color:var(--muted);font-weight:700}
+.mc-row .mc-ic{width:34px;height:34px;border-radius:11px}
+.mc-plus{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:99px;background:var(--mc);color:var(--mi);font-weight:700;font-size:13.5px}
+.mc-plus::before{content:"+";font-size:17px;line-height:1;font-weight:700}
+.mc-row:active{transform:scale(.985)}
+/* on phones, a food is deleted by swiping it or from its sheet; the cross stays for mouse and keyboard */
+@media (hover:none) and (pointer:coarse){#diary .del{display:none}#diary .entry{grid-template-columns:minmax(0,1fr) auto}}
+.diary-hint{margin-top:2px}
+
+/* ================= the edit sheet speaks the same language as Adaugă ================= */
+#editCard .mname{margin-bottom:12px}
+#editCard .mtiles{margin-bottom:4px}
+.portion{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;padding:4px;border-radius:16px;background:var(--sunk)}
+.portion button{border:0;background:transparent;border-radius:12px;padding:10px 0;font-family:var(--f-display);font-stretch:96%;font-weight:760;font-size:16px;color:var(--muted);cursor:pointer;transition:background-color .2s,color .2s,box-shadow .2s}
+.portion button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgb(0 0 0 / .06),0 6px 14px -6px rgb(0 0 0 / .16)}
+#editCard .meals{margin:0}
+#editCard .ml{box-shadow:none;background:var(--sunk)}
+#editCard .ml[aria-checked="true"]{background:var(--mc)}
+.ebtns{margin-top:6px;flex-wrap:nowrap}
+.ebtns .btn.act{width:auto;flex:1}
+.ebtns .btn.danger-ghost{min-height:54px;border-radius:18px;padding-inline:20px}
