@@ -925,3 +925,127 @@ html[data-native] button,html[data-native] .tab,html[data-native] .chip,html[dat
   .tab-ind,.tabbar,.sheet.ghost{transition:none;animation:none}
   .sheet.ghost{display:none}
 }
+
+/* ================= Proaspăt, rafinat: warm white, soft depth, the day as one dial ================= */
+/* Surfaces lift off the page with soft shadows instead of outlines. The calories are one dial drawn like the logo:
+   a green ring with the coral dot at its end. Each meal has its own colour; coral marks the one main action. */
+@property --p{syntax:"<number>";inherits:true;initial-value:0}
+@property --f{syntax:"<number>";inherits:false;initial-value:0}
+:root{--lift:0 1px 2px rgb(20 32 26 / .04),0 12px 30px -16px rgb(20 32 26 / .18);--lift-hi:0 1px 2px rgb(20 32 26 / .05),0 22px 44px -22px rgb(20 32 26 / .28);--dot:#FF6A4D;--act:var(--kcal);--on-act:#FFFFFF;
+  --m1:#FFF1D6;--m1i:#C27500;--m2:#DDF5E6;--m2i:#0F8A4F;--m3:#FFE4DD;--m3i:#DE4A2C;--m4:#E7E9FF;--m4i:#4B55D6}
+:root[data-theme="dark"]{--lift:none;--lift-hi:none;--m1:#382A10;--m1i:#FFC163;--m2:#123122;--m2i:#6EE7A8;--m3:#3A1E17;--m3i:#FF9A84;--m4:#1F2246;--m4i:#A3AAFF}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--lift:none;--lift-hi:none;--m1:#382A10;--m1i:#FFC163;--m2:#123122;--m2i:#6EE7A8;--m3:#3A1E17;--m3i:#FF9A84;--m4:#1F2246;--m4i:#A3AAFF}}
+
+h1{font-stretch:104%;font-weight:800;font-size:clamp(32px,9vw,38px);letter-spacing:-.025em}
+h2{font-stretch:104%;font-weight:750}
+.panel,.mt,.askbar,.meal-card{border:0;box-shadow:var(--lift);border-radius:26px}
+:root[data-theme="dark"] :is(.panel,.mt,.askbar,.meal-card){border:1px solid var(--line)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) :is(.panel,.mt,.askbar,.meal-card){border:1px solid var(--line)}}
+.streak{box-shadow:var(--lift);border-color:transparent}
+
+/* week strip: thinner rings */
+.wr-t,.wr-v{stroke-width:2.8}
+
+/* hero: a white card holding the dial and the three macros */
+.hero-card{--hc-ink:var(--ink);--hc-muted:var(--muted);--hc-line:var(--track);--hc-acc:color-mix(in srgb,var(--kcal) 45%,#FFFFFF);--hc-acc2:var(--kcal);
+  background:var(--surface);color:var(--ink);border-radius:32px;padding:16px 16px 18px;box-shadow:var(--lift-hi);overflow:hidden}
+:root[data-theme="dark"] .hero-card{border:1px solid var(--line)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .hero-card{border:1px solid var(--line)}}
+.hero-card::before{inset:0;background:radial-gradient(60% 46% at 50% 36%,color-mix(in srgb,var(--kcal) 11%,transparent),transparent 72%);-webkit-mask-image:none;mask-image:none}
+.hero-card.is-empty{padding:24px 22px}
+.hero-card .hc-top{justify-content:center;min-height:0;margin-bottom:0}
+.hero-card .hc-chip{background:var(--sunk);border:0;color:var(--ink)}
+.hero-card .btn.hc-btn,.hero-card .btn.hc-cta{background:var(--ink);color:var(--surface)}
+.hero-card .newbadge{background:var(--sunk);border-color:transparent;color:var(--ink)}
+
+.dial{position:relative;display:block;width:min(74vw,290px);aspect-ratio:1;margin:6px auto 4px;padding:0;border:0;border-radius:50%;background:none;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .18s cubic-bezier(.2,.8,.2,1)}
+.dial:active{transform:scale(.975)}
+.dial svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;--C:603.19;transition:--p .8s cubic-bezier(.2,.8,.2,1)}
+.dial svg.sweep{transition-duration:1.3s;transition-timing-function:cubic-bezier(.16,.84,.24,1)}
+.dial .tk-base line{stroke:var(--track);stroke-width:1.7;stroke-linecap:round}
+.dial .tk-lit line{stroke:var(--kcal);stroke-width:1.7;stroke-linecap:round;opacity:clamp(0,calc((var(--p) - var(--i)) * 600),1)}
+.dial line.mj{stroke-width:2.6}
+.dial .r-trk{fill:none;stroke:var(--sunk);stroke-width:12}
+.dial .r-val{fill:none;stroke:url(#dialGrad);stroke-width:12;stroke-linecap:round;transform:rotate(-90deg);transform-origin:120px 120px;stroke-dasharray:var(--C);stroke-dashoffset:calc(var(--C) - var(--p) * var(--C));filter:drop-shadow(0 4px 10px color-mix(in srgb,var(--kcal) 35%,transparent))}
+/* the logo's coral dot rides the end of the arc */
+.dial .d-knob{transform:rotate(calc(var(--p) * 360deg));transform-origin:120px 120px}
+.dial .d-knob circle{fill:var(--dot);filter:drop-shadow(0 2px 6px color-mix(in srgb,var(--dot) 60%,transparent))}
+.dial .d-knob .d-knob-in{fill:#FFFFFF;filter:none;opacity:.92}
+.hero-card.is-over .dial .r-val{stroke:var(--over);filter:drop-shadow(0 4px 10px color-mix(in srgb,var(--over) 35%,transparent))}
+.hero-card.is-over .dial .tk-lit line{stroke:var(--over)}
+.d-center{position:absolute;inset:19%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:1px}
+.d-center.swap{animation:dialSwap .32s cubic-bezier(.2,.8,.2,1)}
+@keyframes dialSwap{from{opacity:0;transform:translateY(6px) scale(.97)}}
+.hero-card .d-label{font-size:13.5px;font-weight:600;color:var(--muted)}
+.hero-card .big-num{font-stretch:96%;font-weight:820;font-size:clamp(50px,15vw,64px);line-height:1;letter-spacing:-.04em;color:var(--ink);margin:3px 0 5px}
+.hero-card .big-num small{font-size:.48em;font-weight:700;letter-spacing:0;margin-left:2px;color:var(--muted)}
+.hero-card.is-over .big-num{color:var(--over)}
+.hero-card .hc-sub{margin:0;font-size:13px;color:var(--muted)}
+.hero-card .hc-sub b{color:var(--ink)}
+.d-dots{display:flex;gap:5px;margin-top:10px}
+.d-dots i{width:5px;height:5px;border-radius:3px;background:var(--track);transition:background-color .2s,width .25s cubic-bezier(.2,.8,.2,1)}
+.d-dots i.on{width:15px;background:var(--kcal)}
+
+/* macros: three small dials under the big one */
+.hc-macros{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:12px;padding-top:16px;border-top:1px solid var(--line)}
+.mring{display:flex;align-items:center;gap:9px;min-width:0;justify-content:center}
+.mr-dial{position:relative;flex:none;width:46px;height:46px;display:grid;place-items:center}
+.mr-dial svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+.mr-t{fill:none;stroke:var(--sunk);stroke-width:5}
+.mring .mb-f{fill:none;stroke:var(--c);stroke-width:5;stroke-linecap:round;stroke-dasharray:125.66;stroke-dashoffset:calc(125.66 - var(--f) * 125.66);transition:--f .8s cubic-bezier(.2,.8,.2,1)}
+.mr-dial b{position:relative;font-family:var(--f-display);font-stretch:92%;font-weight:760;font-size:15px;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.mr-txt{display:flex;flex-direction:column;min-width:0;line-height:1.25}
+.mr-txt b{font-size:12.5px;font-weight:650}
+.mr-txt small{font-size:11.5px;color:var(--muted);white-space:nowrap}
+.mring.m-p{--c:var(--prot)} .mring.m-c{--c:var(--carb)} .mring.m-f{--c:var(--fat)}
+.mring.is-over{--c:var(--over)}
+@media (max-width:370px){.mring{flex-direction:column;gap:5px;text-align:center}.mr-txt{align-items:center}}
+
+/* each meal has its own colour, here and in the journal */
+.mt:nth-child(1) .mt-ic,#meal-breakfast .mc-ic{background:var(--m1);color:var(--m1i)}
+.mt:nth-child(2) .mt-ic,#meal-lunch .mc-ic{background:var(--m2);color:var(--m2i)}
+.mt:nth-child(3) .mt-ic,#meal-snack .mc-ic{background:var(--m3);color:var(--m3i)}
+.mt:nth-child(4) .mt-ic,#meal-dinner .mc-ic{background:var(--m4);color:var(--m4i)}
+.mt:not(.has) .mt-ic{filter:saturate(.35);opacity:.8}
+
+/* the one main action: coral in the house theme, the theme's colour elsewhere */
+.tab-add .ti{background:var(--act);color:var(--on-act);box-shadow:0 14px 26px -12px var(--act),0 0 0 5px var(--bg)}
+.tab-add[aria-current="page"] .ti{background:var(--ink);color:var(--bg)}
+.tabbar{border:0;box-shadow:0 12px 36px -14px rgb(20 32 26 / .32),0 0 0 1px color-mix(in srgb,var(--line) 70%,transparent);background:color-mix(in srgb,var(--surface) 88%,transparent)}
+.tab-ind{background:var(--kcal-soft)}
+.askbar{padding:7px}
+.ask-main{font-weight:700}
+
+/* the moment a target is reached: sparks leave the dial's ring */
+.burst i{animation-name:sparkRing}
+@keyframes sparkRing{0%{opacity:1;transform:translate(var(--x0),var(--y0)) scale(var(--s))}70%{opacity:1}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(0)}}
+.hero-card.cheer .dial .r-val{animation:ringCheer 1.4s cubic-bezier(.2,.8,.2,1)}
+.hero-card.cheer .big-num{animation:pop .6s cubic-bezier(.3,1.6,.5,1)}
+.hero-card .d-label.cheering{color:var(--kcal);font-weight:700;white-space:nowrap}
+
+/* the ask bar is one white pill, like a ride app's destination field */
+.ask-main{background:transparent}
+.ask-ic{background:var(--sunk)}
+.ww-num b small{font-size:.5em;font-weight:700;color:var(--muted);letter-spacing:0}
+
+/* progress chart: slim capsules, green inside the target, coral above it */
+.chart .track{fill:var(--sunk)}
+.chart .b-ok{fill:url(#barG)}
+.chart .b-over{fill:color-mix(in srgb,var(--over) 82%,#FFFFFF)}
+.chart .sel .track{fill:var(--kcal-soft)}
+.chart .hv{font-size:10px;font-weight:650}
+.hstats dd{font-stretch:100%;font-weight:780}
+
+/* profile: the same white card as the dial, with the logo */
+.prof-card{background:var(--surface);color:var(--ink);box-shadow:var(--lift-hi)}
+.prof-card::before,.prof-card::after{display:none}
+:root[data-theme="dark"] .prof-card{border:1px solid var(--line)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .prof-card{border:1px solid var(--line)}}
+.prof-card .pc-id span,.prof-card p{color:var(--muted)}
+.pc-av{filter:drop-shadow(0 8px 14px rgb(20 32 26 / .18))}
+.pc-stats{border-top-color:var(--line)}
+.pc-stats dt,.pc-stats dd small{color:var(--muted)}
+.prof-card .btn.ghost{color:var(--ink);border-color:var(--line);background:var(--sunk)}
+
+@media (min-width:900px){.dial{width:min(30vw,310px)}}
+@media (prefers-reduced-motion: reduce){.dial svg,.mring .mb-f,.d-center.swap{transition:none;animation:none}}

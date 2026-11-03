@@ -45,8 +45,8 @@ const THEMES = {
     light:{ bg:'#F4F2F0', surface:'#FFFFFF', sunk:'#EAE6E2', ink:'#1A1512', muted:'#6B6058', line:'#E2DCD6', track:'#ECE7E2', kcal:'#DD4A14', 'kcal-soft':'#FFE6DB', 'on-kcal':'#FFFFFF', prot:'#D6336C', carb:'#F2B705', fat:'#159A8C', water:'#2D8FD8', over:'#B3261E', 'toast-bg':'#1A1512', 'toast-fg':'#F4EEE9', 'toast-act':'#FFB38F' },
     dark:{ bg:'#100D0B', surface:'#1B1714', sunk:'#25201C', ink:'#F4EEE9', muted:'#A39A92', line:'#2F2925', track:'#2C2622', kcal:'#FF6B33', 'kcal-soft':'#3A2218', 'on-kcal':'#160F0B', prot:'#FF5C8D', carb:'#FFCB2E', fat:'#34C7B5', water:'#5AB2F2', over:'#FF5A4E', 'toast-bg':'#F4EEE9', 'toast-fg':'#1A1512', 'toast-act':'#C2410C' } },
   proaspat: { t:'Proaspăt', d:'verde și coral, sănătos', free:true, logo:{ bg1:'#36CC8A', bg2:'#0A6B3F', s1:'#FFFFFF', s2:'#CDF5DF', dot:'#F0603A', dot2:'#FFC3AF' },
-    light:{ bg:'#EFF4F1', surface:'#FFFFFF', sunk:'#E2EAE5', ink:'#0F1C16', muted:'#57685F', line:'#D5E0D9', track:'#DFE8E2', kcal:'#11874F', 'kcal-soft':'#DDF3E7', 'on-kcal':'#FFFFFF', prot:'#E5484D', carb:'#E9A100', fat:'#4F6BED', water:'#14A3C7', over:'#E8590C', 'toast-bg':'#0F1C16', 'toast-fg':'#E9F2EC', 'toast-act':'#8FE3B5' },
-    dark:{ bg:'#0A110E', surface:'#131C17', sunk:'#1A2620', ink:'#E9F2EC', muted:'#8FA398', line:'#22302A', track:'#21302A', kcal:'#3DD68C', 'kcal-soft':'#173426', 'on-kcal':'#06120C', prot:'#FF6B6F', carb:'#FFC233', fat:'#7D93FF', water:'#4CCFEA', over:'#FF8A3D', 'toast-bg':'#E9F2EC', 'toast-fg':'#0F1C16', 'toast-act':'#11874F' } },
+    light:{ bg:'#F6F6F3', surface:'#FFFFFF', sunk:'#EFF0EC', ink:'#14201A', muted:'#646F69', line:'#E8E9E4', track:'#E9EBE6', kcal:'#0F9D58', 'kcal-soft':'#DCF3E6', 'on-kcal':'#FFFFFF', prot:'#E5484D', carb:'#E9A100', fat:'#4F6BED', water:'#14A3C7', over:'#E8590C', 'toast-bg':'#0B1410', 'toast-fg':'#E9F2EC', 'toast-act':'#8FE3B5' },
+    dark:{ bg:'#0C0F0E', surface:'#161A18', sunk:'#1E2320', ink:'#EEF3EF', muted:'#94A19A', line:'#242B27', track:'#232A26', kcal:'#4ADE8E', 'kcal-soft':'#123222', 'on-kcal':'#03100A', prot:'#FF6B78', carb:'#FFC54D', fat:'#8296FF', water:'#4CCFEA', over:'#FF8A3D', 'toast-bg':'#ECF4EF', 'toast-fg':'#0B1410', 'toast-act':'#0E9C59' } },
   premium: { t:'Regal', d:'bleumarin și auriu, calm', logo:{ bg1:'#2E3F8A', bg2:'#0A0F2E', chrome:'blue', glow:'#6F84FF', dot:'#C2902A', dot2:'#FFE7A8' },
     light:{ bg:'#F1F2F6', surface:'#FFFFFF', sunk:'#E6E8EF', ink:'#141A33', muted:'#5D6580', line:'#DADDE7', track:'#E3E6EE', kcal:'#1F2C66', 'kcal-soft':'#E4E7F3', 'on-kcal':'#FFFFFF', prot:'#C2416B', carb:'#C9972B', fat:'#2F8F7E', water:'#3B82C4', over:'#E8590C', 'toast-bg':'#141A33', 'toast-fg':'#F3F1EA', 'toast-act':'#E3C26B' },
     dark:{ bg:'#0A0D1A', surface:'#131829', sunk:'#1B2136', ink:'#EEF0F7', muted:'#9298B0', line:'#252C44', track:'#232A40', kcal:'#A8B6FF', 'kcal-soft':'#232B4D', 'on-kcal':'#0A0D1A', prot:'#F07198', carb:'#E3B652', fat:'#4CC2AA', water:'#62A8E8', over:'#FF8A4C', 'toast-bg':'#EEF0F7', 'toast-fg':'#141A33', 'toast-act':'#1F2C66' } },
@@ -161,7 +161,10 @@ function themeCss(id){
   const t = THEMES[id]; if (!t) return '';
   if (!t.light) return '';
   const d = tokCss(liftDark(t.dark, shadeAmt()));
-  return ':root{' + tokCss(t.light) + '}@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){' + d + 'color-scheme:dark}}:root[data-theme="dark"]{' + d + 'color-scheme:dark}';
+  // the logo's dot colour rides the dial; the house themes use it for the main action too
+  const warm = id === 'proaspat' || id === 'craciun';
+  const extra = '--dot:' + (t.logo.dot || '#FF6A4D') + ';' + (warm ? '--act:#FF6A4D;--on-act:#FFFFFF;' : '');
+  return ':root{' + tokCss(t.light) + extra + '}@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){' + d + 'color-scheme:dark}}:root[data-theme="dark"]{' + d + 'color-scheme:dark}';
 }
 const P_PATH = 'M 26 78 C 31 77 34 73 34 67 L 34 42 A 17 17 0 1 1 51 59';
 const SHEEN_PATH = 'M 0 22.5 A 22.5 22.5 0 0 1 22.5 0 L 77.5 0 A 22.5 22.5 0 0 1 100 22.5 L 100 40 C 72 50 28 50 0 40 Z';
@@ -547,7 +550,7 @@ const S = {
   theme: 'proaspat', isOwner: true, previewing: false, plan: 'year', tier: 'plus', unsubs: [],
   appearance: lsGet('portia-appearance') || 'auto', darkShade: lsGet('portia-dark') || 'noapte', hostTheme: null, modeSet: null,
   library: { recipes: [], favorites: [], reports: [], products: [] }, bc: null, bcCtl: null, libRef: null, mini: null, rdraft: null, rctl: null, repCtl: null,
-  screen: '', lastMain: 'azi', scrollY: {}, heroDrawn: false, profSec: null, profScroll: 0, hero: null, heroRaf: 0
+  screen: '', lastMain: 'azi', scrollY: {}, heroDrawn: false, dialMode: [0, 1, 2].includes(lsGet('portia-dial')) ? lsGet('portia-dial') : 0, profSec: null, profScroll: 0, hero: null, heroRaf: 0
 };
 function fallbackToLocal(){
   if (S.mode !== 'cloud') return;
@@ -2805,29 +2808,55 @@ function renderHero(){
   const nb = S.loaded && S.newBadge && Date.now() < S.newBadge.until ? S.newBadge : null;
   const T = targetsFor(S.view), t = dayTotals(S.days[S.view]);
   const rem = T.kcal - t.kcal, over = rem < 0;
-  const R = 52, C = 2 * Math.PI * R, frac = T.kcal ? Math.min(1, t.kcal / T.kcal) : 0;
+  const frac = T.kcal ? Math.min(1, t.kcal / T.kcal) : 0;
   const pct = T.kcal ? Math.round(t.kcal / T.kcal * 100) : 0;
   const remP = Math.round(T.protein - t.protein);
   const showIdeas = !S.aiOff && S.view === todayKey() && rem > 150;
   const dayChip = T.type ? '<button class="hc-chip daytype ' + T.type + '" data-action="toggle-daytype" aria-label="' + (T.type === 'train' ? 'Zi de sală' : 'Zi de pauză') + '. Atinge ca să schimbi tipul zilei."><i></i>' + (T.type === 'train' ? 'Zi de sală · +' + fmt(T.delta) : 'Zi de pauză · −' + fmt(-T.delta)) + ' kcal</button>' : '';
-  const first = !S.heroDrawn && frac > 0; if (frac > 0) S.heroDrawn = true;
-  el.className = 'hero-card' + (over ? ' is-over' : '') + (first ? ' first' : '');
+  const D = dialFace(S.dialMode, { rem, over, eaten: t.kcal, target: T.kcal, pct });
+  el.className = 'hero-card' + (over ? ' is-over' : '');
   el.innerHTML =
-    '<div class="hc-top"><span class="hc-label">' + (over ? 'Peste țintă' : 'Calorii rămase') + '</span>' + dayChip + '</div>' +
+    (dayChip || nb ? '<div class="hc-top">' + dayChip + '</div>' : '') +
     (nb ? '<button class="newbadge" data-action="open-badges">' + bIcon(nb.icon, 18) + '<span>' + (nb.many ? 'Ai îndeplinit <b>' + nb.many + ' provocări</b> noi' : 'Provocare îndeplinită: <b>' + esc(nb.t) + '</b>') + '</span><em>Vezi</em></button>' : '') +
-    '<div class="hc-main">' +
-      '<div class="hc-num"><span class="big-num">' + (over ? '+' : '') + fmt(Math.abs(rem)) + '</span><span class="hc-sub"><b>' + fmt(t.kcal) + '</b> din <b>' + fmt(T.kcal) + '</b> kcal</span><span class="hc-kj">Ținta în kJ: ' + fmt(T.kcal * 4.184) + '</span></div>' +
-      '<div class="ringwrap"><svg viewBox="0 0 120 120" aria-hidden="true"><defs><linearGradient id="hcGrad" x1="0" y1="1" x2="1" y2="0"><stop offset="0" style="stop-color:var(--hc-acc2)"/><stop offset="1" style="stop-color:var(--hc-acc)"/></linearGradient></defs>' +
-        '<circle class="r-trk" cx="60" cy="60" r="' + R + '"/>' +
-        (frac > 0 ? '<circle class="r-val" cx="60" cy="60" r="' + R + '" stroke-dasharray="' + C.toFixed(2) + '" stroke-dashoffset="' + (C * (1 - frac)).toFixed(2) + '" style="--c0:' + C.toFixed(2) + '"/>' : '') +
-      '</svg><div class="ring-center"><b>' + pct + '<small>%</small></b><span>din țintă</span></div></div>' +
-    '</div>' +
-    '<div class="hc-bars">' + macroBar('p', 'Proteine', t.protein, T.protein) + macroBar('c', 'Glucide', t.carbs, T.carbs) + macroBar('f', 'Grăsimi', t.fat, T.fat) + '</div>' +
+    '<button class="dial" data-action="dial" aria-label="' + esc(D.aria) + '. Atinge ca să vezi ' + DIAL_NEXT[S.dialMode] + '.">' +
+      '<svg viewBox="0 0 240 240" aria-hidden="true" style="--p:' + frac.toFixed(4) + '">' +
+        '<defs><linearGradient id="dialGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--hc-acc)"/><stop offset="1" style="stop-color:var(--hc-acc2)"/></linearGradient></defs>' +
+        DIAL_TICKS +
+        '<circle class="r-trk" cx="120" cy="120" r="96"/>' +
+        '<circle class="r-val" cx="120" cy="120" r="96"/>' +
+        '<g class="d-knob"><circle cx="120" cy="24" r="9"/><circle class="d-knob-in" cx="120" cy="24" r="3.4"/></g>' +
+      '</svg>' +
+      '<span class="d-center"><span class="hc-label d-label">' + D.label + '</span><b class="big-num">' + D.big + '</b><span class="hc-sub">' + D.sub + '</span>' +
+        '<span class="d-dots" aria-hidden="true">' + [0, 1, 2].map(i => '<i' + (i === S.dialMode ? ' class="on"' : '') + '></i>').join('') + '</span></span>' +
+    '</button>' +
+    '<div class="hc-macros">' + macroRing('p', 'Proteine', t.protein, T.protein) + macroRing('c', 'Glucide', t.carbs, T.carbs) + macroRing('f', 'Grăsimi', t.fat, T.fat) + '</div>' +
     (showIdeas ? '<div class="hc-foot"><p>' + (remP > 0 ? 'Mai ai ' + fmt(remP) + ' g proteine de luat azi.' : 'Ai atins proteinele de azi.') + '</p><button class="btn hc-btn" data-action="ideas">Idei pentru ' + mealName(S.meal).toLowerCase() + '</button></div>' : '');
   const f3 = (e, t) => t ? Math.min(1, e / t) : 0;
-  heroTween(S.hero, { k: S.view, rem, pct, frac, f: [f3(t.protein, T.protein), f3(t.carbs, T.carbs), f3(t.fat, T.fat)] });
+  heroTween(S.hero, { k: S.view, mode: S.dialMode, rem, eaten: t.kcal, target: T.kcal, over, pct, frac, f: [f3(t.protein, T.protein), f3(t.carbs, T.carbs), f3(t.fat, T.fat)] });
 }
-// When the numbers change (a meal added, another day picked), count them and grow the ring and bars from where they were
+/* The dial: the day's calories as one instrument. Its ring and coral dot are the logo; ticks light up as the day fills.
+   A tap switches what the centre says: what's left, what's eaten, how much of the target. */
+const DIAL_TICKS = (() => {
+  let base = '', lit = '';
+  for (let i = 0; i < 60; i++){
+    const a = i / 60 * 2 * Math.PI, major = i % 5 === 0, r1 = major ? 106 : 109, r2 = 117;
+    const x1 = (120 + r1 * Math.sin(a)).toFixed(2), y1 = (120 - r1 * Math.cos(a)).toFixed(2), x2 = (120 + r2 * Math.sin(a)).toFixed(2), y2 = (120 - r2 * Math.cos(a)).toFixed(2);
+    const l = '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '"' + (major ? ' class="mj"' : '');
+    base += l + '/>';
+    lit += l + ' style="--i:' + (i / 60).toFixed(4) + '"/>';
+  }
+  return '<g class="tk-base">' + base + '</g><g class="tk-lit">' + lit + '</g>';
+})();
+const DIAL_NEXT = ['cât ai mâncat', 'procentul din țintă', 'cât mai ai'];
+function dialFace(mode, v){
+  if (mode === 1) return { label: 'mâncate', big: fmt(v.eaten), sub: 'din <b>' + fmt(v.target) + '</b> kcal', aria: 'Ai mâncat ' + fmt(v.eaten) + ' din ' + fmt(v.target) + ' kcal' };
+  if (mode === 2) return { label: 'din țintă', big: v.pct + '<small>%</small>', sub: '<b>' + fmt(v.eaten) + '</b> din <b>' + fmt(v.target) + '</b> kcal', aria: 'Ai ajuns la ' + v.pct + '% din țintă' };
+  return { label: v.over ? 'peste țintă' : 'rămase', big: (v.over ? '+' : '') + fmt(Math.abs(v.rem)), sub: '<b>' + fmt(v.eaten) + '</b> din <b>' + fmt(v.target) + '</b> kcal', aria: (v.over ? 'Ești cu ' + fmt(-v.rem) + ' kcal peste țintă' : 'Mai ai ' + fmt(v.rem) + ' kcal') + ', ai mâncat ' + fmt(v.eaten) + ' din ' + fmt(v.target) };
+}
+const dialValue = (mode, v) => mode === 1 ? v.eaten : mode === 2 ? v.pct : v.rem;
+function dialNumber(mode, n){ return mode === 2 ? n + '<small>%</small>' : (n < 0 ? '+' : '') + fmt(Math.abs(n)); }
+// When the numbers change (a meal added, another day picked), count them and turn the dial from where it was.
+// The first time the day is shown, the dial sweeps up from zero.
 function heroTween(prev, cur){
   S.hero = cur;
   // crossing a target by adding food today, not by opening another day
@@ -2835,36 +2864,43 @@ function heroTween(prev, cur){
     if (prev.f[0] < 1 && cur.f[0] >= 1) cheer('protein');
     else if (prev.pct < 95 && cur.pct >= 95 && cur.pct <= 105) cheer('kcal');
   }
-  if (!prev || reduceMotion()) return;
-  const el = $('#hero'), num = el.querySelector('.big-num'), pc = el.querySelector('.ring-center b');
-  if (prev.rem !== cur.rem || prev.pct !== cur.pct){
+  if (reduceMotion()) return;
+  const el = $('#hero'), num = el.querySelector('.big-num'), svg = el.querySelector('.dial svg');
+  // the sweep waits for the journal to finish loading, so it plays once, on the numbers that stay
+  let from = prev;
+  if (!S.heroDrawn && S.loaded){ S.heroDrawn = true; from = { mode: cur.mode, rem: cur.target, eaten: 0, pct: 0, frac: 0, f: [0, 0, 0] }; }
+  if (!from) return;
+  if (from.mode !== cur.mode){ const c = el.querySelector('.d-center'); if (c){ c.classList.add('swap'); } return; }
+  const a = dialValue(cur.mode, from), b = dialValue(cur.mode, cur);
+  if (a !== b && num){
     cancelAnimationFrame(S.heroRaf);
-    const t0 = performance.now(), d = 700;
+    const t0 = performance.now(), d = prev ? 700 : 1100;
+    num.innerHTML = dialNumber(cur.mode, a);
     const step = now => {
       const k = Math.min(1, (now - t0) / d), e = 1 - Math.pow(1 - k, 3);
-      const v = Math.round(prev.rem + (cur.rem - prev.rem) * e), q = Math.round(prev.pct + (cur.pct - prev.pct) * e);
-      if (num) num.textContent = (v < 0 ? '+' : '') + fmt(Math.abs(v));
-      if (pc && pc.firstChild) pc.firstChild.nodeValue = q;
+      num.innerHTML = dialNumber(cur.mode, Math.round(a + (b - a) * e));
       if (k < 1) S.heroRaf = requestAnimationFrame(step);
     };
     S.heroRaf = requestAnimationFrame(step);
   }
-  const ring = el.querySelector('.r-val');
-  if (ring && prev.frac !== cur.frac){
-    ring.style.strokeDashoffset = (2 * Math.PI * 52 * (1 - prev.frac)).toFixed(2);
-    ring.getBoundingClientRect();
-    requestAnimationFrame(() => { ring.style.strokeDashoffset = ''; });
+  if (svg && from.frac !== cur.frac){
+    if (!prev) svg.classList.add('sweep');
+    const to = svg.style.getPropertyValue('--p');
+    svg.style.setProperty('--p', from.frac.toFixed(4)); svg.getBoundingClientRect();
+    requestAnimationFrame(() => svg.style.setProperty('--p', to));
   }
-  el.querySelectorAll('.mb-f').forEach((b, i) => {
-    if (prev.f[i] === cur.f[i]) return;
-    const to = b.style.getPropertyValue('--f');
-    b.style.setProperty('--f', prev.f[i].toFixed(3)); b.getBoundingClientRect();
-    requestAnimationFrame(() => b.style.setProperty('--f', to));
+  el.querySelectorAll('.mb-f').forEach((r, i) => {
+    if (from.f[i] === cur.f[i]) return;
+    const to = r.style.getPropertyValue('--f');
+    r.style.setProperty('--f', from.f[i].toFixed(3)); r.getBoundingClientRect();
+    requestAnimationFrame(() => r.style.setProperty('--f', to));
   });
 }
-function macroBar(key, label, eaten, target){
+function macroRing(key, label, eaten, target){
   const f = target ? Math.min(1, eaten / target) : 0, over = target && eaten > target * 1.1;
-  return '<div class="mbar m-' + key + (over ? ' is-over' : '') + '"><b>' + label + '</b><span class="mb-v">' + fmt(eaten) + '<small> / ' + fmt(target) + ' g</small></span><span class="mb-t"><span class="mb-f" style="--f:' + f.toFixed(3) + '"></span></span></div>';
+  return '<div class="mring m-' + key + (over ? ' is-over' : '') + '" role="img" aria-label="' + label + ': ' + fmt(eaten) + ' din ' + fmt(target) + ' g">' +
+    '<span class="mr-dial" aria-hidden="true"><svg viewBox="0 0 48 48"><circle class="mr-t" cx="24" cy="24" r="20"/><circle class="mb-f" cx="24" cy="24" r="20" style="--f:' + f.toFixed(3) + '"/></svg><b>' + fmt(eaten) + '</b></span>' +
+    '<span class="mr-txt" aria-hidden="true"><b>' + label + '</b><small>din ' + fmt(target) + ' g</small></span></div>';
 }
 function renderMeals(){
   const sa = $('#subAdd'); if (sa) sa.textContent = 'La ' + mealName(S.meal).toLowerCase() + (S.view === todayKey() ? ', azi' : ', ' + dayWord(S.view).toLowerCase());
@@ -2878,7 +2914,7 @@ function renderTabs(){
   });
   $$('#logger [data-pane]').forEach(p => p.hidden = p.dataset.pane !== S.tab);
   const ap = $('#askPhoto'); if (ap) ap.hidden = S.aiOff || S.photoOff;
-  $('#aiNote').hidden = !S.aiOff;
+  $('#aiNote').hidden = !S.aiOff || (NATIVE && S.noSample); // the store app has no AI yet: nothing to explain
   $('#aiNote').textContent = S.noSample ? 'Estimarea automată nu e disponibilă aici, așa că notezi valorile manual.' : 'Ai ales să nu trimiți mesele la AI, așa că notezi valorile manual. Poți porni estimările din Profil → Datele tale.';
 }
 function renderRecent(){
@@ -2977,7 +3013,7 @@ function renderWater(){
   const left = Math.max(0, target - w);
   el.innerHTML = '<div class="ww-top"><span class="ww-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3.2c3.2 4 6 7.2 6 10.8a6 6 0 0 1-12 0c0-3.6 2.8-6.8 6-10.8z"/><path d="M9 14.2a3 3 0 0 0 3 3" stroke-linecap="round"/></svg></span>' +
       '<div class="ww-txt"><h2>Apă</h2><span>' + (left ? 'Mai ai ' + fmtL(left) + ' L' : 'Ținta de azi e atinsă') + '</span></div>' +
-      '<div class="ww-num"><b' + (w !== was ? ' class="bump"' : '') + '>' + fmtL(w) + '</b><span>din ' + fmtL(target) + ' L</span></div></div>' +
+      '<div class="ww-num"><b' + (w !== was ? ' class="bump"' : '') + '>' + fmtL(w) + '<small> L</small></b><span>din ' + fmtL(target) + ' L</span></div></div>' +
     '<div class="glasses' + (reached ? ' full' : '') + '" style="--n:' + cells + '">' + g + '</div>' +
     '<div class="ww-btns"><button class="ww-b" data-action="water-add" data-ml="-250" aria-label="Scade 250 ml"' + (w <= 0 ? ' disabled' : '') + '><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 12h12"/></svg></button>' +
       '<button class="ww-b add" data-action="water-add" data-ml="250">+ 250 ml</button><button class="ww-b add" data-action="water-add" data-ml="500">+ 500 ml</button></div>';
@@ -3085,7 +3121,7 @@ function renderHistory(){
   const W_ = 336, top = 24, base = 112, left = 4, right = 332;
   const maxV = Math.max(T ? T.kcal * 1.2 : 2500, ...days.map(d => d.kcal * 1.08), 1);
   const y = v => base - (v / maxV) * (base - top);
-  const slot = (right - left) / 7, bw = Math.min(30, slot * 0.6);
+  const slot = (right - left) / 7, bw = Math.min(22, slot * 0.46);
   let bars = '';
   days.forEach((d, i) => {
     const cx = left + slot*i + slot/2;
@@ -3095,8 +3131,8 @@ function renderHistory(){
     const dt = parseKey(d.k);
     bars += '<g data-day="' + d.k + '" class="' + (sel ? 'sel' : '') + '" role="button" tabindex="0" aria-label="' + esc(dateLine(d.k)) + ': ' + fmt(d.kcal) + ' kcal">' +
       '<rect class="hit" x="' + (cx - slot/2).toFixed(1) + '" y="0" width="' + slot.toFixed(1) + '" height="150"/>' +
-      '<rect class="track" x="' + (cx - bw/2).toFixed(1) + '" y="' + top + '" width="' + bw.toFixed(1) + '" height="' + (base - top) + '" rx="7"/>' +
-      (d.kcal > 0 ? '<rect class="' + (over ? 'b-over' : 'b-ok') + '" x="' + (cx - bw/2).toFixed(1) + '" y="' + Math.min(base - 4, y(d.kcal)).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(4, base - y(d.kcal)).toFixed(1) + '" rx="7"/>' +
+      '<rect class="track" x="' + (cx - bw/2).toFixed(1) + '" y="' + top + '" width="' + bw.toFixed(1) + '" height="' + (base - top) + '" rx="' + (bw / 2).toFixed(1) + '"/>' +
+      (d.kcal > 0 ? '<rect class="' + (over ? 'b-over' : 'b-ok') + '" x="' + (cx - bw/2).toFixed(1) + '" y="' + Math.min(base - 4, y(d.kcal)).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(bw, base - y(d.kcal)).toFixed(1) + '" rx="' + (bw / 2).toFixed(1) + '"/>' +
         '<text class="hv" x="' + cx.toFixed(1) + '" y="' + (Math.min(base - 4, y(d.kcal)) - 6).toFixed(1) + '" text-anchor="middle">' + fmt(d.kcal) + '</text>' : '') +
       '<text class="hl" x="' + cx.toFixed(1) + '" y="' + (base + 18) + '" text-anchor="middle">' + DAY_ABBR[dt.getDay()] + '</text>' +
       '<text class="hd" x="' + cx.toFixed(1) + '" y="' + (base + 32) + '" text-anchor="middle">' + dt.getDate() + '</text></g>';
@@ -3568,12 +3604,15 @@ function playCheer(kind){
   const hero = $('#hero'); if (!hero || reduceMotion()) return;
   hero.classList.remove('cheer'); hero.getBoundingClientRect(); hero.classList.add('cheer');
   setTimeout(() => hero.classList.remove('cheer'), 1600);
-  const wrap = hero.querySelector('.ringwrap');
+  const wrap = hero.querySelector('.dial');
   if (wrap){
+    // sparks leave from the dial's ring, outwards
     const burst = document.createElement('span'); burst.className = 'burst'; burst.setAttribute('aria-hidden', 'true');
-    for (let i = 0; i < 18; i++){
-      const a = (i / 18) * Math.PI * 2 + Math.random() * 0.3, r = 62 + Math.random() * 34;
+    const R0 = wrap.offsetWidth * 0.4;
+    for (let i = 0; i < 22; i++){
+      const a = (i / 22) * Math.PI * 2 + Math.random() * 0.25, r = R0 + 26 + Math.random() * 30;
       const s = document.createElement('i');
+      s.style.setProperty('--x0', (Math.cos(a) * R0).toFixed(1) + 'px'); s.style.setProperty('--y0', (Math.sin(a) * R0).toFixed(1) + 'px');
       s.style.setProperty('--dx', (Math.cos(a) * r).toFixed(1) + 'px'); s.style.setProperty('--dy', (Math.sin(a) * r).toFixed(1) + 'px');
       s.style.setProperty('--d', Math.round(Math.random() * 90) + 'ms'); s.style.setProperty('--s', (0.6 + Math.random() * 0.7).toFixed(2));
       s.className = 'b' + (i % 3);
@@ -3723,6 +3762,7 @@ function bindStatic(){
       case 'bc-save': saveProduct(); break;
       case 'prod-del': delProduct(b.dataset.code); break;
       case 'toggle-daytype': toggleDayType(); break;
+      case 'dial': S.dialMode = (S.dialMode + 1) % 3; lsSet('portia-dial', S.dialMode); buzz('tick'); renderHero(); break;
       case 'cycle-on': setCycle({ on: !cycleOf().on }); break;
       case 'cycle-day': { const dd = Number(b.dataset.d); const days = cycleOf().days.slice(); const ix = days.indexOf(dd); if (ix >= 0) days.splice(ix, 1); else days.push(dd); setCycle({ days }); break; }
       case 'cycle-extra': setCycle({ extra: Number(b.dataset.x) }); break;
