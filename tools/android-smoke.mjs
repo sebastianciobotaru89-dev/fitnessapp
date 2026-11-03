@@ -207,8 +207,9 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   page.close();
   const log = sh('adb logcat -d');
   writeFileSync(`${OUT}/logcat.txt`, log);
-  // Capacitor's own script that writes the safe-area values can run before the page exists; it retries on its own
-  const ours = l => !/favicon|Error injecting safe area CSS/.test(l);
+  // Capacitor's own native-to-page calls can run in the instant before the page exists (the safe-area values,
+  // the first lifecycle event); they are not the app's code and Capacitor repeats them once the page is up
+  const ours = l => !/favicon|Error injecting safe area CSS|reading 'triggerEvent'/.test(l);
   const jsErr = log.split('\n').filter(l => /Capacitor\/Console/.test(l) && /Uncaught|Error|error/.test(l) && ours(l));
   const seenOurs = seen.filter(ours);
   ok('nicio eroare JavaScript', !jsErr.length && !seenOurs.length, jsErr.slice(0, 5).concat(seenOurs.slice(0, 5)));
