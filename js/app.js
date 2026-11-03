@@ -3492,7 +3492,8 @@ function gEnd(ev){
   const go = !cancel && ok && (Math.abs(G.dx) > window.innerWidth * 0.22 || (Math.abs(v) > 0.45 && Math.abs(G.dx) > 36));
   if (go){
     buzz('tick');
-    if (G.week) G.panes.forEach(el => { el.style.transform = ''; el.style.opacity = ''; el.style.transition = ''; });
+    // the dragged panes let go here; dayAnim slides the new day in, or nothing moves when the phone asks for less motion
+    G.panes.forEach(el => { el.style.transform = ''; el.style.opacity = ''; el.style.transition = ''; });
     setDay(addDays(S.view, next ? G.step : -G.step));
     return;
   }

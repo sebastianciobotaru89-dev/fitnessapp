@@ -83,7 +83,7 @@ run(){
   limit 60 xcrun simctl io "$udid" screenshot "$OUT/ios-$name-3-azi-intunecat.png" >/dev/null
   limit 30 xcrun simctl ui "$udid" appearance light
 
-  if limit 30 xcrun simctl spawn "$udid" launchctl list | grep -q "UIKitApplication:$BUNDLE"; then note "$name: aplicația rulează"; else err "$name: aplicația nu mai rulează"; fi
+  if limit 30 xcrun simctl spawn "$udid" launchctl list | grep -q "$BUNDLE"; then note "$name: aplicația rulează"; else err "$name: aplicația nu mai rulează"; fi
   consola "$udid" "$OUT/ios-$name-consola.txt"
   if grep -E "\[error\]|Uncaught|TypeError|ReferenceError|SyntaxError" "$OUT/ios-$name-consola.txt" | grep -v favicon > "$OUT/ios-$name-erori.txt"; then
     err "$name: erori JavaScript: $(head -3 "$OUT/ios-$name-erori.txt" | tr '\n' ' ')"

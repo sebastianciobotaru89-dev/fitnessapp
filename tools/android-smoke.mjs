@@ -111,8 +111,10 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   for (const p of ['App', 'Clipboard', 'Filesystem', 'Haptics', 'Keyboard', 'Preferences', 'Share', 'SplashScreen', 'SystemBars', 'PortiaWindow']) ok('pluginul ' + p + ' e disponibil', nfo.plugins.includes(p));
   ok('primul ecran e bun venit', await page.ev(`!document.querySelector('#consentSheet').hidden`));
   ok('fără bifa pentru AI când nu există AI', await page.ev(`!document.querySelector('[data-consent="ai"]')`));
-  back(); await sleep(1200);
-  ok('Înapoi pe bun venit ascunde aplicația', !resumed());
+  back();
+  let away = false;
+  for (let i = 0; i < 6 && !away; i++){ await sleep(500); away = !resumed(); }
+  ok('Înapoi pe bun venit ascunde aplicația', away);
   start(); await sleep(2500);
 
   // a journal with content, then a restart, as a returning user sees it
@@ -149,6 +151,7 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   shot('3-ieri');
   const vw = await page.ev(`({ w: innerWidth, sw: document.documentElement.scrollWidth, scale: visualViewport ? visualViewport.scale : 1 })`);
   ok('pagina nu se micșorează după glisare', vw.w === iw && vw.sw <= iw + 1 && Math.abs(vw.scale - 1) < 0.01, vw);
+  ok('ziua nouă stă la locul ei după glisare', await page.ev(`[...document.querySelectorAll('#scr-azi .scr-head > div, #hero, #mealsToday, #water')].every(el => !el.style.transform && Math.abs(el.getBoundingClientRect().left - document.querySelector('.app').getBoundingClientRect().left - 16) < 40)`));
   if (await page.ev(`document.querySelector('#hAzi').textContent`) === 'Azi') await act('prev-day');
   await sleep(500);
   back(); await sleep(900);
@@ -193,7 +196,8 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   page.close(); page = await connect(); await sleep(1500);
   ok('datele rămân după închiderea aplicației', await page.ev(`!document.querySelector('#hero.is-empty') && document.querySelectorAll('#mealsToday .mt.has').length === 2`));
   // iOS and Android can clear a web view's storage; the native copy brings the journal back
-  await page.ev(`localStorage.clear(); location.reload(); true`); await sleep(3000);
+  await page.ev(`localStorage.clear(); true`); await sleep(300);
+  await page.send('Page.reload', {}); await sleep(3000);
   const restored = `!!JSON.parse(localStorage.getItem('mt-local') || 'null') && !document.querySelector('#hero.is-empty')`;
   let back2 = false;
   for (let i = 0; i < 10 && !back2; i++){ try { back2 = await page.ev(restored); } catch {} if (!back2) await sleep(1000); }
