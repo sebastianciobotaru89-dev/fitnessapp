@@ -390,6 +390,8 @@ function nativeBars(bg){
   const c = bg.replace('#', ''); if (c.length < 6) return;
   const n = parseInt(c.slice(0, 6), 16), lum = (0.2126 * (n >> 16 & 255) + 0.7152 * (n >> 8 & 255) + 0.0722 * (n & 255)) / 255;
   nat('SystemBars', 'setStyle', { style: lum < 0.5 ? 'DARK' : 'LIGHT' });
+  // Android with an older web view keeps the page clear of the bars: the window behind them takes the app's colour
+  if (PLATFORM === 'android' && /^#[0-9a-f]{6}$/i.test(bg)) nat('PortiaWindow', 'setBackground', { color: bg });
 }
 // Saves a text file: the share sheet in the store app, a download on the web
 async function saveTextFile(name, text, mime){

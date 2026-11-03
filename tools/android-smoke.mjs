@@ -69,13 +69,24 @@ async function cdp(url){
   return { send, ev, seen, close: () => ws.close() };
 }
 const start = () => sh(`adb shell am start -W -n ${PKG}/.MainActivity`);
+// where the web view sits on the screen: below the status bar when Capacitor pads it (older Android System WebView)
+let VIEW = null;
+function webviewBox(){
+  sh('adb shell uiautomator dump /sdcard/ui.xml');
+  const xml = sh('adb shell cat /sdcard/ui.xml');
+  const m = xml.match(/class="android\.webkit\.WebView"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+  return m ? { x: +m[1], y: +m[2], w: m[3] - m[1], h: m[4] - m[2] } : null;
+}
+// css pixels inside the page → screen pixels for adb
+const toScreen = (x, y) => ({ x: Math.round(VIEW.x + x * VIEW.k), y: Math.round(VIEW.y + y * VIEW.k) });
 // a real finger tap through Android's input system, at the element's place on the screen
 const tap = async (page, sel) => {
-  const r = await page.ev(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); if (!el) return null; el.scrollIntoView({ block: 'nearest' }); const b = el.getBoundingClientRect(); return { x: (b.left + b.width / 2) * devicePixelRatio, y: (b.top + b.height / 2) * devicePixelRatio }; })()`);
+  const r = await page.ev(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); if (!el) return null; el.scrollIntoView({ block: 'nearest' }); const b = el.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; })()`);
   if (!r){ ok('găsesc ' + sel, false); return; }
-  sh(`adb shell input tap ${Math.round(r.x)} ${Math.round(r.y)}`); await sleep(800);
+  const p = toScreen(r.x, r.y);
+  sh(`adb shell input tap ${p.x} ${p.y}`); await sleep(800);
 };
-const swipe = (x1, y1, x2, y2, ms = 220) => sh(`adb shell input swipe ${x1} ${y1} ${x2} ${y2} ${ms}`);
+const swipe = (a, b, ms = 260) => sh(`adb shell input swipe ${a.x} ${a.y} ${b.x} ${b.y} ${ms}`);
 const back = () => sh('adb shell input keyevent 4');
 const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity activities').split('\n').filter(l => /mResumedActivity|topResumedActivity|ResumedActivity:/.test(l)).join('\n'));
 
@@ -103,13 +114,18 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   await sleep(4000);
   ok('jurnalul se încarcă', await page.ev(`!document.querySelector('#hero.is-empty') && document.querySelectorAll('#mealsToday .mt.has').length === 2`));
   shot('2-azi');
+  const box = webviewBox(), iw = await page.ev('innerWidth'), ih = await page.ev('innerHeight');
+  VIEW = box ? Object.assign(box, { k: box.w / iw }) : { x: 0, y: 0, k: await page.ev('devicePixelRatio') };
+  console.log('::notice::web view pe ecran: ' + JSON.stringify(VIEW) + ', pagina ' + iw + '×' + ih);
   const mirrored = await page.ev(`new Promise(r => setTimeout(async () => { const v = await Capacitor.Plugins.Preferences.get({ key: 'mt-local' }); r(!!(v && v.value && JSON.parse(v.value).profile)); }, 900))`);
   ok('jurnalul are copie în memoria nativă', mirrored);
   ok('vibrațiile răspund', await page.ev(`Capacitor.Plugins.Haptics.impact({ style: 'LIGHT' }).then(() => true, e => String(e))`) === true);
 
   // real touches: swipe to yesterday and back, through the system's input
-  const size = sh('adb shell wm size').match(/(\d+)x(\d+)/); const W = +size[1], H = +size[2];
-  swipe(W * 0.3, H * 0.42, W * 0.85, H * 0.44); await sleep(900);
+  await page.ev(`window.__ev = []; ['pointerdown', 'pointermove', 'pointerup', 'pointercancel'].forEach(t => document.addEventListener(t, e => { if (__ev.length < 60) __ev.push(t.slice(7) + ':' + e.pointerType); }, true)); true`);
+  const hr = await page.ev(`(() => { const b = document.querySelector('#hero').getBoundingClientRect(); return { l: b.left, r: b.right, y: b.top + b.height * 0.45 }; })()`);
+  swipe(toScreen(hr.l + 60, hr.y), toScreen(hr.r - 20, hr.y + 4)); await sleep(1000);
+  console.log('::notice::evenimente la glisare: ' + await page.ev(`__ev.filter((x, i, a) => a.indexOf(x) === i).join(' ') + ' (' + __ev.length + ')'`));
   ok('glisarea spre dreapta deschide ziua de ieri', /^Ieri/.test(await page.ev(`document.querySelector('#hAzi').textContent`)), await page.ev(`document.querySelector('#hAzi').textContent`));
   shot('3-ieri');
   back(); await sleep(800);
@@ -154,8 +170,11 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   page.close();
   const log = sh('adb logcat -d');
   writeFileSync(`${OUT}/logcat.txt`, log);
-  const jsErr = log.split('\n').filter(l => /Capacitor\/Console.*(Uncaught|Error|error)|Uncaught/.test(l) && !/favicon/.test(l));
-  ok('nicio eroare JavaScript', !jsErr.length && !seen.length, jsErr.slice(0, 5).concat(seen.slice(0, 5)));
+  // Capacitor's own script that writes the safe-area values can run before the page exists; it retries on its own
+  const ours = l => !/favicon|Error injecting safe area CSS/.test(l);
+  const jsErr = log.split('\n').filter(l => /Capacitor\/Console.*(Uncaught|Error|error)|Uncaught/.test(l) && ours(l));
+  const seenOurs = seen.filter(ours);
+  ok('nicio eroare JavaScript', !jsErr.length && !seenOurs.length, jsErr.slice(0, 5).concat(seenOurs.slice(0, 5)));
   ok('aplicația nu s-a oprit', !/FATAL EXCEPTION/.test(log));
   if (errors.length){ console.log('::error::' + errors.length + ' verificări au eșuat: ' + errors.join('; ')); process.exit(1); }
   console.log('Toate verificările au trecut.');

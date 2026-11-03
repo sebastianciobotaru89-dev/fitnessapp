@@ -8,6 +8,10 @@ set -uo pipefail
 APP="$1"; BUNDLE=com.portia.app; OUT=smoke; mkdir -p "$OUT"
 fail=0
 note(){ echo "::notice::$1"; }
+# macOS has no `timeout`; perl's alarm stops a command that hangs
+limit(){ local secs="$1"; shift; perl -e 'alarm shift; exec @ARGV' "$secs" "$@"; }
+# opens the app and returns at once; its console output goes to a file
+launch(){ ( xcrun simctl launch --terminate-running-process --stdout="$3" --stderr="$3.err" "$1" "$2" >/dev/null 2>&1 & ); }
 err(){ echo "::error::$1"; fail=1; }
 
 # newest iOS runtime, then its first iPhone and first iPad
@@ -17,8 +21,14 @@ d = json.load(sys.stdin)
 rts = sorted([r for r in d["runtimes"] if r.get("isAvailable") and r["identifier"].split(".")[-1].startswith("iOS")], key=lambda r: [int(x) for x in r["version"].split(".")])
 rt = rts[-1]["identifier"]
 devs = d["devices"].get(rt, [])
-pick = lambda w: next((x["udid"] for x in devs if x.get("isAvailable") and x["name"].startswith(w) and "Pro" in x["name"]), None) or next((x["udid"] for x in devs if x.get("isAvailable") and x["name"].startswith(w)), "")
-print(rt, pick("iPhone"), pick("iPad"))')
+ok = [x for x in devs if x.get("isAvailable")]
+def pick(w, prefs):
+    for p in prefs:
+        m = [x["udid"] for x in ok if x["name"].startswith(w) and p in x["name"]]
+        if m: return m[0]
+    m = [x["udid"] for x in ok if x["name"].startswith(w)]
+    return m[0] if m else ""
+print(rt, pick("iPhone", ["Pro Max", "Plus", "Pro"]), pick("iPad", ["13-inch", "Pro", "Air"]))')
 note "Simulator: $RUNTIME"
 
 SEED=$(python3 - <<'PY'
@@ -44,33 +54,36 @@ CONSENT='{"v":1,"health":1,"ai":0,"age":true}'
 run(){
   local name="$1" udid="$2"
   [ -n "$udid" ] || { err "Nu găsesc un simulator $name."; return; }
-  xcrun simctl boot "$udid" 2>/dev/null; xcrun simctl bootstatus "$udid" -b >/dev/null
+  local t0=$SECONDS
+  xcrun simctl boot "$udid" 2>/dev/null
+  limit 600 xcrun simctl bootstatus "$udid" -b >/dev/null || { err "$name: simulatorul nu a pornit în 10 minute"; return; }
+  note "$name: simulator pornit în $((SECONDS - t0)) s"
   xcrun simctl ui "$udid" appearance light
-  xcrun simctl install "$udid" "$APP" || { err "$name: instalarea a eșuat"; return; }
+  limit 300 xcrun simctl install "$udid" "$APP" || { err "$name: instalarea a eșuat"; return; }
 
   # first run: the welcome screen
-  xcrun simctl launch --terminate-running-process --stdout="$OUT/ios-$name-1.log" --stderr="$OUT/ios-$name-1.err" "$udid" "$BUNDLE" >/dev/null
-  sleep 9
-  xcrun simctl io "$udid" screenshot "$OUT/ios-$name-1-bun-venit.png" >/dev/null
-  xcrun simctl terminate "$udid" "$BUNDLE" 2>/dev/null
+  launch "$udid" "$BUNDLE" "$OUT/ios-$name-1.log"
+  sleep 12
+  limit 60 xcrun simctl io "$udid" screenshot "$OUT/ios-$name-1-bun-venit.png" >/dev/null
+  limit 30 xcrun simctl terminate "$udid" "$BUNDLE" 2>/dev/null
 
   # a returning user: the journal sits only in native storage and must come back into the app
-  xcrun simctl spawn "$udid" defaults write "$BUNDLE" "CapacitorStorage.mt-local" -string "$SEED"
-  xcrun simctl spawn "$udid" defaults write "$BUNDLE" "CapacitorStorage.portia-consent" -string "$CONSENT"
-  xcrun simctl launch --terminate-running-process --stdout="$OUT/ios-$name-2.log" --stderr="$OUT/ios-$name-2.err" "$udid" "$BUNDLE" >/dev/null
-  sleep 9
-  xcrun simctl io "$udid" screenshot "$OUT/ios-$name-2-azi.png" >/dev/null
-  xcrun simctl ui "$udid" appearance dark; sleep 3
-  xcrun simctl io "$udid" screenshot "$OUT/ios-$name-3-azi-intunecat.png" >/dev/null
-  xcrun simctl ui "$udid" appearance light
+  limit 60 xcrun simctl spawn "$udid" defaults write "$BUNDLE" "CapacitorStorage.mt-local" -string "$SEED"
+  limit 60 xcrun simctl spawn "$udid" defaults write "$BUNDLE" "CapacitorStorage.portia-consent" -string "$CONSENT"
+  launch "$udid" "$BUNDLE" "$OUT/ios-$name-2.log"
+  sleep 12
+  limit 60 xcrun simctl io "$udid" screenshot "$OUT/ios-$name-2-azi.png" >/dev/null
+  limit 30 xcrun simctl ui "$udid" appearance dark; sleep 4
+  limit 60 xcrun simctl io "$udid" screenshot "$OUT/ios-$name-3-azi-intunecat.png" >/dev/null
+  limit 30 xcrun simctl ui "$udid" appearance light
 
-  if xcrun simctl spawn "$udid" launchctl list | grep -q "UIKitApplication:$BUNDLE"; then note "$name: aplicația rulează"; else err "$name: aplicația nu mai rulează"; fi
+  if limit 30 xcrun simctl spawn "$udid" launchctl list | grep -q "UIKitApplication:$BUNDLE"; then note "$name: aplicația rulează"; else err "$name: aplicația nu mai rulează"; fi
   cat "$OUT"/ios-"$name"-*.log "$OUT"/ios-"$name"-*.err > "$OUT/ios-$name-consola.txt" 2>/dev/null
   if grep -E "\[error\]|Uncaught|TypeError|ReferenceError|SyntaxError" "$OUT/ios-$name-consola.txt" | grep -v favicon > "$OUT/ios-$name-erori.txt"; then
     err "$name: erori JavaScript: $(head -3 "$OUT/ios-$name-erori.txt" | tr '\n' ' ')"
   else note "$name: nicio eroare JavaScript"; fi
   grep -E "⚡️|Capacitor" "$OUT/ios-$name-consola.txt" | head -15
-  xcrun simctl shutdown "$udid" 2>/dev/null
+  limit 60 xcrun simctl shutdown "$udid" 2>/dev/null
 }
 
 run iphone "$IPHONE"

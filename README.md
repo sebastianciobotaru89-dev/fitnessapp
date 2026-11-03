@@ -55,7 +55,10 @@ tools/build-www.mjs     adună fișierele aplicației în www/
 Workflow-uri:
 
 - **Aplicația nativă – creare proiecte iOS și Android** (manual): creează sau actualizează `ios/` și `android/`, iconițele și `package-lock.json`. Rulează-l după ce schimbi `package.json`.
-- **Aplicația nativă – construire de test** (la fiecare push): construiește APK-ul de test și versiunea pentru simulatorul iOS, apoi deschide aplicația pe un telefon Android emulat, pe un iPhone și pe un iPad simulat, face capturi și verifică să nu apară erori. APK-ul și capturile se descarcă din pagina rulării, la **Artifacts**.
+- **Aplicația nativă – construire de test** (la fiecare push): construiește APK-ul de test și versiunea pentru simulatorul iOS, apoi deschide aplicația pe un telefon Android emulat, pe un iPhone și pe un iPad simulat, face capturi și verifică să nu apară erori. APK-ul se descarcă din pagina rulării, la **Artifacts**, iar capturile apar și pe ramura `capturi`.
+- **Aplicația nativă – versiune pentru magazine** (manual): `.aab` semnat pentru Google Play și build semnat trimis în TestFlight. Folosește doar cheile din Settings → Secrets and variables → Actions.
+
+Pentru fișele din magazine, `assets/store/` are capturile la dimensiunile cerute, iconița pentru Google Play și grafica de 1024 × 500. Le refaci cu `python3 tools/make-store-screens.py` și `python3 tools/make-store-graphics.py`.
 
 Pe calculator (pentru Android ai nevoie de Android Studio, pentru iOS de un Mac cu Xcode):
 
