@@ -794,7 +794,7 @@ function modeNote(){
 const swRow = (label, action, on) => '<label class="sw-row"><span>' + label + '</span><button class="switch" role="switch" data-action="' + action + '" aria-checked="' + !!on + '"><i></i></button></label>';
 function appearanceSection(){
   const now = phoneMode() === 'dark' ? 'întunecat' : 'luminos';
-  const opts = [['auto', 'Automat <span class="chip-sub">· ' + now + '</span>'], ['light', 'Luminos'], ['dark', 'Întunecat']];
+  const opts = [['auto', 'Automat <span class="chip-sub">(acum ' + now + ')</span>'], ['light', 'Luminos'], ['dark', 'Întunecat']];
   return '<h3>Aspect</h3>' +
     '<div class="row" role="radiogroup" aria-label="Aspect">' + opts.map(o => '<button class="chip" role="radio" data-action="appearance" data-v="' + o[0] + '" aria-checked="' + (S.appearance === o[0]) + '">' + o[1] + '</button>').join('') + '</div>' +
     '<p class="hint mode-note" style="margin-top:8px">' + modeNote() + '</p>' +
@@ -1230,7 +1230,15 @@ function commitDraft(){
   else if (d.src === 'photo') clearPhoto();
   else if (d.src === 'idea'){ S.ideas = null; renderIdeas(); }
   const kc = entries.reduce((a, e) => a + e.kcal, 0);
-  toast('Adăugat la ' + mealName(meal) + ' · ' + fmt(kc) + ' kcal', 'Anulează', () => mutateDay(k, day => { day.entries = day.entries.filter(e => !ids.has(e.id)); }));
+  addedToast(k, entries.length === 1 ? atMeal(entries[0].name, meal) : atMeal(entries.length + ' alimente', meal), kc, () => mutateDay(k, day => { day.entries = day.entries.filter(e => !ids.has(e.id)); }));
+}
+// After food goes in: what went where, and what's left of the day, with the day's ring filling up
+const atMeal = (what, meal) => what + ' la ' + mealName(meal).toLowerCase();
+function addedToast(k, title, kcal, undo){
+  const T = S.profile ? targetsFor(k) : null, after = dayTotals(S.days[k]).kcal, before = Math.max(0, after - kcal);
+  let sub = fmt(kcal) + ' kcal';
+  if (T && T.kcal){ const rem = T.kcal - after; sub += rem >= 0 ? (k === todayKey() ? ', îți mai rămân ' : ', mai rămân ') + fmt(rem) : ', cu ' + fmt(-rem) + ' peste țintă'; }
+  toast(title, 'Anulează', undo, { sub, ring: T && T.kcal ? [before / T.kcal, after / T.kcal] : null });
 }
 function addManual(){
   const name = $('#mName').value.trim();
@@ -1248,7 +1256,7 @@ function addManual(){
   mutateDay(k, day => day.entries.push(e));
   ['#mName','#mGrams','#mKcal','#mP','#mC','#mF'].forEach(s => $(s).value = '');
   renderManualFit();
-  toast('Adăugat la ' + mealName(e.meal) + ' · ' + fmt(e.kcal) + ' kcal', 'Anulează', () => mutateDay(k, day => { day.entries = day.entries.filter(x => x.id !== e.id); }));
+  addedToast(k, atMeal(e.name, e.meal), e.kcal, () => mutateDay(k, day => { day.entries = day.entries.filter(x => x.id !== e.id); }));
 }
 function recentFoods(){
   const all = [];
@@ -1263,7 +1271,7 @@ function addRecent(i){
   const k = S.view;
   const e = Object.assign(clone(src), { id: newId(), meal: S.meal, at: Date.now(), src: 'repeat' });
   mutateDay(k, day => day.entries.push(e));
-  toast('Adăugat: ' + e.name, 'Anulează', () => mutateDay(k, day => { day.entries = day.entries.filter(x => x.id !== e.id); }));
+  addedToast(k, atMeal(e.name, e.meal), e.kcal, () => mutateDay(k, day => { day.entries = day.entries.filter(x => x.id !== e.id); }));
 }
 function repeatMeal(){
   const k = S.view, meal = S.meal;
@@ -1273,7 +1281,7 @@ function repeatMeal(){
   const copies = src.map((e, i) => Object.assign(clone(e), { id: newId(), at: now + i, src: 'repeat' }));
   const ids = new Set(copies.map(e => e.id));
   mutateDay(k, day => day.entries.push(...copies));
-  toast(mealName(meal) + ' ca ieri · ' + fmt(copies.reduce((a, e) => a + e.kcal, 0)) + ' kcal', 'Anulează', () => mutateDay(k, day => { day.entries = day.entries.filter(e => !ids.has(e.id)); }));
+  addedToast(k, mealName(meal) + ' ca ieri', copies.reduce((a, e) => a + e.kcal, 0), () => mutateDay(k, day => { day.entries = day.entries.filter(e => !ids.has(e.id)); }));
 }
 function delEntry(id){
   const k = S.view; const day = getDay(k);
@@ -1428,7 +1436,7 @@ function renderFast(){
   const head = (meta) => '<div class="panel-head"><h2 id="fastTitle">Post intermitent</h2><span class="meta">' + meta + '</span></div>';
   if (!f.start){
     const lm = lastMealAt(), since = lm ? now - lm : 0, canLast = lm && since > 6e4 && since < goalH * 36e5;
-    el.innerHTML = head(goalH + ' h post · ' + (24 - goalH) + ' h mese') +
+    el.innerHTML = head(goalH + ' h post, ' + (24 - goalH) + ' h mese') +
       '<div class="row" role="radiogroup" aria-label="Planul de post">' + FAST_PLANS.map(x => '<button class="chip" role="radio" data-action="fast-plan" data-plan="' + x.id + '" aria-checked="' + (f.plan === x.id) + '">' + x.id + '</button>').join('') + '</div>' +
       '<p class="fast-meal">' + (lm ? 'Ultima masă notată: ' + whenOf(lm) + ', acum ' + hm(since) + '.' : 'Pornește postul după ultima masă a zilei.') + '</p>' +
       '<div class="row"><button class="btn primary sm" data-action="fast-start">Pornește acum</button>' + (canLast ? '<button class="btn soft sm" data-action="fast-start-last">De la ultima masă</button>' : '') + '</div>' +
@@ -1438,7 +1446,7 @@ function renderFast(){
   }
   const ms = now - f.start, goal = goalH * 36e5, frac = Math.min(1, ms / goal), done = ms >= goal;
   const C = 2 * Math.PI * 52, mins = Math.floor(ms / 6e4), clock = Math.floor(mins / 60) + ':' + String(mins % 60).padStart(2, '0');
-  el.innerHTML = head(f.plan + ' · ' + (done ? 'ținta atinsă' : 'în desfășurare')) +
+  el.innerHTML = head(f.plan + ', ' + (done ? 'ținta atinsă' : 'în desfășurare')) +
     '<div class="fast-run"><div class="fring' + (done ? ' done' : '') + '" role="img" aria-label="' + hm(ms) + ' din ' + goalH + ' ore"><svg viewBox="0 0 128 128" aria-hidden="true"><circle class="trk" cx="64" cy="64" r="52"/><circle class="val" cx="64" cy="64" r="52" stroke-dasharray="' + C.toFixed(2) + '" stroke-dashoffset="' + (C * (1 - frac)).toFixed(2) + '"/></svg><div aria-hidden="true"><b>' + clock + '</b><small>' + (done ? 'gata!' : 'din ' + goalH + ' h') + '</small></div></div>' +
     '<dl class="fast-info"><div><dt>A început</dt><dd>' + whenOf(f.start) + '</dd></div><div><dt>' + (done ? 'Ținta atinsă' : 'Se termină') + '</dt><dd>' + whenOf(f.start + goal) + '</dd></div><div><dt>' + (done ? 'Peste țintă' : 'Mai ai') + '</dt><dd>' + hm(Math.abs(goal - ms)) + '</dd></div></dl></div>' +
     '<div class="row"><button class="btn ' + (done ? 'primary' : 'ghost') + ' sm" data-action="fast-stop">' + (done ? 'Încheie postul' : 'Oprește postul') + '</button></div>' +
@@ -1619,7 +1627,7 @@ function cycleSection(){
     (c.on
       ? '<span class="lbl">Zilele tale de sală</span><div class="row" style="margin-bottom:12px">' + WD_ORDER.map(d => '<button class="chip" data-action="cycle-day" data-d="' + d + '" aria-pressed="' + c.days.includes(d) + '">' + WD_NAME[d] + '</button>').join('') + '</div>' +
         '<span class="lbl">În plus în zilele de sală</span><div class="row" style="margin-bottom:12px">' + [150, 200, 300].map(x => '<button class="chip" data-action="cycle-extra" data-x="' + x + '" aria-pressed="' + (c.extra === x) + '">+' + x + ' kcal</button>').join('') + '</div>' +
-        (dl ? '<p class="hint">Sală: ' + fmt(b.kcal + dl.train) + ' kcal · Pauză: ' + fmt(b.kcal + dl.rest) + ' kcal. Diferența vine din glucide. Poți schimba tipul oricărei zile din panoul principal.</p>' : '<p class="hint">Alege între 1 și 6 zile de sală.</p>')
+        (dl ? '<p class="hint">În zilele de sală ai ' + fmt(b.kcal + dl.train) + ' kcal, în cele de pauză ' + fmt(b.kcal + dl.rest) + ' kcal. Diferența vine din glucide. Poți schimba tipul oricărei zile din panoul principal.</p>' : '<p class="hint">Alege între 1 și 6 zile de sală.</p>')
       : '');
 }
 function setCycle(patch){
@@ -1683,10 +1691,10 @@ function renderLib(){
   const ae = document.activeElement, keep = ae && (ae.id === 'impText' || ae.id === 'prodQ') ? [ae.id, ae.selectionStart, ae.selectionEnd] : null;
   const L = S.library;
   const rec = L.recipes.length
-    ? '<ul class="lib-list">' + L.recipes.map(r => { const s = sumItems(r.items); return '<li><div><b>' + esc(r.name) + '</b><span>' + r.servings + (r.servings === 1 ? ' porție' : ' porții') + ' · ' + fmt(s.kcal / r.servings) + ' kcal pe porție' + (r.totalGrams ? ' · ' + fmt(r.totalGrams) + ' g gătit' : '') + '</span></div><div class="row"><button class="rm" data-action="recipe-edit" data-id="' + esc(r.id) + '">Editează</button><button class="btn soft sm" data-action="recipe-log" data-id="' + esc(r.id) + '">Adaugă</button></div></li>'; }).join('') + '</ul>'
+    ? '<ul class="lib-list">' + L.recipes.map(r => { const s = sumItems(r.items); return '<li><div><b>' + esc(r.name) + '</b><span>' + r.servings + (r.servings === 1 ? ' porție' : ' porții') + ', ' + fmt(s.kcal / r.servings) + ' kcal pe porție' + (r.totalGrams ? ', ' + fmt(r.totalGrams) + ' g gătit' : '') + '</span></div><div class="row"><button class="rm" data-action="recipe-edit" data-id="' + esc(r.id) + '">Editează</button><button class="btn soft sm" data-action="recipe-log" data-id="' + esc(r.id) + '">Adaugă</button></div></li>'; }).join('') + '</ul>'
     : '<p class="empty">Salvează o mâncare gătită acasă o singură dată, apoi notezi doar cât ai mâncat din ea.</p>';
   const fav = L.favorites.length
-    ? '<ul class="lib-list">' + L.favorites.map(f => { const s = sumItems(f.items); return '<li><div><b>' + esc(f.name) + '</b><span>' + f.items.length + (f.items.length === 1 ? ' aliment' : ' alimente') + ' · ' + fmt(s.kcal) + ' kcal</span></div><div class="row"><button class="rm" data-action="fav-del" data-id="' + esc(f.id) + '">Șterge</button><button class="btn soft sm" data-action="fav-add" data-id="' + esc(f.id) + '">Adaugă</button></div></li>'; }).join('') + '</ul>'
+    ? '<ul class="lib-list">' + L.favorites.map(f => { const s = sumItems(f.items); return '<li><div><b>' + esc(f.name) + '</b><span>' + f.items.length + (f.items.length === 1 ? ' aliment' : ' alimente') + ', ' + fmt(s.kcal) + ' kcal</span></div><div class="row"><button class="rm" data-action="fav-del" data-id="' + esc(f.id) + '">Șterge</button><button class="btn soft sm" data-action="fav-add" data-id="' + esc(f.id) + '">Adaugă</button></div></li>'; }).join('') + '</ul>'
     : '<p class="empty">În jurnal, apasă „☆ Salvează” lângă o masă ca s-o păstrezi aici.</p>';
   $('#libCard').innerHTML = sheetHead('libTitle', 'Rețete și favorite', 'close-lib') +
     '<section><div class="panel-head" style="margin-bottom:8px"><h3>Rețetele mele</h3><button class="btn primary sm" data-action="recipe-new">+ Rețetă nouă</button></div>' + rec + '</section>' +
@@ -1700,7 +1708,7 @@ function prodListHtml(){
   if (!P.length) return '<p class="empty">Produsele salvate prin codul de bare apar aici. Poți importa și o listă întreagă.</p>';
   const shown = q ? P.filter(p => p.name.toLowerCase().includes(q) || p.code.includes(q)) : P;
   if (!shown.length) return '<p class="empty">Niciun produs nu se potrivește cu „' + esc(S.prodQ.trim()) + '”.</p>';
-  return '<ul class="lib-list">' + shown.map(p => '<li><div><b>' + esc(p.name) + '</b><span>' + fmt(p.per100.kcal) + ' kcal la 100 ' + p.unit + ' · cod ' + esc(p.code) + '</span></div><div class="row"><button class="rm" data-action="prod-del" data-code="' + esc(p.code) + '">Șterge</button></div></li>').join('') + '</ul>';
+  return '<ul class="lib-list">' + shown.map(p => '<li><div><b>' + esc(p.name) + '</b><span>' + fmt(p.per100.kcal) + ' kcal la 100 ' + p.unit + ', cod ' + esc(p.code) + '</span></div><div class="row"><button class="rm" data-action="prod-del" data-code="' + esc(p.code) + '">Șterge</button></div></li>').join('') + '</ul>';
 }
 function prodSection(){
   const P = S.library.products, io = S.prodIO;
@@ -1716,7 +1724,7 @@ function prodSection(){
       '<label class="sr" for="expText">Lista de produse</label><textarea id="expText" class="code" rows="6" readonly spellcheck="false">' + esc(productsCsv()) + '</textarea>' +
       '<div class="row"><button class="btn soft" data-action="prod-copy">Copiază lista</button>' + (window.claude ? '' : '<button class="btn ghost" data-action="prod-download">' + (NATIVE ? 'Trimite .csv' : 'Descarcă .csv') + '</button>') + '</div></div>';
   }
-  return '<section id="prodSec"><div class="panel-head" style="margin-bottom:8px"><h3>Produse cu cod de bare' + (P.length ? ' · ' + P.length : '') + '</h3><div class="row">' +
+  return '<section id="prodSec"><div class="panel-head" style="margin-bottom:8px"><h3>Produse cu cod de bare' + (P.length ? ' (' + P.length + ')' : '') + '</h3><div class="row">' +
       '<button class="btn soft sm" data-action="prod-import" aria-pressed="' + !!(io && io.mode === 'import') + '">Importă o listă</button>' +
       (P.length ? '<button class="btn ghost sm" data-action="prod-export" aria-pressed="' + !!(io && io.mode === 'export') + '">Exportă</button>' : '') + '</div></div>' +
     panel +
@@ -1737,7 +1745,7 @@ function addFavorite(id){
   const entries = f.items.map((it, i) => Object.assign(clone(it), { id: newId(), meal, at: now + i, src: 'fav' }));
   const ids = new Set(entries.map(e => e.id));
   mutateDay(k, d => d.entries.push(...entries));
-  toast(f.name + ' la ' + mealName(meal).toLowerCase() + ' · ' + fmt(sumItems(f.items).kcal) + ' kcal', 'Anulează', () => mutateDay(k, d => { d.entries = d.entries.filter(e => !ids.has(e.id)); }));
+  addedToast(k, atMeal(f.name, meal), sumItems(f.items).kcal, () => mutateDay(k, d => { d.entries = d.entries.filter(e => !ids.has(e.id)); }));
 }
 function openFavSave(meal){
   const items = getDay(S.view).entries.filter(e => e.meal === meal).sort((a, b) => a.at - b.at).map(normItem).filter(Boolean);
@@ -1800,9 +1808,9 @@ function renderRecipeItems(){
   const d = S.rdraft, el = $('#rItems'); if (!d || !el) return;
   if (!d.items.length){ el.innerHTML = '<p class="empty" style="margin-top:12px">Încă nu ai ingrediente. Scrie-le mai sus' + (S.aiOff ? '' : ' și apasă „Calculează”') + ', sau adaugă-le manual.</p>'; return; }
   const s = sumItems(d.items);
-  el.innerHTML = '<ul class="mini-list" style="margin-top:12px">' + d.items.map((it, i) => '<li><span>' + esc(it.name) + '<small>P ' + fmt1(it.protein) + ' · G ' + fmt1(it.carbs) + ' · Gr ' + fmt1(it.fat) + '</small>' + (it.warn ? '<small class="warn">Verifică: ' + esc(it.warn[0]) + '.</small>' : '') + '</span><b>' + fmt(it.kcal) + '</b><button class="del" data-action="recipe-rm" data-i="' + i + '" aria-label="Scoate ' + esc(it.name) + '">' + X_ICON + '</button></li>').join('') + '</ul>' +
+  el.innerHTML = '<ul class="mini-list" style="margin-top:12px">' + d.items.map((it, i) => '<li><span>' + esc(it.name) + '<small>' + fmt1(it.protein) + ' g proteine, ' + fmt1(it.carbs) + ' g glucide, ' + fmt1(it.fat) + ' g grăsimi</small>' + (it.warn ? '<small class="warn">Verifică: ' + esc(it.warn[0]) + '.</small>' : '') + '</span><b>' + fmt(it.kcal) + '</b><button class="del" data-action="recipe-rm" data-i="' + i + '" aria-label="Scoate ' + esc(it.name) + '">' + X_ICON + '</button></li>').join('') + '</ul>' +
     '<div class="ptotal">' + mxHtml(s.protein, s.carbs, s.fat) + '<b>' + fmt(s.kcal) + ' kcal</b></div>' +
-    '<p class="hint" style="margin-top:6px">Pe porție: ' + fmt(s.kcal / d.servings) + ' kcal · ' + fmt1(s.protein / d.servings) + ' g proteine</p>';
+    '<p class="hint" style="margin-top:6px">Pe porție: ' + fmt(s.kcal / d.servings) + ' kcal, ' + fmt1(s.protein / d.servings) + ' g proteine</p>';
 }
 async function recipeAi(){
   const ta = $('#rText'), err = $('#rErr'); const txt = ta ? ta.value.trim() : '';
@@ -1908,7 +1916,7 @@ function addRecipeLog(){
   const e = normEntry({ id: newId(), name: v.name, grams: v.grams, kcal: v.kcal, protein: v.protein, carbs: v.carbs, fat: v.fat, meal, at: Date.now(), src: 'recipe' });
   closeMini(); closeSheet('#libSheet');
   mutateDay(k, d => d.entries.push(e));
-  toast('Adăugat la ' + mealName(meal) + ' · ' + fmt(e.kcal) + ' kcal', 'Anulează', () => mutateDay(k, d => { d.entries = d.entries.filter(x => x.id !== e.id); }));
+  addedToast(k, atMeal(v.r.name, meal), e.kcal, () => mutateDay(k, d => { d.entries = d.entries.filter(x => x.id !== e.id); }));
 }
 
 /* weekly report */
@@ -2148,7 +2156,7 @@ function renderBarcode(){
     if (p.serving) chips.push([p.serving, 'O porție (' + fmt(p.serving) + ' ' + p.unit + ')']);
     chips.push([100, '100 ' + p.unit]);
     if (p.pack && p.pack !== 100) chips.push([p.pack, 'Tot pachetul (' + fmt(p.pack) + ' ' + p.unit + ')']);
-    el.innerHTML = '<div class="bc-card"><div class="bc-top"><div><b>' + esc(p.name) + '</b><span class="meta">La 100 ' + p.unit + ': ' + fmt(p.per100.kcal) + ' kcal · P ' + fmt1(p.per100.protein) + ' · G ' + fmt1(p.per100.carbs) + ' · Gr ' + fmt1(p.per100.fat) + '</span></div><button class="rm" data-action="bc-edit">Editează</button></div>' +
+    el.innerHTML = '<div class="bc-card"><div class="bc-top"><div><b>' + esc(p.name) + '</b><span class="meta">La 100 ' + p.unit + ': ' + fmt(p.per100.kcal) + ' kcal</span>' + mxHtml(p.per100.protein, p.per100.carbs, p.per100.fat) + '</div><button class="rm" data-action="bc-edit">Editează</button></div>' +
       '<span class="lbl">Cât ai mâncat</span><div class="row">' + chips.map(c => '<button class="chip" data-action="bc-qty" data-q="' + c[0] + '" aria-pressed="' + (num(B.qty) === c[0]) + '">' + esc(c[1]) + '</button>').join('') + '</div>' +
       '<div class="unit"><label class="sr" for="bcQty">Cantitate</label><input type="text" inputmode="decimal" id="bcQty" value="' + esc(B.qty) + '"><em>' + p.unit + '</em></div>' +
       '<div class="ptotal" id="bcPrev"></div>' +
@@ -2159,7 +2167,7 @@ function renderBarcode(){
   const d = B.draft, canAI = !S.aiOff && !!S.imgLimits;
   const accept = (S.imgLimits && S.imgLimits.mediaTypes && S.imgLimits.mediaTypes.join(',')) || 'image/jpeg,image/png,image/webp';
   const field = (id, label, key, unit, cls, mode) => '<div class="' + (cls || '') + '"><label class="lbl" for="' + id + '">' + label + '</label>' + (unit ? '<div class="unit">' : '') + '<input type="text" id="' + id + '"' + (mode ? ' inputmode="' + mode + '"' : '') + ' value="' + esc(d[key]) + '">' + (unit ? '<em>' + unit + '</em></div>' : '') + '</div>';
-  el.innerHTML = '<div class="bc-card"><div class="bc-top"><div><b>' + (B.editing ? 'Editează produsul' : 'Produs nou') + '</b><span class="meta">Cod ' + esc(B.code) + (B.warn ? ' · verifică cifrele, codul pare incomplet' : '') + '</span></div></div>' +
+  el.innerHTML = '<div class="bc-card"><div class="bc-top"><div><b>' + (B.editing ? 'Editează produsul' : 'Produs nou') + '</b><span class="meta">Cod ' + esc(B.code) + (B.warn ? '. Verifică cifrele, codul pare incomplet.' : '') + '</span></div></div>' +
     (B.looking ? '<div class="status" style="margin-top:0"><span class="spin" aria-hidden="true"></span><p>Caut produsul în Open Food Facts…<small>O bază de date deschisă, cu produse din toată lumea.</small></p></div>' : '') +
     (B.editing || B.off ? '' : '<p class="hint">Nu e încă în lista ta. ' + (canAI ? 'Fotografiază tabelul cu valori nutriționale de pe ambalaj sau completează manual.' : 'Completează valorile de pe etichetă.') + ' Îl salvez, ca data viitoare să-l găsești instant.</p>') +
     (canAI ? '<label class="photo-pick" for="bcLabelInput"><input type="file" id="bcLabelInput" accept="' + accept + '"><span class="ph">' + CAM_ICON + '</span><span><b>Fotografiază eticheta</b><span>tabelul „Valori nutriționale”</span></span></label>' : '') +
@@ -2240,7 +2248,7 @@ function addBarcodeEntry(){
   const e = normEntry({ id: newId(), name: v.p.name + ' · ' + fmt(v.q) + ' ' + v.p.unit, grams: v.q, kcal: v.kcal, protein: v.protein, carbs: v.carbs, fat: v.fat, meal, at: Date.now(), src: 'barcode' });
   mutateDay(k, d => d.entries.push(e));
   S.bc = null; renderBarcode(); $('#bcCode').value = '';
-  toast('Adăugat la ' + mealName(meal) + ' · ' + fmt(e.kcal) + ' kcal', 'Anulează', () => mutateDay(k, d => { d.entries = d.entries.filter(x => x.id !== e.id); }));
+  addedToast(k, atMeal(v.p.name, meal), e.kcal, () => mutateDay(k, d => { d.entries = d.entries.filter(x => x.id !== e.id); }));
 }
 function delProduct(code){
   const i = S.library.products.findIndex(p => p.code === code); if (i < 0) return;
@@ -2665,11 +2673,26 @@ function stopSnow(){ Snow.on = false; cancelAnimationFrame(Snow.raf); if (Snow.c
 
 /* ---------- toast ---------- */
 let toastT = null, toastFn = null;
-function toast(msg, label, fn){
-  const el = $('#toast'), b = $('#toastBtn');
+function toast(msg, label, fn, opt){
+  const el = $('#toast'), b = $('#toastBtn'), ic = $('#toastIc'), sub = $('#toastSub');
   $('#toastMsg').textContent = msg;
+  const sb = (opt && opt.sub) || '', ring = opt && opt.ring;
+  if (sub){ sub.textContent = sb; sub.hidden = !sb; }
+  el.classList.toggle('rich', !!(sb || ring));
+  if (ic){
+    ic.hidden = !ring; ic.innerHTML = '';
+    if (ring){
+      const C = 87.96, a = Math.min(1, ring[0]), z = Math.min(1, ring[1]);
+      ic.classList.toggle('over', ring[1] > 1.05);
+      ic.innerHTML = '<svg viewBox="0 0 36 36" aria-hidden="true"><circle class="t-tr" cx="18" cy="18" r="14"/><circle class="t-va" cx="18" cy="18" r="14" stroke-dasharray="' + C + '" style="stroke-dashoffset:' + (C * (1 - a)).toFixed(2) + '"/></svg>';
+      const v = ic.querySelector('.t-va');
+      if (reduceMotion()) v.style.strokeDashoffset = (C * (1 - z)).toFixed(2);
+      else requestAnimationFrame(() => requestAnimationFrame(() => { v.style.strokeDashoffset = (C * (1 - z)).toFixed(2); }));
+    }
+  }
   toastFn = fn || null;
   b.hidden = !fn; b.textContent = label || '';
+  if (!el.hidden && !reduceMotion()){ el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
   el.hidden = false;
   clearTimeout(toastT);
   toastT = setTimeout(() => { el.hidden = true; toastFn = null; }, fn ? 6000 : 3500);
@@ -2816,7 +2839,7 @@ function renderHero(){
   const pct = T.kcal ? Math.round(t.kcal / T.kcal * 100) : 0;
   const remP = Math.round(T.protein - t.protein);
   const showIdeas = !S.aiOff && S.view === todayKey() && rem > 150;
-  const dayChip = T.type ? '<button class="hc-chip daytype ' + T.type + '" data-action="toggle-daytype" aria-label="' + (T.type === 'train' ? 'Zi de sală' : 'Zi de pauză') + '. Atinge ca să schimbi tipul zilei."><i></i>' + (T.type === 'train' ? 'Zi de sală · +' + fmt(T.delta) : 'Zi de pauză · −' + fmt(-T.delta)) + ' kcal</button>' : '';
+  const dayChip = T.type ? '<button class="hc-chip daytype ' + T.type + '" data-action="toggle-daytype" aria-label="' + (T.type === 'train' ? 'Zi de sală' : 'Zi de pauză') + '. Atinge ca să schimbi tipul zilei."><i></i>' + (T.type === 'train' ? 'Zi de sală, +' + fmt(T.delta) : 'Zi de pauză, −' + fmt(-T.delta)) + ' kcal</button>' : '';
   const D = dialFace(S.dialMode, { rem, over, eaten: t.kcal, target: T.kcal, pct });
   el.className = 'hero-card' + (over ? ' is-over' : '');
   el.innerHTML =
@@ -2940,24 +2963,33 @@ function renderTabs(){
   $('#aiNote').hidden = !S.aiOff || (NATIVE && S.noSample); // the store app has no AI yet: nothing to explain
   $('#aiNote').textContent = S.noSample ? 'Estimarea automată nu e disponibilă aici, așa că notezi valorile manual.' : 'Ai ales să nu trimiți mesele la AI, așa că notezi valorile manual. Poți porni estimările din Profil → Datele tale.';
 }
+const PLUS_SM = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13"/></svg>';
+const STAR_SM = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M12 3.6l2.5 5.2 5.7.8-4.1 4 1 5.7L12 16.6l-5.1 2.7 1-5.7-4.1-4 5.7-.8z"/></svg>';
+const POT_SM = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 10.5h15v4a5 5 0 0 1-5 5h-5a5 5 0 0 1-5-5zM2.5 10.5h2M19.5 10.5h2M9 7c0-1 1-1.5 1-2.5M13 7c0-1 1-1.5 1-2.5"/></svg>';
+// One row: what it is, what it brings, and a plus. Tapping anywhere on it adds it to the chosen meal.
+const qaRow = (attrs, lead, name, sub) => '<button class="qa-row" ' + attrs + '>' + (lead ? '<span class="qa-ic">' + lead + '</span>' : '') + '<span class="qa-t"><b>' + name + '</b><small>' + sub + '</small></span><span class="qa-plus">' + PLUS_SM + '</span></button>';
 function renderRecent(){
   const el = $('#recent'); const list = recentFoods(); S._recent = list;
   const y = getDay(addDays(S.view, -1)).entries.filter(e => e.meal === S.meal);
+  const meal = mealName(S.meal).toLowerCase();
   let html = '';
   if (y.length){
     const yk = y.reduce((a, e) => a + e.kcal, 0);
-    html += '<div><label class="lbl">Repetă</label><div class="chips"><button class="chip accent" data-action="repeat-meal">' + mealName(S.meal) + ' ca ieri<i>' + y.length + (y.length === 1 ? ' aliment' : ' alimente') + ' · ' + fmt(yk) + ' kcal</i></button></div></div>';
+    html += '<div class="qa"><div class="qa-list ml-' + S.meal + ' qa-repeat">' + qaRow('data-action="repeat-meal" aria-label="Adaugă ' + meal + ' ca ieri: ' + y.length + (y.length === 1 ? ' aliment' : ' alimente') + ', ' + fmt(yk) + ' kcal"', MEAL_ICON[S.meal], mealName(S.meal) + ' ca ieri', esc(y.slice(0, 3).map(e => e.name).join(', ') + (y.length > 3 ? ' și încă ' + (y.length - 3) : '')) + ', ' + fmt(yk) + ' kcal') + '</div></div>';
+  }
+  if (list.length){
+    const n = S.recentAll ? list.length : Math.min(5, list.length);
+    html += '<div class="qa"><div class="qa-head"><h3>Ce ai mai mâncat</h3></div><div class="qa-list">' +
+      list.slice(0, n).map((e, i) => qaRow('data-action="recent" data-i="' + i + '" aria-label="Adaugă ' + esc(e.name) + ', ' + fmt(e.kcal) + ' kcal, la ' + meal + '"', '', esc(e.name), (e.grams ? fmt(e.grams) + ' g, ' : '') + fmt(e.kcal) + ' kcal')).join('') +
+      (list.length > 5 ? '<button class="qa-more" data-action="recent-all">' + (S.recentAll ? 'Arată mai puține' : 'Arată toate (' + list.length + ')') + '</button>' : '') + '</div></div>';
   }
   if (S.profile){
     const L = S.library;
-    const chips = L.favorites.map(f => '<button class="chip" data-action="fav-add" data-id="' + esc(f.id) + '">★ ' + esc(f.name) + '<i>' + fmt(sumItems(f.items).kcal) + '</i></button>').join('') +
-      L.recipes.map(r => '<button class="chip" data-action="recipe-log" data-id="' + esc(r.id) + '">' + esc(r.name) + '<i>' + fmt(sumItems(r.items).kcal / r.servings) + '/porție</i></button>').join('') +
-      '<button class="chip accent" data-action="open-lib">' + (L.favorites.length || L.recipes.length ? 'Gestionează' : '+ Rețete și mese favorite') + '</button>';
-    html += '<div><label class="lbl">Rețete și favorite</label><div class="chips">' + chips + '</div></div>';
-  }
-  if (list.length){
-    html += '<div><label class="lbl">Adaugă rapid din ce ai mai mâncat</label><div class="chips">' +
-      list.map((e, i) => '<button class="chip" data-action="recent" data-i="' + i + '" aria-label="Adaugă ' + esc(e.name) + ', ' + fmt(e.kcal) + ' kcal">' + esc(e.name) + '<i>' + fmt(e.kcal) + '</i></button>').join('') + '</div></div>';
+    const rows = L.favorites.map(f => qaRow('data-action="fav-add" data-id="' + esc(f.id) + '"', STAR_SM, esc(f.name), f.items.length + (f.items.length === 1 ? ' aliment' : ' alimente') + ', ' + fmt(sumItems(f.items).kcal) + ' kcal')).join('') +
+      L.recipes.map(r => qaRow('data-action="recipe-log" data-id="' + esc(r.id) + '"', POT_SM, esc(r.name), 'Rețetă, ' + fmt(sumItems(r.items).kcal / r.servings) + ' kcal pe porție')).join('');
+    html += '<div class="qa"><div class="qa-head"><h3>Rețete și favorite</h3>' + (rows ? '<button class="qa-link" data-action="open-lib">Gestionează</button>' : '') + '</div>' +
+      (rows ? '<div class="qa-list qa-lib">' + rows + '</div>'
+        : '<button class="qa-empty" data-action="open-lib"><span class="qa-ic">' + POT_SM + '</span><span class="qa-t"><b>Salvează rețete și mese favorite</b><small>Le adaugi apoi dintr-o atingere.</small></span>' + CHEVRON + '</button>') + '</div>';
   }
   el.hidden = !html; el.innerHTML = html;
 }
@@ -3272,7 +3304,8 @@ function histPaint(){
   if (!d){
     el.innerHTML = H.logged
       ? '<div class="r-top"><p class="r-num"><b>' + fmt(H.avgK) + '</b><span>kcal pe zi</span></p></div><p class="r-sub">' + (H.logged === 1 ? 'Din singura zi notată' : 'Media celor ' + H.logged + ' zile notate') + '. Atinge o zi pentru detalii.</p>'
-      : '<div class="r-top"><p class="r-num"><b>–</b></p></div><p class="r-sub">Notează mesele câteva zile și aici apare media.</p>';
+      : '<div class="r-empty"><b>Prima ta săptămână începe azi</b><p>Pe măsură ce notezi mesele, aici apar media zilnică, zilele în țintă și proteinele.</p></div>';
+    const hs = $('#history .hstats'); if (hs) hs.hidden = true;
     return;
   }
   const Td = targetsFor(d.k), diff = Td ? d.kcal - Td.kcal : 0;
@@ -3336,15 +3369,36 @@ function renderSetup(){
     const T = computeTargets(d);
     const g = GOALS.find(x => x.id === d.goal);
     const adjTxt = T.adj === 0 ? 'fără ajustare pentru menținere' : (T.adj > 0 ? '+' : '−') + Math.abs(Math.round(T.adj*100)) + '% pentru ' + g.t.toLowerCase();
-    b = '<h2 id="sTitle" tabindex="-1">Ținta ta zilnică</h2><div class="result"><div class="kbig">' + fmt(T.kcal) + '<small>kcal pe zi</small></div>' +
-      '<dl class="rgrid"><div><dt><i class="dot p"></i>Proteine</dt><dd>' + fmt(T.protein) + ' g</dd></div><div><dt><i class="dot c"></i>Glucide</dt><dd>' + fmt(T.carbs) + ' g</dd></div><div><dt><i class="dot f"></i>Grăsimi</dt><dd>' + fmt(T.fat) + ' g</dd></div><div><dt>Apă</dt><dd>' + fmtL(T.water) + ' L</dd></div></dl>' +
-      '<p class="how">Cum am calculat: metabolism bazal ' + fmt(T.bmr) + ' kcal (formula Mifflin-St Jeor) × ' + nf3.format(T.actF) + ' pentru activitate = ' + fmt(T.tdee) + ' kcal de menținere, apoi ' + adjTxt + '. Proteine ' + fmt1(T.protPerKg) + ' g pe kg, grăsimi 25% din calorii, restul glucide. Poți ajusta oricând numerele din Setări.</p></div>';
+    b = '<h2 id="sTitle" tabindex="-1">Ținta ta zilnică</h2><div class="result">' +
+      '<div class="dial res-dial" role="img" aria-label="' + fmt(T.kcal) + ' kcal pe zi, pentru ' + esc(g.t.toLowerCase()) + '"><svg viewBox="0 0 240 240" aria-hidden="true" style="--p:0">' +
+        '<defs><linearGradient id="resGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:color-mix(in srgb,var(--kcal) 45%,#FFFFFF)"/><stop offset="1" style="stop-color:var(--kcal)"/></linearGradient></defs>' +
+        DIAL_TICKS + '<circle class="r-trk" cx="120" cy="120" r="96"/><circle class="r-val" cx="120" cy="120" r="96"/><g class="d-knob"><circle cx="120" cy="24" r="9"/><circle class="d-knob-in" cx="120" cy="24" r="3.4"/></g></svg>' +
+        '<span class="d-center" aria-hidden="true"><span class="d-label">pe zi</span><b class="big-num" id="resNum">' + fmt(T.kcal) + '</b><span class="hc-sub">kcal pentru ' + esc(g.t.toLowerCase()) + '</span></span></div>' +
+      '<dl class="rgrid"><div><dt><i class="dot p"></i>Proteine</dt><dd>' + fmt(T.protein) + '<small> g</small></dd></div><div><dt><i class="dot c"></i>Glucide</dt><dd>' + fmt(T.carbs) + '<small> g</small></dd></div><div><dt><i class="dot f"></i>Grăsimi</dt><dd>' + fmt(T.fat) + '<small> g</small></dd></div><div><dt><i class="dot w"></i>Apă</dt><dd>' + fmtL(T.water) + '<small> L</small></dd></div></dl>' +
+      '<details class="how"><summary>Cum am calculat</summary><p>Metabolismul bazal e ' + fmt(T.bmr) + ' kcal (formula Mifflin-St Jeor). Înmulțit cu ' + nf3.format(T.actF) + ' pentru activitate dă ' + fmt(T.tdee) + ' kcal de menținere, apoi ' + adjTxt + '. Proteine ' + fmt1(T.protPerKg) + ' g pe kg, grăsimi 25% din calorii, restul glucide. Poți ajusta oricând numerele din Profil.</p></details></div>';
   }
   $('#sBody').innerHTML = b;
+  if (st === 'result') playResult(computeTargets(d).kcal);
   const isLast = st === 'result';
   $('#sFoot').innerHTML = (s.step > (S.profile ? 1 : 0) ? '<button class="btn ghost" data-action="s-back">Înapoi</button>' : '') +
     '<button class="btn primary wide" data-action="' + (isLast ? 's-save' : 's-next') + '" id="sNext"' + (stepValid() ? '' : ' disabled') + '>' + (st === 'intro' ? 'Începe' : isLast ? 'Salvează și începe' : 'Continuă') + '</button>';
   const h = $('#sTitle'); if (h) h.focus({ preventScroll: true });
+}
+// The ring goes all the way round while the number counts up to the target; the four tiles follow
+function playResult(kcal){
+  const svg = $('#sBody .res-dial svg'), num = $('#resNum'); if (!svg || !num) return;
+  if (reduceMotion()){ svg.style.setProperty('--p', '1'); return; }
+  svg.classList.add('sweep');
+  requestAnimationFrame(() => requestAnimationFrame(() => svg.style.setProperty('--p', '1')));
+  const t0 = performance.now(), D = 1300;
+  num.textContent = '0';
+  const step = now => {
+    if (!num.isConnected) return;
+    const k = Math.min(1, (now - t0) / D), e = 1 - Math.pow(1 - k, 3);
+    num.textContent = fmt(Math.round(kcal * e));
+    if (k < 1) requestAnimationFrame(step); else buzz('success');
+  };
+  requestAnimationFrame(step);
 }
 function setupInput(field, raw){
   const v = num(raw);
@@ -3408,10 +3462,11 @@ function renderSettingsInner(){
   const TIPS_HTML =
     '<section><h3>Cum îl folosești cel mai bine</h3><ul class="tips">' +
       '<li>Notează mesele imediat după ce mănânci, cât le ții minte.</li>' +
-      '<li>Pentru porții precise, scrie gramajul („150 g piept de pui”) sau fotografiază eticheta.</li>' +
+      (S.noSample ? '<li>Pentru produse din magazin, scanează codul de bare: valorile vin de pe etichetă, iar tu alegi doar cât ai mâncat.</li><li>Ce mănânci des apare la „Ce ai mai mâncat” și se adaugă dintr-o atingere.</li>'
+        : '<li>Pentru porții precise, scrie gramajul („150 g piept de pui”) sau fotografiază eticheta.</li>') +
       '<li>Atinge orice aliment din jurnal ca să-i corectezi cantitatea sau masa.</li>' +
       '<li>„Ca ieri” copiază aceeași masă de ieri dintr-o atingere.</li>' +
-      '<li>Estimările din text și poze sunt aproximative. Contează să notezi constant, nu perfect.</li>' +
+      (S.noSample ? '<li>Contează să notezi constant, nu perfect. O zi cu o estimare e mai bună decât o zi lipsă.</li>' : '<li>Estimările din text și poze sunt aproximative. Contează să notezi constant, nu perfect.</li>') +
     '</ul></section>';
   const ABOUT_HTML =
     '<section><h3>Despre Porția</h3><p>Porția e o aplicație de stil de viață, nu un dispozitiv medical. Nu înlocuiește sfatul unui medic sau nutriționist.' + (S.noSample ? ' Valorile produselor cu cod de bare vin din Open Food Facts sau de la tine și pot avea greșeli: verifică eticheta.' : ' Estimările, ideile de mese și raportul sunt generate de AI (Claude) și pot greși.') + '</p>' + (NATIVE ? '<p><a href="https://sebastianciobotaru89-dev.github.io/fitnessapp/confidentialitate.html" target="_blank" rel="noopener">Politica de confidențialitate</a></p>' : '') + '</section>';
@@ -3896,6 +3951,7 @@ function bindStatic(){
       case 'water-add': waterAdd(Number(b.dataset.ml)); break;
       case 'water-set': waterSet(Number(b.dataset.ml), Number(b.dataset.per)); break;
       case 'w-save': saveWeight(); break;
+      case 'recent-all': S.recentAll = !S.recentAll; renderRecent(); break;
       case 'w-step': {
         const inp = $('#wIn'), cur = num(inp.value) || num(inp.placeholder) || 0;
         const v = Math.min(300, Math.max(30, Math.round((cur + Number(b.dataset.d)) * 10) / 10));
