@@ -102,6 +102,8 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
 
 (async () => {
   sh('adb wait-for-device');
+  // a slow emulator can show "Pixel Launcher isn't responding" over everything; those dialogs are not the app's
+  try { sh('adb shell settings put global hide_error_dialogs 1'); sh('adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS'); } catch {}
   console.log(sh(`adb install -r ${APK}`).trim());
   sh('adb logcat -c');
   start(); await sleep(9000);

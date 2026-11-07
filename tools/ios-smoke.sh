@@ -11,9 +11,7 @@ note(){ echo "::notice::$1"; }
 # macOS has no `timeout`; perl's alarm stops a command that hangs
 limit(){ local secs="$1"; shift; perl -e 'alarm shift; exec @ARGV' "$secs" "$@"; }
 # opens the app; simctl answers with the process id, or with the reason it could not start it
-# the app's own output (Capacitor prints the page's console there) goes to a file per launch
-# NSUnbufferedIO makes the app write each line at once, as when Xcode runs it
-launch(){ local out; out=$(SIMCTL_CHILD_NSUnbufferedIO=YES limit 90 xcrun simctl launch --terminate-running-process --stdout="$3" --stderr="$3" "$1" "$2" 2>&1); note "pornire: $out"; }
+launch(){ local out; out=$(limit 90 xcrun simctl launch --terminate-running-process "$1" "$2" 2>&1); note "pornire: $out"; }
 # the app's console (Capacitor writes each console.log and error there), and any crash report
 consola(){
   limit 90 xcrun simctl spawn "$1" log show --last 3m --style compact --predicate 'process == "App"' > "$2" 2>&1
@@ -70,7 +68,7 @@ run(){
   limit 300 xcrun simctl install "$udid" "$APP" || { err "$name: instalarea a eșuat"; return; }
 
   # first run: the welcome screen
-  launch "$udid" "$BUNDLE" "$PWD/$OUT/ios-$name-iesire-1.txt"
+  launch "$udid" "$BUNDLE"
   sleep 12
   limit 60 xcrun simctl io "$udid" screenshot "$OUT/ios-$name-1-bun-venit.png" >/dev/null
   limit 30 xcrun simctl terminate "$udid" "$BUNDLE" 2>/dev/null
@@ -78,7 +76,7 @@ run(){
   # a returning user: the journal sits only in native storage and must come back into the app
   limit 60 xcrun simctl spawn "$udid" defaults write "$BUNDLE" "CapacitorStorage.mt-local" -string "$SEED"
   limit 60 xcrun simctl spawn "$udid" defaults write "$BUNDLE" "CapacitorStorage.portia-consent" -string "$CONSENT"
-  launch "$udid" "$BUNDLE" "$PWD/$OUT/ios-$name-iesire-2.txt"
+  launch "$udid" "$BUNDLE"
   sleep 12
   limit 60 xcrun simctl io "$udid" screenshot "$OUT/ios-$name-2-azi.png" >/dev/null
   limit 30 xcrun simctl ui "$udid" appearance dark; sleep 4
@@ -91,10 +89,9 @@ run(){
   else echo "::warning::$name: nu găsesc cifrele pentru widget (fără semnare, simulatorul poate ține grupul altundeva)"; fi
   if limit 30 xcrun simctl spawn "$udid" launchctl list | grep -q "$BUNDLE"; then note "$name: aplicația rulează"; else err "$name: aplicația nu mai rulează"; fi
   consola "$udid" "$OUT/ios-$name-consola.txt"
-  if cat "$OUT/ios-$name-consola.txt" "$OUT/ios-$name-iesire-1.txt" "$OUT/ios-$name-iesire-2.txt" 2>/dev/null | grep -E "\[error\]|Uncaught|TypeError|ReferenceError|SyntaxError" | grep -v favicon > "$OUT/ios-$name-erori.txt"; then
+  if grep -E "\[error\]|Uncaught|TypeError|ReferenceError|SyntaxError" "$OUT/ios-$name-consola.txt" | grep -v favicon > "$OUT/ios-$name-erori.txt"; then
     err "$name: erori JavaScript: $(head -3 "$OUT/ios-$name-erori.txt" | tr '\n' ' ')"
   else note "$name: nicio eroare JavaScript"; fi
-  echo "::warning::$name, ce a scris pagina: $(grep -E "⚡️ +\[" "$OUT/ios-$name-iesire-2.txt" 2>/dev/null | tail -6 | tr '\n' ' ' | cut -c1-700)"
   grep -E "⚡️|Capacitor|\[portia\]" "$OUT/ios-$name-consola.txt" | head -15
   # a portia:// link from outside the app: iOS asks "Open in Porția?" (from the widget it opens straight away)
   limit 30 xcrun simctl openurl "$udid" "portia://scan" || err "$name: iOS nu recunoaște linkurile portia://"
