@@ -1467,3 +1467,16 @@ button.lib-main:active{background:color-mix(in srgb,var(--ink) 5%,transparent)}
 @media (prefers-reduced-motion: reduce){.sheet:not([hidden]) .medal{animation:none}}
 .t-tiles .mtile.big,.t-tiles .mtile.m-w,.t-tiles .mtile.m-w:nth-child(2){grid-column:span 3}
 #settingsCard [data-action="save-targets"]{width:100%}
+
+/* Zile de sală: the week as one row of days; the extra calories as one control */
+.wdays{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;margin-bottom:16px}
+.wdays button{aspect-ratio:1;max-height:48px;border:0;border-radius:14px;background:var(--sunk);color:var(--muted);font:inherit;font-weight:700;font-size:14px;cursor:pointer;transition:background-color .2s,color .2s,transform .15s}
+.wdays button[aria-pressed="true"]{background:var(--kcal);color:var(--on-kcal)}
+.wdays button:active{transform:scale(.94)}
+.portion.p3{grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:14px}
+.portion.p3 button{font-size:15px}
+/* Despre */
+.about-id{display:flex;align-items:center;gap:14px;margin:4px 0 14px}
+.about-logo svg{display:block;border-radius:16px}
+.about-id b{display:block;font-family:var(--f-display);font-stretch:100%;font-weight:800;font-size:22px;letter-spacing:-.02em}
+.about-id span#aboutVer{font-size:13.5px;color:var(--muted)}

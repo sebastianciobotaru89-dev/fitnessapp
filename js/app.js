@@ -1636,8 +1636,8 @@ function cycleSection(){
   return '<h3>Zile de sală și de pauză</h3><p>În zilele de sală primești mai multe glucide, în cele de pauză mai puține. Media pe săptămână rămâne ' + fmt(b.kcal) + ' kcal.</p>' +
     swRow('Ținte diferite în zilele de sală', 'cycle-on', c.on) +
     (c.on
-      ? '<span class="lbl">Zilele tale de sală</span><div class="row" style="margin-bottom:12px">' + WD_ORDER.map(d => '<button class="chip" data-action="cycle-day" data-d="' + d + '" aria-pressed="' + c.days.includes(d) + '">' + WD_NAME[d] + '</button>').join('') + '</div>' +
-        '<span class="lbl">În plus în zilele de sală</span><div class="row" style="margin-bottom:12px">' + [150, 200, 300].map(x => '<button class="chip" data-action="cycle-extra" data-x="' + x + '" aria-pressed="' + (c.extra === x) + '">+' + x + ' kcal</button>').join('') + '</div>' +
+      ? '<span class="lbl">Zilele tale de sală</span><div class="wdays" role="group" aria-label="Zilele de sală">' + WD_ORDER.map(d => '<button data-action="cycle-day" data-d="' + d + '" aria-pressed="' + c.days.includes(d) + '">' + WD_NAME[d] + '</button>').join('') + '</div>' +
+        '<span class="lbl">În plus în zilele de sală</span><div class="portion p3" role="group" aria-label="Calorii în plus">' + [150, 200, 300].map(x => '<button data-action="cycle-extra" data-x="' + x + '" aria-pressed="' + (c.extra === x) + '">+' + x + ' kcal</button>').join('') + '</div>' +
         (dl ? '<p class="hint">În zilele de sală ai ' + fmt(b.kcal + dl.train) + ' kcal, în cele de pauză ' + fmt(b.kcal + dl.rest) + ' kcal. Diferența vine din glucide. Poți schimba tipul oricărei zile din panoul principal.</p>' : '<p class="hint">Alege între 1 și 6 zile de sală.</p>')
       : '');
 }
@@ -3536,7 +3536,7 @@ function renderSettingsInner(){
       (S.noSample ? '<li>Contează să notezi constant, nu perfect. O zi cu o estimare e mai bună decât o zi lipsă.</li>' : '<li>Estimările din text și poze sunt aproximative. Contează să notezi constant, nu perfect.</li>') +
     '</ul></section>';
   const ABOUT_HTML =
-    '<section><h3>Despre Porția</h3><p>Porția e o aplicație de stil de viață, nu un dispozitiv medical. Nu înlocuiește sfatul unui medic sau nutriționist.' + (S.noSample ? ' Valorile produselor cu cod de bare vin din Open Food Facts sau de la tine și pot avea greșeli: verifică eticheta.' : ' Estimările, ideile de mese și raportul sunt generate de AI (Claude) și pot greși.') + '</p>' + (NATIVE ? '<p><a href="https://sebastianciobotaru89-dev.github.io/fitnessapp/confidentialitate.html" target="_blank" rel="noopener">Politica de confidențialitate</a></p>' : '') + '</section>';
+    '<section><h3>Despre Porția</h3><div class="about-id"><span class="about-logo" aria-hidden="true">' + logoSvg(S.theme, 60) + '</span><div><b>Porția</b><span id="aboutVer">' + (NATIVE ? '' : 'Versiunea web') + '</span></div></div><p>Porția e o aplicație de stil de viață, nu un dispozitiv medical. Nu înlocuiește sfatul unui medic sau nutriționist.' + (S.noSample ? ' Valorile produselor cu cod de bare vin din Open Food Facts sau de la tine și pot avea greșeli: verifică eticheta.' : ' Estimările, ideile de mese și raportul sunt generate de AI (Claude) și pot greși.') + '</p>' + (NATIVE ? '<p><a href="https://sebastianciobotaru89-dev.github.io/fitnessapp/confidentialitate.html" target="_blank" rel="noopener">Politica de confidențialitate</a></p>' : '') + '</section>';
   const BACKUP_HTML =
     '<section><h3>Cod de backup</h3><p>Un cod care conține tot jurnalul și țintele. Păstrează-l într-o notiță și îl poți restaura oricând.</p>' +
       '<div class="row"><button class="btn soft" data-action="make-backup">Generează codul</button><button class="btn ghost" data-action="copy-backup" id="copyBtn" hidden>Copiază</button></div>' +
@@ -3567,6 +3567,7 @@ function renderSettingsInner(){
     $('#settingsCard').innerHTML = '<div class="prof-detail"><button class="back" data-action="prof-back"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Profil</button>' +
       '<div class="scr-head"><div><h1 id="setTitle" tabindex="-1">' + esc(row ? row[1] : 'Profil') + '</h1></div></div></div>' + SEC[sid]();
     if (sid === 'targets') updateTargetSum();
+    if (sid === 'about') nat('App', 'getInfo').then(i => { const el = $('#aboutVer'); if (el && i && i.version) el.textContent = 'Versiunea ' + i.version + (i.build ? ' (' + i.build + ')' : ''); });
     return;
   }
   $('#settingsCard').innerHTML =
