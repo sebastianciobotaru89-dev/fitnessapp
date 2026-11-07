@@ -1537,14 +1537,17 @@ function openBadges(){ S.newBadge = null; S.mini = { kind: 'badges' }; renderBad
 function renderBadges(){
   if (!S.mini || S.mini.kind !== 'badges') return;
   const { st, list } = badgeList(), nDone = list.filter(b => b.done).length;
+  const doing = list.filter(b => !b.done), won = list.filter(b => b.done), days = n => n + (n === 1 ? ' zi' : ' zile');
   $('#miniCard').innerHTML = sheetHead('miniTitle', 'Serii și provocări', 'close-mini') +
-    '<div class="bstats"><div><dt>Seria</dt><dd>' + st.streak + '<small>' + (st.streak === 1 ? ' zi' : ' zile') + '</small></dd></div><div><dt>Record</dt><dd>' + st.best + '<small>' + (st.best === 1 ? ' zi' : ' zile') + '</small></dd></div><div><dt>Provocări</dt><dd>' + nDone + '<small>/' + list.length + '</small></dd></div></div>' +
-    '<p class="hint" style="margin:12px 0">O zi intră în serie dacă notezi măcar un aliment. Dacă azi n-ai notat încă, seria rămâne vie până diseară.</p>' +
-    '<ul class="badges">' + list.map(b => {
+    '<div class="b-hero' + (st.streak ? ' on' : '') + '"><span class="b-flame">' + bIcon(st.streak ? 'flame' : 'star', 30) + '</span><div><p class="r-num"><b>' + st.streak + '</b><span>' + (st.streak === 1 ? 'zi la rând' : 'zile la rând') + '</span></p>' +
+      '<p class="r-sub">Recordul tău: ' + days(st.best) + '. ' + (st.streak ? 'O zi intră în serie dacă notezi măcar un aliment.' : 'Notează un aliment azi și seria pornește.') + '</p></div></div>' +
+    (doing.length ? '<div class="qa-head b-head"><h3>În lucru</h3></div><div class="qa-list b-doing">' + doing.map(b => {
       const pct = Math.max(0, Math.min(100, Math.round(b.val / b.goal * 100)));
-      const prog = b.done ? 'Gata' : (b.id === 'kg1' ? fmt1(b.val) + ' / 1 kg' : fmt(Math.floor(b.val)) + ' / ' + b.goal);
-      return '<li class="bdg' + (b.done ? ' done' : '') + '"><span class="bic">' + bIcon(b.icon) + '</span><span class="btx"><b>' + esc(b.t) + '</b><small>' + esc(b.d) + '</small><span class="bbar"><i style="width:' + pct + '%"></i></span></span><span class="bpr">' + prog + '</span></li>';
-    }).join('') + '</ul>';
+      const prog = b.id === 'kg1' ? fmt1(b.val) + ' din 1 kg' : fmt(Math.floor(b.val)) + ' din ' + b.goal;
+      return '<div class="b-row"><span class="qa-ic">' + bIcon(b.icon) + '</span><span class="qa-t"><b>' + esc(b.t) + '</b><small>' + esc(b.d) + '</small><span class="bbar"><i style="width:' + pct + '%"></i></span></span><span class="bpr">' + prog + '</span></div>';
+    }).join('') + '</div>' : '') +
+    (won.length ? '<div class="qa-head b-head"><h3>Câștigate</h3><span class="qa-n">' + won.length + ' din ' + list.length + '</span></div><ul class="medals">' + won.map((b, i) =>
+      '<li class="medal pt-' + (i % 4 + 1) + '"><span class="m-ic">' + bIcon(b.icon, 22) + '</span><b>' + esc(b.t) + '</b><span class="sr">' + esc(b.d) + '</span></li>').join('') + '</ul>' : '');
 }
 
 /* ---------- edit entry ---------- */
@@ -1694,29 +1697,39 @@ function subLibrary(){
 function libChanged(){ saveLibrary(); renderRecent(); renderHistory(); if (!$('#libSheet').hidden) renderLib(); }
 
 function openLib(){ S.prodIO = null; S.prodQ = ''; renderLib(); showSheet('#libSheet'); $('#libTitle').focus({ preventScroll: true }); }
+const PENCIL_SM = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 19.5h4l10-10-4-4-10 10z"/><path d="M13 7l4 4"/></svg>';
+const TRASH_SM = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 12.5h9l1-12.5"/></svg>';
+const BC_SM = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3.5 8V4.5H7M17 4.5h3.5V8M3.5 16v3.5H7M17 19.5h3.5V16M8 8.5v7M11 8.5v7M13.5 8.5v7M16 8.5v7"/></svg>';
+// A library row: tapping it adds; the small buttons at the end edit or delete
+const libRow = (lead, name, sub, main, side) => '<div class="lib-row"><button class="lib-main" ' + main + '><span class="qa-ic">' + lead + '</span><span class="qa-t"><b>' + name + '</b><small>' + sub + '</small></span></button>' + side + '</div>';
+const libPlus = (action, id) => '<button class="qa-plus" data-action="' + action + '" data-id="' + esc(id) + '" tabindex="-1" aria-hidden="true">' + PLUS_SM + '</button>';
 function renderLib(){
   // keep typing position when the library changes underneath (e.g. a sync arrives)
   const ae = document.activeElement, keep = ae && (ae.id === 'impText' || ae.id === 'prodQ') ? [ae.id, ae.selectionStart, ae.selectionEnd] : null;
-  const L = S.library;
+  const L = S.library, meal = mealName(S.meal).toLowerCase();
   const rec = L.recipes.length
-    ? '<ul class="lib-list">' + L.recipes.map(r => { const s = sumItems(r.items); return '<li><div><b>' + esc(r.name) + '</b><span>' + r.servings + (r.servings === 1 ? ' porție' : ' porții') + ', ' + fmt(s.kcal / r.servings) + ' kcal pe porție' + (r.totalGrams ? ', ' + fmt(r.totalGrams) + ' g gătit' : '') + '</span></div><div class="row"><button class="rm" data-action="recipe-edit" data-id="' + esc(r.id) + '">Editează</button><button class="btn soft sm" data-action="recipe-log" data-id="' + esc(r.id) + '">Adaugă</button></div></li>'; }).join('') + '</ul>'
-    : '<p class="empty">Salvează o mâncare gătită acasă o singură dată, apoi notezi doar cât ai mâncat din ea.</p>';
+    ? '<div class="qa-list lib-recipes">' + L.recipes.map(r => { const s = sumItems(r.items); return libRow(POT_SM, esc(r.name), r.servings + (r.servings === 1 ? ' porție' : ' porții') + ', ' + fmt(s.kcal / r.servings) + ' kcal pe porție' + (r.totalGrams ? ', ' + fmt(r.totalGrams) + ' g gătit' : ''),
+        'data-action="recipe-log" data-id="' + esc(r.id) + '" aria-label="Adaugă din ' + esc(r.name) + ' la ' + meal + '"',
+        '<button class="lib-act" data-action="recipe-edit" data-id="' + esc(r.id) + '" aria-label="Editează ' + esc(r.name) + '">' + PENCIL_SM + '</button>' + libPlus('recipe-log', r.id)); }).join('') + '</div>'
+    : '<div class="lib-empty lib-recipes"><span class="qa-ic">' + POT_SM + '</span><p>Salvează o mâncare gătită acasă o singură dată, apoi notezi doar cât ai mâncat din ea.</p></div>';
   const fav = L.favorites.length
-    ? '<ul class="lib-list">' + L.favorites.map(f => { const s = sumItems(f.items); return '<li><div><b>' + esc(f.name) + '</b><span>' + f.items.length + (f.items.length === 1 ? ' aliment' : ' alimente') + ', ' + fmt(s.kcal) + ' kcal</span></div><div class="row"><button class="rm" data-action="fav-del" data-id="' + esc(f.id) + '">Șterge</button><button class="btn soft sm" data-action="fav-add" data-id="' + esc(f.id) + '">Adaugă</button></div></li>'; }).join('') + '</ul>'
-    : '<p class="empty">În jurnal, apasă „☆ Salvează” lângă o masă ca s-o păstrezi aici.</p>';
+    ? '<div class="qa-list lib-favs">' + L.favorites.map(f => { const s = sumItems(f.items); return libRow(STAR_SM, esc(f.name), f.items.length + (f.items.length === 1 ? ' aliment' : ' alimente') + ', ' + fmt(s.kcal) + ' kcal',
+        'data-action="fav-add" data-id="' + esc(f.id) + '" aria-label="Adaugă ' + esc(f.name) + ' la ' + meal + '"',
+        '<button class="lib-act" data-action="fav-del" data-id="' + esc(f.id) + '" aria-label="Șterge ' + esc(f.name) + ' din favorite">' + TRASH_SM + '</button>' + libPlus('fav-add', f.id)); }).join('') + '</div>'
+    : '<div class="lib-empty lib-favs"><span class="qa-ic">' + STAR_SM + '</span><p>În Jurnal, atinge steaua de lângă o masă ca s-o păstrezi aici.</p></div>';
   $('#libCard').innerHTML = sheetHead('libTitle', 'Rețete și favorite', 'close-lib') +
-    '<section><div class="panel-head" style="margin-bottom:8px"><h3>Rețetele mele</h3><button class="btn primary sm" data-action="recipe-new">+ Rețetă nouă</button></div>' + rec + '</section>' +
-    '<section><h3 style="margin-bottom:8px">Mese favorite</h3>' + fav + '</section>' +
-    prodSection() +
-    '<p class="foot">Se adaugă la ' + mealName(S.meal).toLowerCase() + (S.view === todayKey() ? '' : ', ' + dayWord(S.view).toLowerCase()) + '. Masa o alegi din panoul „Ce ai mâncat?”.</p>';
+    '<p class="lib-to"><span class="ml-dot ml-' + S.meal + '"></span>Ce atingi se adaugă la ' + meal + (S.view === todayKey() ? '' : ', ' + dayWord(S.view).toLowerCase()) + '.</p>' +
+    '<section class="lib-sec"><div class="qa-head"><h3>Rețetele mele</h3><button class="qa-link with-ic" data-action="recipe-new">' + PLUS_SM + 'Rețetă nouă</button></div>' + rec + '</section>' +
+    '<section class="lib-sec"><div class="qa-head"><h3>Mese favorite</h3></div>' + fav + '</section>' +
+    prodSection();
   if (keep){ const n = $('#' + keep[0]); if (n){ n.focus({ preventScroll: true }); try { n.setSelectionRange(keep[1], keep[2]); } catch (e) {} } }
 }
 function prodListHtml(){
   const P = S.library.products, q = String(S.prodQ || '').trim().toLowerCase();
-  if (!P.length) return '<p class="empty">Produsele salvate prin codul de bare apar aici. Poți importa și o listă întreagă.</p>';
+  if (!P.length) return '<div class="lib-empty lib-prods"><span class="qa-ic">' + BC_SM + '</span><p>Produsele scanate se păstrează aici, ca data viitoare să apară imediat. Poți importa și o listă întreagă.</p></div>';
   const shown = q ? P.filter(p => p.name.toLowerCase().includes(q) || p.code.includes(q)) : P;
-  if (!shown.length) return '<p class="empty">Niciun produs nu se potrivește cu „' + esc(S.prodQ.trim()) + '”.</p>';
-  return '<ul class="lib-list">' + shown.map(p => '<li><div><b>' + esc(p.name) + '</b><span>' + fmt(p.per100.kcal) + ' kcal la 100 ' + p.unit + ', cod ' + esc(p.code) + '</span></div><div class="row"><button class="rm" data-action="prod-del" data-code="' + esc(p.code) + '">Șterge</button></div></li>').join('') + '</ul>';
+  if (!shown.length) return '<p class="lib-none">Niciun produs nu se potrivește cu „' + esc(S.prodQ.trim()) + '”.</p>';
+  return '<div class="qa-list lib-prods">' + shown.map(p => '<div class="lib-row"><div class="lib-main"><span class="qa-ic">' + BC_SM + '</span><span class="qa-t"><b>' + esc(p.name) + '</b><small>' + fmt(p.per100.kcal) + ' kcal la 100 ' + p.unit + ', cod ' + esc(p.code) + '</small></span></div><button class="lib-act" data-action="prod-del" data-code="' + esc(p.code) + '" aria-label="Șterge ' + esc(p.name) + '">' + TRASH_SM + '</button></div>').join('') + '</div>';
 }
 function prodSection(){
   const P = S.library.products, io = S.prodIO;
@@ -1732,9 +1745,9 @@ function prodSection(){
       '<label class="sr" for="expText">Lista de produse</label><textarea id="expText" class="code" rows="6" readonly spellcheck="false">' + esc(productsCsv()) + '</textarea>' +
       '<div class="row"><button class="btn soft" data-action="prod-copy">Copiază lista</button>' + (window.claude ? '' : '<button class="btn ghost" data-action="prod-download">' + (NATIVE ? 'Trimite .csv' : 'Descarcă .csv') + '</button>') + '</div></div>';
   }
-  return '<section id="prodSec"><div class="panel-head" style="margin-bottom:8px"><h3>Produse cu cod de bare' + (P.length ? ' (' + P.length + ')' : '') + '</h3><div class="row">' +
-      '<button class="btn soft sm" data-action="prod-import" aria-pressed="' + !!(io && io.mode === 'import') + '">Importă o listă</button>' +
-      (P.length ? '<button class="btn ghost sm" data-action="prod-export" aria-pressed="' + !!(io && io.mode === 'export') + '">Exportă</button>' : '') + '</div></div>' +
+  return '<section id="prodSec" class="lib-sec"><div class="qa-head"><h3>Produse scanate' + (P.length ? ' <span class="qa-n">' + P.length + '</span>' : '') + '</h3><div class="lib-tools">' +
+      '<button class="pill-btn" data-action="prod-import" aria-pressed="' + !!(io && io.mode === 'import') + '">Importă</button>' +
+      (P.length ? '<button class="pill-btn" data-action="prod-export" aria-pressed="' + !!(io && io.mode === 'export') + '">Exportă</button>' : '') + '</div></div>' +
     panel +
     (P.length > 8 ? '<label class="sr" for="prodQ">Caută în produse</label><input type="text" id="prodQ" class="prod-q" placeholder="Caută după nume sau cod" value="' + esc(S.prodQ || '') + '">' : '') +
     '<div id="prodList">' + prodListHtml() + '</div></section>';
@@ -1760,11 +1773,13 @@ function openFavSave(meal){
   if (!items.length) return;
   S.mini = { kind: 'fav', items };
   const def = { breakfast: 'Mic dejun obișnuit', lunch: 'Prânz obișnuit', snack: 'Gustare obișnuită', dinner: 'Cină obișnuită' }[meal] || 'Masă favorită';
+  const tot = sumItems(items);
   $('#miniCard').innerHTML = sheetHead('miniTitle', 'Salvează ca masă favorită', 'close-mini') +
-    '<label class="lbl" for="favName">Nume</label><input type="text" id="favName" value="' + esc(def) + '">' +
-    '<ul class="mini-list">' + items.map(it => '<li><span>' + esc(it.name) + '</span><b>' + fmt(it.kcal) + '</b><span></span></li>').join('') + '</ul>' +
-    '<p class="hint" style="margin-top:10px">O adaugi apoi dintr-o atingere, din „Rețete și favorite”.</p>' +
-    '<div class="row" style="margin-top:14px"><button class="btn primary wide" data-action="fav-confirm">Salvează</button></div>';
+    '<label class="sr" for="favName">Numele mesei</label><div class="mname"><input type="text" id="favName" value="' + esc(def) + '" autocomplete="off"></div>' +
+    '<div class="qa-list fav-items">' + items.map(it => '<div class="fi-row"><span class="qa-t"><b>' + esc(it.name) + '</b><small>' + (it.grams ? fmt(it.grams) + ' g, ' : '') + fmt(it.kcal) + ' kcal</small></span></div>').join('') +
+      '<div class="fi-row fi-total"><span class="qa-t"><b>Împreună</b></span><b class="fi-k">' + fmt(tot.kcal) + ' <small>kcal</small></b></div></div>' +
+    '<p class="hint" style="margin-top:10px">O adaugi apoi dintr-o atingere, din Adaugă sau din „Rețete și favorite”.</p>' +
+    '<div class="row ebtns"><button class="btn primary wide" data-action="fav-confirm">Salvează favorita</button></div>';
   showSheet('#miniSheet'); $('#miniTitle').focus({ preventScroll: true });
 }
 function confirmFav(){
@@ -1791,7 +1806,7 @@ function closeRecipe(){ if (S.rctl){ S.rctl.abort(); S.rctl = null; } closeSheet
 function renderRecipe(){
   const d = S.rdraft;
   $('#recipeCard').innerHTML = sheetHead('recTitle', d.id ? 'Editează rețeta' : 'Rețetă nouă', 'close-recipe') +
-    '<label class="lbl" for="rName">Nume</label><input type="text" id="rName" value="' + esc(d.name) + '" placeholder="ex: Ciorbă de pui">' +
+    '<label class="sr" for="rName">Numele rețetei</label><div class="mname"><input type="text" id="rName" value="' + esc(d.name) + '" placeholder="Numele rețetei, ex: Ciorbă de pui" autocomplete="off"></div>' +
     '<div class="edit-block"><label class="lbl" for="rText">Ingrediente</label>' +
       (S.aiOff ? '' : '<div class="dict' + (voiceOn() ? ' has-mic' : '') + '"><textarea id="rText" rows="3" placeholder="ex: 1 kg piept de pui, 2 cepe, 2 morcovi, 300 g orez, 3 linguri ulei"></textarea>' + micBtn('rText') + '</div><button class="btn soft" data-action="recipe-ai" id="rAiBtn">Calculează ingredientele</button>') +
       '<div class="status" id="rStatus" hidden><span class="spin" aria-hidden="true"></span><p>Claude calculează ingredientele…</p><button class="btn ghost sm" data-action="recipe-stop">Oprește</button></div><p class="err" id="rErr" hidden></p></div>' +
@@ -1805,20 +1820,20 @@ function renderRecipe(){
       '<div><label class="lbl" for="rmF">Grăsimi</label><input type="text" inputmode="decimal" id="rmF" placeholder="g"></div>' +
       '<div style="display:flex;align-items:flex-end"><button class="btn soft" style="width:100%" data-action="recipe-add-manual">Adaugă</button></div>' +
     '</div></details>' +
-    '<div class="tgrid" style="margin-top:14px"><div><label class="lbl" for="rServ">Porții</label><div class="unit"><input type="text" inputmode="numeric" id="rServ" value="' + d.servings + '"><em>porții</em></div></div>' +
-      '<div><label class="lbl" for="rWeight">Greutate gătită</label><div class="unit"><input type="text" inputmode="numeric" id="rWeight" value="' + (d.totalGrams || '') + '" placeholder="opțional"><em>g</em></div></div></div>' +
+    '<div class="mtiles rec-tiles"><label class="mtile"><span class="mt-l">Porții</span><span class="unit"><input type="text" inputmode="numeric" id="rServ" value="' + d.servings + '"><em>porții</em></span></label>' +
+      '<label class="mtile"><span class="mt-l">Greutate gătită</span><span class="unit"><input type="text" inputmode="numeric" id="rWeight" value="' + (d.totalGrams || '') + '" placeholder="—"><em>g</em></span></label></div>' +
     '<p class="hint">Cântărește mâncarea gătită (oala plină minus oala goală) și poți nota exact în grame. Fără greutate, notezi pe porții.</p>' +
     '<p class="ferr" id="recErr" style="margin-top:10px"></p>' +
-    '<div class="row">' + (d.id ? '<button class="btn danger-ghost" data-action="recipe-del">Șterge</button>' : '') + '<button class="btn primary wide" data-action="recipe-save">Salvează rețeta</button></div>';
+    '<div class="row ebtns">' + (d.id ? '<button class="btn danger-ghost" data-action="recipe-del">Șterge</button>' : '') + '<button class="btn primary wide" data-action="recipe-save">Salvează rețeta</button></div>';
   renderRecipeItems();
 }
 function renderRecipeItems(){
   const d = S.rdraft, el = $('#rItems'); if (!d || !el) return;
-  if (!d.items.length){ el.innerHTML = '<p class="empty" style="margin-top:12px">Încă nu ai ingrediente. Scrie-le mai sus' + (S.aiOff ? '' : ' și apasă „Calculează”') + ', sau adaugă-le manual.</p>'; return; }
+  if (!d.items.length){ el.innerHTML = '<div class="lib-empty"><span class="qa-ic">' + POT_SM + '</span><p>Încă nu ai ingrediente. ' + (S.aiOff ? 'Adaugă-le mai jos, cu caloriile de pe etichetă.' : 'Scrie-le mai sus și apasă „Calculează”, sau adaugă-le manual.') + '</p></div>'; return; }
   const s = sumItems(d.items);
-  el.innerHTML = '<ul class="mini-list" style="margin-top:12px">' + d.items.map((it, i) => '<li><span>' + esc(it.name) + '<small>' + fmt1(it.protein) + ' g proteine, ' + fmt1(it.carbs) + ' g glucide, ' + fmt1(it.fat) + ' g grăsimi</small>' + (it.warn ? '<small class="warn">Verifică: ' + esc(it.warn[0]) + '.</small>' : '') + '</span><b>' + fmt(it.kcal) + '</b><button class="del" data-action="recipe-rm" data-i="' + i + '" aria-label="Scoate ' + esc(it.name) + '">' + X_ICON + '</button></li>').join('') + '</ul>' +
-    '<div class="ptotal">' + mxHtml(s.protein, s.carbs, s.fat) + '<b>' + fmt(s.kcal) + ' kcal</b></div>' +
-    '<p class="hint" style="margin-top:6px">Pe porție: ' + fmt(s.kcal / d.servings) + ' kcal, ' + fmt1(s.protein / d.servings) + ' g proteine</p>';
+  el.innerHTML = '<div class="qa-list rec-items">' + d.items.map((it, i) => '<div class="fi-row' + (it.warn ? ' is-warn' : '') + '"><span class="qa-t"><b>' + esc(it.name) + '</b>' + mxHtml(it.protein, it.carbs, it.fat) + (it.warn ? '<small class="warn">Verifică: ' + esc(it.warn[0]) + '.</small>' : '') + '</span><b class="fi-k">' + fmt(it.kcal) + '</b><button class="lib-act" data-action="recipe-rm" data-i="' + i + '" aria-label="Scoate ' + esc(it.name) + '">' + X_ICON + '</button></div>').join('') +
+      '<div class="fi-row fi-total"><span class="qa-t"><b>Toată oala</b>' + mxHtml(s.protein, s.carbs, s.fat) + '</span><b class="fi-k">' + fmt(s.kcal) + ' <small>kcal</small></b></div></div>' +
+    '<p class="rec-per"><b>' + fmt(s.kcal / d.servings) + ' kcal</b> pe porție, ' + fmt1(s.protein / d.servings) + ' g proteine</p>';
 }
 async function recipeAi(){
   const ta = $('#rText'), err = $('#rErr'); const txt = ta ? ta.value.trim() : '';
@@ -1902,22 +1917,29 @@ function recipeCalc(){
   const f = byG ? q / r.totalGrams : q / r.servings;
   const grams = byG ? Math.round(q) : (r.totalGrams ? Math.round(r.totalGrams / r.servings * q) : null);
   const label = byG ? fmt(q) + ' g' : (q === 1 ? '1 porție' : fmt1(q) + ' porții');
-  return { r, name: r.name + ' · ' + label, grams, kcal: Math.round(s.kcal * f), protein: r1(s.protein * f), carbs: r1(s.carbs * f), fat: r1(s.fat * f) };
+  return { r, name: r.name + ', ' + label, grams, kcal: Math.round(s.kcal * f), protein: r1(s.protein * f), carbs: r1(s.carbs * f), fat: r1(s.fat * f) };
 }
 function renderRecipeLog(){
   const m = S.mini, v = recipeCalc(); if (!v) return;
   const r = v.r;
   $('#miniCard').innerHTML = sheetHead('miniTitle', r.name, 'close-mini') +
-    (r.totalGrams ? '<div class="seg" role="tablist" aria-label="Unitate" style="margin-bottom:14px"><button role="tab" data-action="rl-mode" data-mode="portion" aria-selected="' + (m.mode === 'portion') + '">Porții</button><button role="tab" data-action="rl-mode" data-mode="grams" aria-selected="' + (m.mode === 'grams') + '">Grame</button></div>' : '') +
+    '<div class="rl-total" id="rlPrev" aria-live="polite"></div>' +
+    '<div class="edit-block"><div class="rl-head"><span class="lbl">Cât ai mâncat</span>' +
+      (r.totalGrams ? '<div class="seg rl-unit" role="tablist" aria-label="Unitate"><button role="tab" data-action="rl-mode" data-mode="portion" aria-selected="' + (m.mode === 'portion') + '">Porții</button><button role="tab" data-action="rl-mode" data-mode="grams" aria-selected="' + (m.mode === 'grams') + '">Grame</button></div>' : '') + '</div>' +
     (m.mode === 'portion'
-      ? '<span class="lbl">Cât ai mâncat</span><div class="row">' + [[0.5, '½ porție'], [1, '1 porție'], [1.5, '1½'], [2, '2 porții']].map(x => '<button class="chip" data-action="rl-qty" data-q="' + x[0] + '" aria-pressed="' + (m.qty === x[0]) + '">' + x[1] + '</button>').join('') + '</div>'
-      : '<label class="lbl" for="rlG">Cât ai mâncat</label><div class="unit"><input type="text" inputmode="numeric" id="rlG" value="' + (m.qty || '') + '"><em>g</em></div>') +
-    '<div class="edit-block"><span class="lbl">Masa</span><div class="row" role="radiogroup" aria-label="Masa">' + MEALS.map(x => '<button class="chip" role="radio" data-action="rl-meal" data-meal="' + x.id + '" aria-checked="' + (x.id === m.meal) + '">' + x.t + '</button>').join('') + '</div></div>' +
-    '<div class="ptotal" id="rlPrev" style="margin-top:16px"></div>' +
-    '<div class="row" style="margin-top:14px"><button class="btn primary wide" data-action="rl-add">Adaugă în jurnal</button></div>';
+      ? '<div class="portion" role="group" aria-label="Porții">' + [[0.5, '½'], [1, '1'], [1.5, '1½'], [2, '2'], [3, '3']].map(x => '<button data-action="rl-qty" data-q="' + x[0] + '" aria-pressed="' + (m.qty === x[0]) + '" aria-label="' + (x[0] === 1 ? '1 porție' : String(x[0]).replace('.', ',') + ' porții') + '">' + x[1] + '</button>').join('') + '</div>'
+      : '<label class="sr" for="rlG">Grame</label><label class="mtile big rl-g"><span class="mt-l">Cât ai pus în farfurie</span><span class="unit"><input type="text" inputmode="numeric" id="rlG" value="' + (m.qty || '') + '"><em>g</em></span></label>') + '</div>' +
+    '<div class="edit-block"><span class="lbl">Masa</span><div class="meals" role="radiogroup" aria-label="Masa">' +
+      MEALS.map(x => '<button class="ml ml-' + x.id + '" role="radio" data-action="rl-meal" data-meal="' + x.id + '" aria-checked="' + (x.id === m.meal) + '"><span class="ml-ic">' + MEAL_ICON[x.id] + '</span><b>' + x.t + '</b></button>').join('') + '</div></div>' +
+    '<div class="row ebtns"><button class="btn act wide" data-action="rl-add" id="rlAdd">Adaugă la ' + mealName(m.meal).toLowerCase() + '</button></div>';
   updateRecipeLogPrev();
 }
-function updateRecipeLogPrev(){ const v = recipeCalc(), el = $('#rlPrev'); if (v && el) el.innerHTML = mxHtml(v.protein, v.carbs, v.fat) + '<b>' + fmt(v.kcal) + ' kcal</b>'; }
+function updateRecipeLogPrev(){
+  const v = recipeCalc(), el = $('#rlPrev'); if (!v || !el) return;
+  const m = S.mini, what = m.mode === 'grams' ? fmt(m.qty || 0) + ' g' : (m.qty === 1 ? 'o porție' : fmt1(m.qty) + ' porții');
+  el.innerHTML = '<p class="r-num"><b>' + fmt(v.kcal) + '</b><span>kcal</span></p><p class="rl-sub">Pentru ' + what + (v.grams && m.mode !== 'grams' ? ', cam ' + fmt(v.grams) + ' g' : '') + '</p>' + mxHtml(v.protein, v.carbs, v.fat);
+  const b = $('#rlAdd'); if (b) b.textContent = 'Adaugă la ' + mealName(m.meal).toLowerCase();
+}
 function addRecipeLog(){
   const v = recipeCalc(); if (!v || !(v.kcal > 0)){ toast('Alege cât ai mâncat.'); return; }
   const k = S.view, meal = S.mini.meal;
@@ -3533,11 +3555,11 @@ function renderSettingsInner(){
     about: () => ABOUT_HTML
   };
   const TARGETS_HTML = () => '<h3>Ținte zilnice</h3><p>' + (p.custom ? 'Ținte ajustate de tine.' : 'Calculate din interviu. Le poți ajusta manual.') + '</p>' +
-      '<div class="tgrid">' +
-        tField('tK', 'Calorii', T.kcal, 'kcal') + tField('tW', 'Apă', T.water, 'ml') +
-        tField('tP', 'Proteine', T.protein, 'g') + tField('tC', 'Glucide', T.carbs, 'g') + tField('tF', 'Grăsimi', T.fat, 'g') +
-      '</div><p class="hint" id="tSum"></p><p class="ferr" id="tErr"></p>' +
-      '<button class="btn primary" data-action="save-targets">Salvează țintele</button>';
+      '<div class="mtiles t-tiles">' +
+        tTile('tK', 'Calorii pe zi', T.kcal, 'kcal', 'big') + tTile('tW', 'Apă', T.water, 'ml', 'm-w') +
+        tTile('tP', 'Proteine', T.protein, 'g', 'm-p') + tTile('tC', 'Glucide', T.carbs, 'g', 'm-c') + tTile('tF', 'Grăsimi', T.fat, 'g', 'm-f') +
+      '</div><div class="t-split" id="tSplit" aria-hidden="true"></div><p class="t-sum" id="tSum"></p><p class="ferr" id="tErr"></p>' +
+      '<button class="btn primary wide" data-action="save-targets">Salvează țintele</button>';
   const sid = S.profSec && SEC[S.profSec] ? S.profSec : null;
   if (sid){
     const row = profGroups().flatMap(g => g[1]).find(r => r[0] === sid);
@@ -3578,10 +3600,16 @@ function profRow(r){
 function tField(id, label, val, unit){
   return '<div><label class="lbl" for="' + id + '">' + label + '</label><div class="unit"><input type="text" inputmode="numeric" id="' + id + '" value="' + esc(val) + '"><em>' + unit + '</em></div></div>';
 }
+const tTile = (id, label, val, unit, cls) => '<label class="mtile ' + (cls || '') + '"><span class="mt-l">' + label + '</span><span class="unit"><input type="text" inputmode="numeric" id="' + id + '" value="' + esc(val) + '"><em>' + unit + '</em></span></label>';
+// How the calories split between protein, carbs and fat, and whether they add up to the target
 function updateTargetSum(){
   const p = num($('#tP').value) || 0, c = num($('#tC').value) || 0, f = num($('#tF').value) || 0, k = num($('#tK').value) || 0;
-  const mk = Math.round(p*4 + c*4 + f*9);
-  $('#tSum').textContent = 'Macronutrienții însumează ' + fmt(mk) + ' kcal' + (k ? (Math.abs(mk - k) > 50 ? ', față de ținta de ' + fmt(k) + ' kcal.' : ', potrivit cu ținta.') : '.');
+  const mk = Math.round(p*4 + c*4 + f*9), parts = [['p', p * 4, 'proteine'], ['c', c * 4, 'glucide'], ['f', f * 9, 'grăsimi']];
+  const sp = $('#tSplit');
+  if (sp) sp.innerHTML = mk > 0 ? parts.map(x => '<i class="ts-' + x[0] + '" style="width:' + (x[1] / mk * 100).toFixed(1) + '%"></i>').join('') : '';
+  const pct = mk > 0 ? parts.map(x => '<span><i class="dot ' + x[0] + '"></i>' + Math.round(x[1] / mk * 100) + '% ' + x[2] + '</span>').join('') : '';
+  const off = k && Math.abs(mk - k) > 50;
+  $('#tSum').innerHTML = (pct ? '<span class="t-pct">' + pct + '</span>' : '') + '<span class="t-msg' + (off ? ' off' : '') + '">Din macronutrienți ies ' + fmt(mk) + ' kcal' + (k ? (off ? ', față de ținta de ' + fmt(k) + ' kcal.' : ', cât ținta.') : '.') + '</span>';
 }
 function saveTargets(){
   const k = Math.round(num($('#tK').value)), w = Math.round(num($('#tW').value)), p = Math.round(num($('#tP').value)), c = Math.round(num($('#tC').value)), f = Math.round(num($('#tF').value));
@@ -4070,7 +4098,7 @@ function bindStatic(){
         renderRecipeLog(); break;
       }
       case 'rl-qty': S.mini.qty = Number(b.dataset.q); $$('[data-action="rl-qty"]').forEach(x => x.setAttribute('aria-pressed', String(Number(x.dataset.q) === S.mini.qty))); updateRecipeLogPrev(); break;
-      case 'rl-meal': S.mini.meal = b.dataset.meal; $$('[data-action="rl-meal"]').forEach(x => x.setAttribute('aria-checked', String(x.dataset.meal === S.mini.meal))); break;
+      case 'rl-meal': S.mini.meal = b.dataset.meal; $$('[data-action="rl-meal"]').forEach(x => x.setAttribute('aria-checked', String(x.dataset.meal === S.mini.meal))); updateRecipeLogPrev(); buzz('tick'); break;
       case 'rl-add': addRecipeLog(); break;
       case 'report-new': makeReport(); break;
       case 'report-open': openReport(); break;

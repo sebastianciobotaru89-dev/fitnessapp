@@ -39,7 +39,11 @@ function seed(){
 
 async function connect(){
   for (let i = 0; i < 40; i++){
-    const m = sh('adb shell cat /proc/net/unix').match(/@(webview_devtools_remote_\d+)/);
+    // the app's own web view: after a restart an old socket can linger, so match the running process
+    let pid = ''; try { pid = sh(`adb shell pidof ${PKG}`).trim().split(/\s+/)[0]; } catch {}
+    const socks = sh('adb shell cat /proc/net/unix').match(/@webview_devtools_remote_\d+/g) || [];
+    const mine = socks.find(x => pid && x.endsWith('_' + pid));
+    const m = mine ? [mine, mine.slice(1)] : null;
     if (m){
       try { sh('adb forward --remove tcp:9222'); } catch {}
       sh(`adb forward tcp:9222 localabstract:${m[1]}`);
@@ -196,8 +200,10 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   page.close(); page = await connect(); await sleep(1500);
   ok('datele rămân după închiderea aplicației', await page.ev(`!document.querySelector('#hero.is-empty') && document.querySelectorAll('#mealsToday .mt.has').length === 2`));
   // iOS and Android can clear a web view's storage; the native copy brings the journal back
+  // like the OS clearing it: empty the web view's storage, then open the app again from scratch
   await page.ev(`localStorage.clear(); true`); await sleep(300);
-  await page.send('Page.reload', {}); await sleep(3000);
+  sh(`adb shell am force-stop ${PKG}`); start(); await sleep(6000);
+  page.close(); page = await connect(); await sleep(1500);
   const restored = `!!JSON.parse(localStorage.getItem('mt-local') || 'null') && !document.querySelector('#hero.is-empty')`;
   let back2 = false;
   for (let i = 0; i < 10 && !back2; i++){ try { back2 = await page.ev(restored); } catch {} if (!back2) await sleep(1000); }

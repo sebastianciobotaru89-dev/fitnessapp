@@ -1357,3 +1357,113 @@ details.how p{margin:0;padding:0 16px 14px;font-size:13px;color:var(--muted);lin
 .r-empty{padding:4px 0 2px}
 .r-empty b{display:block;font-family:var(--f-display);font-stretch:100%;font-weight:780;font-size:21px;letter-spacing:-.015em}
 .r-empty p{margin:6px 0 0;font-size:14px;color:var(--muted);max-width:40ch}
+
+/* ================= Rețete și favorite, the recipe editor and adding from a recipe ================= */
+#miniCard .mname,#recipeCard .mname{margin-bottom:14px}
+#miniCard .meals{margin:0}
+#miniCard .ml,#recipeCard .ml{box-shadow:none;background:var(--sunk)}
+#miniCard .ml[aria-checked="true"]{background:var(--mc)}
+.lib-to{display:flex;align-items:center;gap:8px;margin:-4px 0 18px;font-size:14px;color:var(--muted)}
+.ml-dot{width:10px;height:10px;border-radius:50%;background:var(--mi);flex:none}
+.lib-sec{margin-bottom:22px}
+.lib-sec .qa-head{margin-left:2px;margin-right:2px}
+.qa-link.with-ic{display:inline-flex;align-items:center;gap:4px}
+.qa-link.with-ic svg{width:16px;height:16px}
+.qa-n{display:inline-grid;place-items:center;min-width:24px;height:22px;padding:0 7px;margin-left:4px;border-radius:99px;background:var(--sunk);color:var(--muted);font-family:var(--f-body);font-size:12.5px;font-weight:700;vertical-align:2px}
+.lib-tools{display:flex;gap:6px}
+.pill-btn{border:0;border-radius:99px;padding:7px 13px;background:var(--sunk);color:var(--ink);font:inherit;font-size:13.5px;font-weight:650;cursor:pointer}
+.pill-btn[aria-pressed="true"]{background:var(--kcal-soft);color:var(--kcal)}
+.sheet .qa-list{box-shadow:none;background:var(--sunk)}
+:root[data-theme="dark"] .sheet .qa-list{border-color:transparent}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .sheet .qa-list{border-color:transparent}}
+.sheet .qa-row + .qa-row,.sheet .lib-row + .lib-row,.sheet .fi-row + .fi-row{border-top-color:color-mix(in srgb,var(--ink) 8%,transparent)}
+.lib-row{display:flex;align-items:center;gap:4px;padding:0 10px 0 0;min-height:62px}
+.lib-row + .lib-row{border-top:1px solid var(--line)}
+.lib-main{display:flex;align-items:center;gap:12px;flex:1;min-width:0;padding:10px 6px 10px 14px;border:0;background:none;color:var(--ink);font:inherit;text-align:left;cursor:pointer;border-radius:16px}
+div.lib-main{cursor:default}
+button.lib-main:active{background:color-mix(in srgb,var(--ink) 5%,transparent)}
+.lib-act{flex:none;width:36px;height:36px;border:0;border-radius:50%;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer}
+.lib-act:active{background:color-mix(in srgb,var(--ink) 8%,transparent)}
+.lib-row .qa-plus{border:0;cursor:pointer}
+.lib-recipes .qa-ic{background:var(--m2);color:var(--m2i)}
+.lib-favs .qa-ic{background:var(--m1);color:var(--m1i)}
+.lib-prods .qa-ic{background:var(--surface);color:var(--muted)}
+.lib-empty{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:20px;background:var(--sunk)}
+.lib-empty p{margin:0;font-size:14px;line-height:1.45;color:var(--muted)}
+.lib-none{margin:4px 2px;font-size:14px;color:var(--muted)}
+.lib-sec .io{margin-bottom:12px}
+.lib-sec .prod-q{margin-bottom:10px}
+/* foods inside a favourite or a recipe */
+.fi-row{display:flex;align-items:center;gap:10px;min-height:56px;padding:9px 8px 9px 16px}
+.fi-row + .fi-row{border-top:1px solid var(--line)}
+.fi-row .qa-t .mx{margin-top:2px;font-size:12.5px}
+.fi-row.is-warn{background:color-mix(in srgb,var(--over) 9%,transparent)}
+.fi-row .warn{color:var(--over);font-size:12.5px;white-space:normal}
+.fi-k{flex:none;font-family:var(--f-display);font-stretch:96%;font-weight:780;font-size:17px;letter-spacing:-.01em;font-variant-numeric:tabular-nums;padding-right:6px}
+.fi-k small{font-family:var(--f-body);font-size:12px;font-weight:600;color:var(--muted)}
+.fi-total{background:color-mix(in srgb,var(--ink) 4%,transparent)}
+.fi-total .qa-t b{font-weight:750}
+.rec-items{margin-top:14px}
+.rec-per{margin:10px 4px 0;font-size:14px;color:var(--muted)}
+.rec-per b{color:var(--ink);font-weight:750}
+.rec-tiles{margin-top:16px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.rec-tiles .mtile,.rec-tiles .mtile:nth-child(2){grid-column:span 1}
+#recipeCard .lib-empty{margin-top:14px}
+#recipeCard details.manual{margin-top:14px}
+/* adding from a recipe */
+.rl-total{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:16px 18px;margin-bottom:6px;border-radius:22px;background:var(--kcal-soft)}
+.rl-total .r-num b{font-size:44px}
+.rl-sub{margin:0;font-size:14px;color:var(--ink);opacity:.75}
+.rl-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.rl-head .lbl{margin:0}
+.rl-unit{padding:3px;border-radius:12px}
+.rl-unit button{padding:6px 12px;font-size:13px;border-radius:9px}
+.rl-g{display:flex}
+.rl-g input[type="text"]{font-size:30px}
+#recipeCard details.manual{border:0;border-radius:18px;background:var(--sunk);padding:0}
+#recipeCard details.manual > summary{cursor:pointer;list-style:none;padding:14px 16px;font-weight:650;font-size:14.5px;display:flex;align-items:center;justify-content:space-between}
+#recipeCard details.manual > summary::-webkit-details-marker{display:none}
+#recipeCard details.manual > summary::after{content:"";width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg) translate(-2px,-2px);transition:transform .2s}
+#recipeCard details.manual[open] > summary::after{transform:rotate(-135deg) translate(-2px,-2px)}
+#recipeCard details.manual .mgrid{padding:0 14px 14px}
+#recipeCard details.manual input{background:var(--surface)}
+
+/* ================= Țintele zilnice ================= */
+.t-tiles{margin-top:6px}
+.mtile.m-w{--c:var(--water)}
+.mtile.m-w .mt-l::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--c)}
+.t-split{display:flex;gap:3px;height:10px;margin:16px 0 10px;border-radius:99px;overflow:hidden;background:var(--sunk)}
+.t-split i{display:block;height:100%;transition:width .35s cubic-bezier(.2,.8,.2,1)}
+.t-split i:first-child{border-radius:99px 0 0 99px} .t-split i:last-child{border-radius:0 99px 99px 0}
+.ts-p{background:var(--prot)} .ts-c{background:var(--carb)} .ts-f{background:var(--fat)}
+.t-sum{display:flex;flex-direction:column;gap:6px;margin:0 2px 16px;font-size:13.5px;color:var(--muted)}
+.t-pct{display:flex;flex-wrap:wrap;gap:4px 14px;color:var(--ink);font-weight:600}
+.t-pct span{display:inline-flex;align-items:center;gap:6px}
+.t-msg.off{color:var(--over);font-weight:600}
+
+/* ================= Serii și provocări: the streak first, what's in progress, then the medals ================= */
+.b-hero{display:flex;align-items:center;gap:16px;padding:16px 18px;border-radius:22px;background:var(--sunk);margin-bottom:20px}
+.b-hero.on{background:color-mix(in srgb,var(--dot, #FF6A4D) 13%,var(--surface))}
+.b-flame{flex:none;width:58px;height:58px;border-radius:18px;display:grid;place-items:center;background:var(--surface);color:var(--muted)}
+.b-hero.on .b-flame{background:var(--dot, #FF6A4D);color:#FFFFFF;box-shadow:0 8px 20px -8px color-mix(in srgb,var(--dot, #FF6A4D) 70%,transparent)}
+.b-hero .r-num b{font-size:40px}
+.b-hero .r-sub{margin-top:4px;font-size:13px}
+.b-head{margin:0 2px 8px}
+.b-doing{margin-bottom:22px}
+.b-row{display:flex;align-items:center;gap:12px;padding:12px 14px 12px 14px}
+.b-row + .b-row{border-top:1px solid color-mix(in srgb,var(--ink) 8%,transparent)}
+.b-row .qa-ic{background:var(--surface);color:var(--kcal)}
+.b-row .bbar{display:block;height:6px;margin-top:8px;border-radius:99px;background:var(--surface);overflow:hidden}
+.b-row .bbar i{display:block;height:100%;border-radius:99px;background:var(--kcal)}
+.b-row .bpr{flex:none;align-self:flex-start;margin-top:2px;font-size:12.5px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums}
+.medals{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.medal{display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 6px 12px;border-radius:20px;background:var(--sunk);text-align:center}
+.medal .m-ic{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:var(--mc);color:var(--mi);box-shadow:inset 0 0 0 3px var(--surface),0 0 0 1.5px color-mix(in srgb,var(--mi) 35%,transparent)}
+.medal.pt-1{--mc:var(--m1);--mi:var(--m1i)} .medal.pt-2{--mc:var(--m2);--mi:var(--m2i)} .medal.pt-3{--mc:var(--m3);--mi:var(--m3i)} .medal.pt-4{--mc:var(--m4);--mi:var(--m4i)}
+.medal b{font-size:12.5px;font-weight:650;line-height:1.25;color:var(--ink)}
+.sheet:not([hidden]) .medal{animation:tileIn .45s cubic-bezier(.2,.8,.2,1) both}
+.sheet:not([hidden]) .medal:nth-child(n+2){animation-delay:.04s} .sheet:not([hidden]) .medal:nth-child(n+4){animation-delay:.08s}
+.sheet:not([hidden]) .medal:nth-child(n+7){animation-delay:.12s} .sheet:not([hidden]) .medal:nth-child(n+10){animation-delay:.16s}
+@media (prefers-reduced-motion: reduce){.sheet:not([hidden]) .medal{animation:none}}
+.t-tiles .mtile.big,.t-tiles .mtile.m-w,.t-tiles .mtile.m-w:nth-child(2){grid-column:span 3}
+#settingsCard [data-action="save-targets"]{width:100%}
