@@ -2757,6 +2757,7 @@ function openLink(url, tries){
   const m = /^portia:\/\/([a-z]+)/i.exec(String(url || '')); if (!m) return;
   if (!S.loaded){ if ((tries || 0) < 40) setTimeout(() => openLink(url, (tries || 0) + 1), 150); return; }
   const where = m[1].toLowerCase();
+  console.info('[portia] deschid ' + where);
   $$('.sheet:not(.ghost)').forEach(sh => { if (!sh.hidden && sh.id && sh.id !== 'setupSheet' && sh.id !== 'consentSheet') closeSheet('#' + sh.id); });
   if (S.view !== todayKey()) setDay(todayKey());
   if (!S.profile || where === 'azi'){ go('azi'); return; }

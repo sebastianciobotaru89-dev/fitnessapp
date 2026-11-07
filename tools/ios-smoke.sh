@@ -87,14 +87,15 @@ run(){
   local data; data=$(limit 30 xcrun simctl get_app_container "$udid" "$BUNDLE" data 2>/dev/null)
   if [ -n "$data" ] && plutil -p "$data/Library/Preferences/group.com.portia.app.plist" 2>/dev/null | grep -q '"eaten"'; then note "$name: aplicația a trimis cifrele zilei către widget"
   else echo "::warning::$name: nu găsesc cifrele pentru widget (fără semnare, simulatorul poate ține grupul altundeva)"; fi
-  limit 30 xcrun simctl openurl "$udid" "portia://scan"; sleep 5
+  limit 30 xcrun simctl openurl "$udid" "portia://scan" || err "$name: nu pot deschide portia://scan"; sleep 8
   limit 60 xcrun simctl io "$udid" screenshot "$OUT/ios-$name-4-link-scanare.png" >/dev/null
   if limit 30 xcrun simctl spawn "$udid" launchctl list | grep -q "$BUNDLE"; then note "$name: aplicația rulează"; else err "$name: aplicația nu mai rulează"; fi
   consola "$udid" "$OUT/ios-$name-consola.txt"
   if grep -E "\[error\]|Uncaught|TypeError|ReferenceError|SyntaxError" "$OUT/ios-$name-consola.txt" | grep -v favicon > "$OUT/ios-$name-erori.txt"; then
     err "$name: erori JavaScript: $(head -3 "$OUT/ios-$name-erori.txt" | tr '\n' ' ')"
   else note "$name: nicio eroare JavaScript"; fi
-  grep -E "⚡️|Capacitor" "$OUT/ios-$name-consola.txt" | head -15
+  if grep -q "\[portia\] deschid scan" "$OUT/ios-$name-consola.txt"; then note "$name: portia://scan a deschis scanarea"; else err "$name: portia://scan nu a ajuns la aplicație"; fi
+  grep -E "⚡️|Capacitor|\[portia\]" "$OUT/ios-$name-consola.txt" | head -15
   limit 60 xcrun simctl shutdown "$udid" 2>/dev/null
 }
 

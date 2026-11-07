@@ -48,11 +48,13 @@ struct DialView: View {
             let ring = fig.isOver ? t.over : t.kcal
             ZStack {
                 Circle().stroke(t.track, lineWidth: line)
+                if frac > 0.004 {
                 Circle()
-                    .trim(from: 0, to: max(0.001, frac))
+                    .trim(from: 0, to: frac)
                     .stroke(AngularGradient(gradient: Gradient(colors: [ring.opacity(0.45), ring]), center: .center, startAngle: .degrees(0), endAngle: .degrees(max(1, 360 * frac))),
                             style: StrokeStyle(lineWidth: line, lineCap: .round))
                     .rotationEffect(.degrees(-90))
+                }
                 Circle().fill(t.dot)
                     .frame(width: line * 1.25, height: line * 1.25)
                     .overlay(Circle().fill(Color.white).frame(width: line * 0.45, height: line * 0.45))
