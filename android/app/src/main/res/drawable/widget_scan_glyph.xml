@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Barcode inside corner brackets, the same mark as on the Adaugă screen -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp" android:height="32dp" android:viewportWidth="32" android:viewportHeight="32">
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="2.6" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M3,10V3h7M22,3h7v7M3,22v7h7M22,29h7v-7M10,10v12M14,10v12M17,10v12M21,10v12" />
+</vector>

@@ -50,13 +50,15 @@ android/  ios/          proiectele native, create de workflow
 tools/build-www.mjs     adună fișierele aplicației în www/
 ```
 
-În aplicația nativă: vibrații la acțiuni, bara de stare care urmează tema, butonul Înapoi pe Android, tastatura care ascunde bara de taburi, partajare pentru fișierul .csv, o copie a jurnalului în memoria nativă a telefonului și două coloane pe tabletă. Temele plătite și oferta apar abia când plata prin App Store și Google Play e gata.
+În aplicația nativă: widgeturi pentru ecranul principal și ecranul blocat (caloriile rămase, macronutrienții și un buton care deschide scanarea codului de bare), vibrații la acțiuni, bara de stare care urmează tema, butonul Înapoi pe Android, tastatura care ascunde bara de taburi, partajare pentru fișierul .csv, o copie a jurnalului în memoria nativă a telefonului și două coloane pe tabletă. Temele plătite și oferta apar abia când plata prin App Store și Google Play e gata.
 
 Workflow-uri:
 
 - **Aplicația nativă – creare proiecte iOS și Android** (manual): creează sau actualizează `ios/` și `android/`, iconițele și `package-lock.json`. Rulează-l după ce schimbi `package.json`.
 - **Aplicația nativă – construire de test** (la fiecare push): construiește APK-ul de test și versiunea pentru simulatorul iOS, apoi deschide aplicația pe un telefon Android emulat, pe un iPhone și pe un iPad simulat, face capturi și verifică să nu apară erori. APK-ul se descarcă din pagina rulării, la **Artifacts**, iar capturile apar și pe ramura `capturi`.
 - **Aplicația nativă – versiune pentru magazine** (manual): `.aab` semnat pentru Google Play și build semnat trimis în TestFlight. Folosește doar cheile din Settings → Secrets and variables → Actions.
+
+Widgeturile stau în `ios/App/PortiaWidget/` (SwiftUI) și în `android/app/src/main/java/com/portia/app/` (`PortiaWidgets.java`, cu machetele din `res/layout/widget_*.xml`). Aplicația le trimite cifrele zilei prin pluginul `PortiaWidget`, iar ele deschid aplicația cu `portia://azi` sau `portia://scan`. Ținta widgetului iOS se adaugă în proiectul Xcode cu `python3 tools/add-ios-widget.py`, care nu face nimic dacă e deja acolo. La fiecare construire de test, widgeturile se desenează și apar în capturi (`ios-widgeturi-*.png`, `android-11-widgeturi.png`).
 
 Pentru fișele din magazine, `assets/store/` are capturile la dimensiunile cerute, iconița pentru Google Play și grafica de 1024 × 500. Le refaci cu `python3 tools/make-store-screens.py` și `python3 tools/make-store-graphics.py`.
 

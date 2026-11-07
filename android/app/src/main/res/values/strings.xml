@@ -4,4 +4,10 @@
     <string name="title_activity_main">Porția</string>
     <string name="package_name">com.portia.app</string>
     <string name="custom_url_scheme">com.portia.app</string>
+    <string name="widget_day">Ziua ta</string>
+    <string name="widget_day_desc">Câte calorii îți mai rămân azi</string>
+    <string name="widget_medium">Ziua ta, cu macronutrienți</string>
+    <string name="widget_medium_desc">Caloriile rămase, proteinele, glucidele și grăsimile de azi</string>
+    <string name="widget_scan">Scanează</string>
+    <string name="widget_scan_desc">Deschide Porția direct pe scanarea codului de bare</string>
 </resources>

@@ -31,6 +31,8 @@ jobs:
         run: '[ -d android ] || npx cap add android'
       - name: Creez proiectul iOS
         run: '[ -d ios ] || npx cap add ios'
+      - name: Adaug widgetul iOS în proiect
+        run: python3 tools/add-ios-widget.py
       - name: Desenez iconițele și ecranul de pornire
         run: npx capacitor-assets generate --ios --android --iconBackgroundColor '#11874F' --iconBackgroundColorDark '#0A110E' --splashBackgroundColor '#EFF4F1' --splashBackgroundColorDark '#0A110E'
       - name: Sincronizez

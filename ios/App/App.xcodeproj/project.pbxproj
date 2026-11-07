@@ -17,7 +17,37 @@
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
 		A1B2C3D42F00000100000001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D42F00000100000002 /* PrivacyInfo.xcprivacy */; };
+		B0B7A1D00000000000000002 /* PortiaViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0B7A1D00000000000000001 /* PortiaViewController.swift */; };
+		B0B7A1D00000000000000004 /* PortiaWidgetPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0B7A1D00000000000000003 /* PortiaWidgetPlugin.swift */; };
+		B0B7A1D0000000000000000C /* WidgetData.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0B7A1D00000000000000007 /* WidgetData.swift */; };
+		B0B7A1D0000000000000000D /* WidgetViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0B7A1D00000000000000008 /* WidgetViews.swift */; };
+		B0B7A1D0000000000000000E /* PortiaWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0B7A1D00000000000000009 /* PortiaWidget.swift */; };
+		B0B7A1D00000000000000010 /* PortiaWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B0B7A1D0000000000000000F /* PortiaWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		B0B7A1D0000000000000001A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B0B7A1D00000000000000015;
+			remoteInfo = PortiaWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		B0B7A1D00000000000000011 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				B0B7A1D00000000000000010 /* PortiaWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
@@ -32,6 +62,15 @@
 		9582B6822FE993A50072D4E8 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
 		A1B2C3D42F00000100000002 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		B0B7A1D00000000000000001 /* PortiaViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortiaViewController.swift; sourceTree = "<group>"; };
+		B0B7A1D00000000000000003 /* PortiaWidgetPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortiaWidgetPlugin.swift; sourceTree = "<group>"; };
+		B0B7A1D00000000000000005 /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
+		B0B7A1D00000000000000007 /* WidgetData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetData.swift; sourceTree = "<group>"; };
+		B0B7A1D00000000000000008 /* WidgetViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetViews.swift; sourceTree = "<group>"; };
+		B0B7A1D00000000000000009 /* PortiaWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortiaWidget.swift; sourceTree = "<group>"; };
+		B0B7A1D0000000000000000A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B0B7A1D0000000000000000B /* PortiaWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PortiaWidget.entitlements; sourceTree = "<group>"; };
+		B0B7A1D0000000000000000F /* PortiaWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PortiaWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -40,6 +79,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B0B7A1D00000000000000013 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -52,6 +98,7 @@
 				958DCC722DB07C7200EA8C5F /* debug.xcconfig */,
 				504EC3061FED79650016851F /* App */,
 				504EC3051FED79650016851F /* Products */,
+				B0B7A1D00000000000000006 /* PortiaWidget */,
 			);
 			sourceTree = "<group>";
 		};
@@ -59,6 +106,7 @@
 			isa = PBXGroup;
 			children = (
 				504EC3041FED79650016851F /* App.app */,
+				B0B7A1D0000000000000000F /* PortiaWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -76,8 +124,23 @@
 				A1B2C3D42F00000100000002 /* PrivacyInfo.xcprivacy */,
 				2FAD9762203C412B000D30F8 /* config.xml */,
 				50B271D01FEDC1A000F3C39B /* public */,
+				B0B7A1D00000000000000001 /* PortiaViewController.swift */,
+				B0B7A1D00000000000000003 /* PortiaWidgetPlugin.swift */,
+				B0B7A1D00000000000000005 /* App.entitlements */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		B0B7A1D00000000000000006 /* PortiaWidget */ = {
+			isa = PBXGroup;
+			children = (
+				B0B7A1D00000000000000009 /* PortiaWidget.swift */,
+				B0B7A1D00000000000000008 /* WidgetViews.swift */,
+				B0B7A1D00000000000000007 /* WidgetData.swift */,
+				B0B7A1D0000000000000000A /* Info.plist */,
+				B0B7A1D0000000000000000B /* PortiaWidget.entitlements */,
+			);
+			path = PortiaWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -90,10 +153,12 @@
 				504EC3001FED79650016851F /* Sources */,
 				504EC3011FED79650016851F /* Frameworks */,
 				504EC3021FED79650016851F /* Resources */,
+				B0B7A1D00000000000000011 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				B0B7A1D00000000000000019 /* PBXTargetDependency */,
 			);
 			name = App;
 			packageProductDependencies = (
@@ -102,6 +167,23 @@
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
 			productType = "com.apple.product-type.application";
+		};
+		B0B7A1D00000000000000015 /* PortiaWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B0B7A1D00000000000000018 /* Build configuration list for PBXNativeTarget "PortiaWidget" */;
+			buildPhases = (
+				B0B7A1D00000000000000012 /* Sources */,
+				B0B7A1D00000000000000013 /* Frameworks */,
+				B0B7A1D00000000000000014 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PortiaWidget;
+			productName = PortiaWidget;
+			productReference = B0B7A1D0000000000000000F /* PortiaWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -112,6 +194,9 @@
 				LastSwiftUpdateCheck = 0920;
 				LastUpgradeCheck = 0920;
 				TargetAttributes = {
+					B0B7A1D00000000000000015 = {
+						CreatedOnToolsVersion = 16.0;
+					};
 					504EC3031FED79650016851F = {
 						CreatedOnToolsVersion = 9.2;
 						LastSwiftMigration = 1100;
@@ -136,6 +221,7 @@
 			projectRoot = "";
 			targets = (
 				504EC3031FED79650016851F /* App */,
+				B0B7A1D00000000000000015 /* PortiaWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -155,6 +241,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B0B7A1D00000000000000014 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -164,10 +257,30 @@
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
+				B0B7A1D00000000000000002 /* PortiaViewController.swift in Sources */,
+				B0B7A1D00000000000000004 /* PortiaWidgetPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B0B7A1D00000000000000012 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B0B7A1D0000000000000000E /* PortiaWidget.swift in Sources */,
+				B0B7A1D0000000000000000D /* WidgetViews.swift in Sources */,
+				B0B7A1D0000000000000000C /* WidgetData.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B0B7A1D00000000000000019 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B0B7A1D00000000000000015 /* PortiaWidget */;
+			targetProxy = B0B7A1D0000000000000001A /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
 		504EC30B1FED79650016851F /* Main.storyboard */ = {
@@ -302,6 +415,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 958DCC722DB07C7200EA8C5F /* debug.xcconfig */;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -324,6 +438,7 @@
 		504EC3181FED79650016851F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -336,6 +451,54 @@
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.portia.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		B0B7A1D00000000000000016 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PortiaWidget/PortiaWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PortiaWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.portia.app.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B0B7A1D00000000000000017 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PortiaWidget/PortiaWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PortiaWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.portia.app.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -359,6 +522,15 @@
 			buildConfigurations = (
 				504EC3171FED79650016851F /* Debug */,
 				504EC3181FED79650016851F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B0B7A1D00000000000000018 /* Build configuration list for PBXNativeTarget "PortiaWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B0B7A1D00000000000000016 /* Debug */,
+				B0B7A1D00000000000000017 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -18,6 +18,9 @@ on:
       - 'package-lock.json'
       - 'capacitor.config.json'
       - 'tools/build-www.mjs'
+      - 'tools/android-smoke.mjs'
+      - 'tools/ios-smoke.sh'
+      - 'tools/render-widgets.swift'
       - '.github/workflows/native-build.yml'
   workflow_dispatch:
 
@@ -119,6 +122,13 @@ jobs:
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -40
           test -d build/Build/Products/Debug-iphonesimulator/App.app
+          test -d build/Build/Products/Debug-iphonesimulator/App.app/PlugIns/PortiaWidget.appex && echo "::notice::Widgetul e inclus în aplicație."
+      - name: Desenez widgeturile iOS
+        if: steps.has.outputs.ok
+        run: |
+          mkdir -p smoke
+          swiftc -parse-as-library -swift-version 5 tools/render-widgets.swift ios/App/PortiaWidget/WidgetData.swift ios/App/PortiaWidget/WidgetViews.swift -o "$RUNNER_TEMP/render-widgets"
+          "$RUNNER_TEMP/render-widgets" smoke
       - name: Deschid aplicația pe un iPhone și un iPad simulate
         if: steps.has.outputs.ok
         timeout-minutes: 30

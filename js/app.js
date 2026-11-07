@@ -336,8 +336,16 @@ const NATIVE = !!(CapN && typeof CapN.isNativePlatform === 'function' && CapN.is
 const PLATFORM = NATIVE ? CapN.getPlatform() : 'web';
 // Paid themes and the offer stay out of the store apps until App Store and Google Play billing is in place
 const SELL = !NATIVE;
+// Plugins that live in the app's own native code may be missing from Capacitor.Plugins; registerPlugin reaches them anyway
+const natReg = {};
+function natPlugin(name){
+  if (!NATIVE) return null;
+  if (CapN.Plugins && CapN.Plugins[name]) return CapN.Plugins[name];
+  if (typeof CapN.registerPlugin !== 'function') return null;
+  try { return natReg[name] || (natReg[name] = CapN.registerPlugin(name)); } catch (e) { return null; }
+}
 function nat(plugin, method, args){
-  const p = NATIVE && CapN.Plugins ? CapN.Plugins[plugin] : null;
+  const p = natPlugin(plugin);
   if (!p || typeof p[method] !== 'function') return Promise.resolve(null);
   try { return Promise.resolve(p[method](args)).then(r => r == null ? true : r, () => null); } catch (e) { return Promise.resolve(null); }
 }
@@ -823,7 +831,7 @@ function applyTheme(id){
   const mk = $('#brandMark'); if (mk) mk.innerHTML = logoSvg(id, 40);
   const fx = THEMES[id].logo.fx;
   if (fx) document.documentElement.setAttribute('data-fx', fx); else document.documentElement.removeAttribute('data-fx');
-  updateSnow(); updateIce(); updateHud(); syncThemeColor();
+  updateSnow(); updateIce(); updateHud(); syncThemeColor(); widgetSync();
 }
 // A paid theme loads only for the owner; anyone else falls back to the default theme
 const savedSkin = () => { const id = (S.profile && S.profile.skin) || lsGet('portia-skin') || 'proaspat'; return THEMES[id] && (THEMES[id].free || S.isOwner) ? id : 'proaspat'; };
@@ -2699,8 +2707,41 @@ function toast(msg, label, fn, opt){
 }
 
 /* ---------- render ---------- */
-function renderAll(){ renderSync(); renderHeader(); renderHero(); renderMeals(); renderTabs(); renderRecent(); renderPreview(); renderIdeas(); renderDiary(); renderWater(); renderFast(); renderWeight(); renderHistory(); }
-function renderDayParts(){ renderHeader(); renderHero(); renderRecent(); renderManualFit(); renderDiary(); renderWater(); renderFast(); renderWeight(); renderHistory(); renderPreview(); }
+function renderAll(){ renderSync(); renderHeader(); renderHero(); renderMeals(); renderTabs(); renderRecent(); renderPreview(); renderIdeas(); renderDiary(); renderWater(); renderFast(); renderWeight(); renderHistory(); widgetSync(); }
+function renderDayParts(){ renderHeader(); renderHero(); renderRecent(); renderManualFit(); renderDiary(); renderWater(); renderFast(); renderWeight(); renderHistory(); renderPreview(); widgetSync(); }
+// ---------- home screen and lock screen widgets ----------
+// The store app hands its widgets today's figures, tomorrow's targets and the theme's colours.
+// They stay on the phone: iOS keeps them in the app's own App Group, Android in the app's preferences.
+let widgetT = 0, widgetLast = '';
+function widgetSync(){
+  if (!NATIVE || !S.loaded) return;
+  clearTimeout(widgetT);
+  widgetT = setTimeout(() => {
+    const k = todayKey(), n = addDays(k, 1), T = S.profile ? targetsFor(k) : null, Tn = S.profile ? targetsFor(n) : null, d = dayTotals(S.days[k]);
+    const th = THEMES[S.theme] && THEMES[S.theme].light ? THEMES[S.theme] : THEMES.proaspat;
+    const warm = S.theme === 'proaspat' || S.theme === 'craciun', r = v => Math.round(v || 0);
+    const pal = m => { const x = th[m]; return { bg: x.bg, surface: x.surface, ink: x.ink, muted: x.muted, track: x.track, kcal: x.kcal, over: x.over, prot: x.prot, carb: x.carb, fat: x.fat, dot: th.logo.dot || '#FF6A4D', act: warm ? '#FF6A4D' : x.kcal }; };
+    const json = JSON.stringify({ v: 1, setup: !!(T && T.kcal), day: k, eaten: r(d.kcal), target: T ? r(T.kcal) : 0,
+      p: [r(d.protein), T ? r(T.protein) : 0], c: [r(d.carbs), T ? r(T.carbs) : 0], f: [r(d.fat), T ? r(T.fat) : 0],
+      next: Tn ? { day: n, target: r(Tn.kcal), p: r(Tn.protein), c: r(Tn.carbs), f: r(Tn.fat) } : null,
+      light: pal('light'), dark: pal('dark') });
+    if (json === widgetLast) return;
+    widgetLast = json;
+    nat('PortiaWidget', 'update', { data: json });
+  }, 350);
+}
+// portia://azi, portia://add and portia://scan: what the widgets open. Only moves between screens, never changes data.
+function openLink(url, tries){
+  const m = /^portia:\/\/([a-z]+)/i.exec(String(url || '')); if (!m) return;
+  if (!S.loaded){ if ((tries || 0) < 40) setTimeout(() => openLink(url, (tries || 0) + 1), 150); return; }
+  const where = m[1].toLowerCase();
+  $$('.sheet:not(.ghost)').forEach(sh => { if (!sh.hidden && sh.id && sh.id !== 'setupSheet' && sh.id !== 'consentSheet') closeSheet('#' + sh.id); });
+  if (S.view !== todayKey()) setDay(todayKey());
+  if (!S.profile || where === 'azi'){ go('azi'); return; }
+  if (where === 'scan'){ S.tab = 'barcode'; showErr(''); renderTabs(); go('add'); return; }
+  if (where === 'add'){ go('add'); return; }
+  go('azi');
+}
 function renderSync(){
   const el = $('#sync'); let st = 'idle', txt = 'Se încarcă…';
   if (S.mode === 'cloud'){
@@ -2803,6 +2844,9 @@ function nativeInit(){
   root.setAttribute('data-native', PLATFORM);
   natOn('App', 'backButton', onBack);
   natOn('App', 'pause', mirrorFlush);
+  natOn('App', 'resume', () => { widgetLast = ''; widgetSync(); });
+  natOn('App', 'appUrlOpen', e => openLink(e && e.url));
+  nat('App', 'getLaunchUrl').then(r => { if (r && r.url) openLink(r.url); });
   natOn('Keyboard', 'keyboardWillShow', () => root.classList.add('kb'));
   natOn('Keyboard', 'keyboardWillHide', () => root.classList.remove('kb'));
   document.addEventListener('visibilitychange', () => { if (document.hidden) mirrorFlush(); });

@@ -20,6 +20,8 @@
 - `SELL` e fals în aplicația nativă: temele plătite și oferta nu apar până nu există plată prin App Store și Google Play (StoreKit / Play Billing). Fără butoane de plată care nu funcționează.
 - Aplicația nativă nu descarcă cod de pe internet: biblioteca pentru coduri de bare e inclusă în `www/vendor/`.
 - `npm` nu merge din sandbox. Dependențele noi se adaugă în `package.json`, apoi se rulează workflow-ul „Aplicația nativă – creare proiecte” (actualizează `package-lock.json`, `ios/`, `android/`). „Construire de test” construiește și deschide aplicația pe emulator și simulator la fiecare push.
+- Widgeturile (iOS: `ios/App/PortiaWidget/`, Android: `PortiaWidgets.java` și `res/layout/widget_*.xml`) citesc doar instantaneul pe care îl scrie `widgetSync()` din `js/app.js` prin pluginul `PortiaWidget`. Câmpuri noi se adaugă în ambele părți în același commit. Linkurile `portia://` doar mută între ecrane (`openLink`), nu schimbă date.
+- Pe iOS, widgetul și aplicația împart grupul `group.com.portia.app` (fișierele `.entitlements`). `MARKETING_VERSION` se schimbă la fel în ținta App și în PortiaWidget. Dacă proiectul iOS e creat din nou, rulează `python3 tools/add-ios-widget.py`.
 - Iconița și ecranul de pornire se desenează din logo cu `python3 tools/make-native-assets.py` (în `assets/`).
 - Politica de confidențialitate e `confidentialitate.html`, publicată pe Pages. Când aplicația începe să trimită date noi undeva, pagina se actualizează în același commit.
 

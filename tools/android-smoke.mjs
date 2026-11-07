@@ -108,7 +108,7 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   const nfo = await page.ev(`({ native: Capacitor.isNativePlatform(), platform: Capacitor.getPlatform(), plugins: Object.keys(Capacitor.Plugins).sort(), mark: document.documentElement.getAttribute('data-native'), top: getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-top').trim(), bottom: getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-bottom').trim() })`);
   ok('rulează ca aplicație nativă Android', nfo.native && nfo.platform === 'android' && nfo.mark === 'android');
   info('aplicația: ' + JSON.stringify(nfo));
-  for (const p of ['App', 'Clipboard', 'Filesystem', 'Haptics', 'Keyboard', 'Preferences', 'Share', 'SplashScreen', 'SystemBars', 'PortiaWindow']) ok('pluginul ' + p + ' e disponibil', nfo.plugins.includes(p));
+  for (const p of ['App', 'Clipboard', 'Filesystem', 'Haptics', 'Keyboard', 'Preferences', 'Share', 'SplashScreen', 'SystemBars', 'PortiaWindow', 'PortiaWidget']) ok('pluginul ' + p + ' e disponibil', nfo.plugins.includes(p));
   ok('primul ecran e bun venit', await page.ev(`!document.querySelector('#consentSheet').hidden`));
   ok('fără bifa pentru AI când nu există AI', await page.ev(`!document.querySelector('[data-consent="ai"]')`));
   back();
@@ -202,6 +202,22 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   let back2 = false;
   for (let i = 0; i < 10 && !back2; i++){ try { back2 = await page.ev(restored); } catch {} if (!back2) await sleep(1000); }
   ok('jurnalul revine din memoria nativă', back2, back2 ? undefined : await page.ev(`({ keys: Object.keys(localStorage), hero: document.querySelector('#hero').className })`).catch(e => String(e)));
+
+  // the home screen widgets: registered, fed by the app, drawn, and their links open the right screen
+  const rcv = sh(`adb shell cmd package query-receivers --brief -a android.appwidget.action.APPWIDGET_UPDATE ${PKG}`);
+  ok('widgeturile sunt înregistrate', ['DayWidgetSmall', 'DayWidgetMedium', 'ScanWidget'].every(n => rcv.includes(n)), rcv.trim());
+  await sleep(1200);
+  const snap = sh(`adb shell run-as ${PKG} cat shared_prefs/portia_widget.xml`);
+  ok('aplicația trimite cifrele zilei către widget', /&quot;eaten&quot;:\d+/.test(snap) && /&quot;setup&quot;:true/.test(snap), snap.slice(0, 300));
+  sh(`adb shell am start -W -a android.intent.action.VIEW -d portia://scan ${PKG}`); await sleep(2500);
+  ok('portia://scan deschide scanarea codului de bare', await page.ev(`document.documentElement.dataset.screen === 'add' && !!document.querySelector('.scan') && document.querySelector('.scan').getBoundingClientRect().height > 0`));
+  shot('10-link-scanare');
+  sh(`adb shell am start -W -a android.intent.action.VIEW -d portia://azi ${PKG}`); await sleep(2000);
+  ok('portia://azi deschide Azi', await screenNow() === 'azi');
+  sh(`adb shell am start -W -n ${PKG}/.WidgetPreviewActivity`); await sleep(2500);
+  shot('11-widgeturi');
+  ok('widgeturile se desenează fără erori', !/FATAL EXCEPTION/.test(sh('adb logcat -d')));
+  sh(`adb shell am start -W -n ${PKG}/.MainActivity`); await sleep(1500);
 
   const seen = page.seen.slice();
   page.close();
