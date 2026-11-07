@@ -87,7 +87,8 @@ run(){
   local data; data=$(limit 30 xcrun simctl get_app_container "$udid" "$BUNDLE" data 2>/dev/null)
   if [ -n "$data" ] && plutil -p "$data/Library/Preferences/group.com.portia.app.plist" 2>/dev/null | grep -q '"eaten"'; then note "$name: aplicația a trimis cifrele zilei către widget"
   else echo "::warning::$name: nu găsesc cifrele pentru widget (fără semnare, simulatorul poate ține grupul altundeva)"; fi
-  if limit 30 xcrun simctl spawn "$udid" launchctl list | grep -q "$BUNDLE"; then note "$name: aplicația rulează"; else err "$name: aplicația nu mai rulează"; fi
+  # a simulator app is a process on the Mac, under the simulator's own folder
+  if pgrep -f "$udid/.*/App\.app/App" >/dev/null || limit 60 xcrun simctl spawn "$udid" launchctl list | grep -q "$BUNDLE"; then note "$name: aplicația rulează"; else err "$name: aplicația nu mai rulează"; fi
   consola "$udid" "$OUT/ios-$name-consola.txt"
   if grep -E "\[error\]|Uncaught|TypeError|ReferenceError|SyntaxError" "$OUT/ios-$name-consola.txt" | grep -v favicon > "$OUT/ios-$name-erori.txt"; then
     err "$name: erori JavaScript: $(head -3 "$OUT/ios-$name-erori.txt" | tr '\n' ' ')"
