@@ -38,16 +38,17 @@ function seed(){
 }
 
 async function connect(){
-  for (let i = 0; i < 40; i++){
-    // the app's own web view: after a restart an old socket can linger, so match the running process
+  for (let i = 0; i < 60; i++){
+    // the app's own web view: after a restart an old socket can linger, so prefer the running process
     let pid = ''; try { pid = sh(`adb shell pidof ${PKG}`).trim().split(/\s+/)[0]; } catch {}
-    const socks = sh('adb shell cat /proc/net/unix').match(/@webview_devtools_remote_\d+/g) || [];
-    const mine = socks.find(x => pid && x.endsWith('_' + pid));
-    const m = mine ? [mine, mine.slice(1)] : null;
-    if (m){
+    const socks = (sh('adb shell cat /proc/net/unix').match(/@webview_devtools_remote_\d+/g) || []).map(x => x.slice(1));
+    const mine = socks.filter(x => pid && x.endsWith('_' + pid));
+    // if the process can't be matched for a while, try every socket, newest pid first
+    const tryList = mine.length ? mine : i >= 8 ? [...new Set(socks)].sort((a, b) => Number(b.split('_').pop()) - Number(a.split('_').pop())) : [];
+    for (const name of tryList){
       try { sh('adb forward --remove tcp:9222'); } catch {}
-      sh(`adb forward tcp:9222 localabstract:${m[1]}`);
       try {
+        sh(`adb forward tcp:9222 localabstract:${name}`);
         const list = await (await fetch('http://127.0.0.1:9222/json/list')).json();
         const t = list.find(x => x.type === 'page' && /localhost/.test(x.url));
         if (t) return cdp(t.webSocketDebuggerUrl);
