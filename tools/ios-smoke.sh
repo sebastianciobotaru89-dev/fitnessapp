@@ -12,7 +12,8 @@ note(){ echo "::notice::$1"; }
 limit(){ local secs="$1"; shift; perl -e 'alarm shift; exec @ARGV' "$secs" "$@"; }
 # opens the app; simctl answers with the process id, or with the reason it could not start it
 # the app's own output (Capacitor prints the page's console there) goes to a file per launch
-launch(){ local out; out=$(limit 90 xcrun simctl launch --terminate-running-process --stdout="$3" --stderr="$3" "$1" "$2" 2>&1); note "pornire: $out"; }
+# NSUnbufferedIO makes the app write each line at once, as when Xcode runs it
+launch(){ local out; out=$(SIMCTL_CHILD_NSUnbufferedIO=YES limit 90 xcrun simctl launch --terminate-running-process --stdout="$3" --stderr="$3" "$1" "$2" 2>&1); note "pornire: $out"; }
 # the app's console (Capacitor writes each console.log and error there), and any crash report
 consola(){
   limit 90 xcrun simctl spawn "$1" log show --last 3m --style compact --predicate 'process == "App"' > "$2" 2>&1
@@ -88,16 +89,16 @@ run(){
   local data; data=$(limit 30 xcrun simctl get_app_container "$udid" "$BUNDLE" data 2>/dev/null)
   if [ -n "$data" ] && plutil -p "$data/Library/Preferences/group.com.portia.app.plist" 2>/dev/null | grep -q '"eaten"'; then note "$name: aplicația a trimis cifrele zilei către widget"
   else echo "::warning::$name: nu găsesc cifrele pentru widget (fără semnare, simulatorul poate ține grupul altundeva)"; fi
-  limit 30 xcrun simctl openurl "$udid" "portia://scan" || err "$name: nu pot deschide portia://scan"; sleep 8
-  limit 60 xcrun simctl io "$udid" screenshot "$OUT/ios-$name-4-link-scanare.png" >/dev/null
   if limit 30 xcrun simctl spawn "$udid" launchctl list | grep -q "$BUNDLE"; then note "$name: aplicația rulează"; else err "$name: aplicația nu mai rulează"; fi
   consola "$udid" "$OUT/ios-$name-consola.txt"
   if cat "$OUT/ios-$name-consola.txt" "$OUT/ios-$name-iesire-1.txt" "$OUT/ios-$name-iesire-2.txt" 2>/dev/null | grep -E "\[error\]|Uncaught|TypeError|ReferenceError|SyntaxError" | grep -v favicon > "$OUT/ios-$name-erori.txt"; then
     err "$name: erori JavaScript: $(head -3 "$OUT/ios-$name-erori.txt" | tr '\n' ' ')"
   else note "$name: nicio eroare JavaScript"; fi
-  if grep -q "\[portia\] deschid scan" "$OUT/ios-$name-iesire-2.txt" "$OUT/ios-$name-consola.txt" 2>/dev/null; then note "$name: portia://scan a deschis scanarea"; else err "$name: portia://scan nu a ajuns la aplicație"; fi
-  echo "::warning::$name, ce a scris aplicația: $(grep -E "appUrlOpen|portia|URL|Error|error" "$OUT/ios-$name-iesire-2.txt" 2>/dev/null | tail -8 | tr '\n' ' ' | cut -c1-900)"
+  echo "::warning::$name, ce a scris pagina: $(grep -E "⚡️ +\[" "$OUT/ios-$name-iesire-2.txt" 2>/dev/null | tail -6 | tr '\n' ' ' | cut -c1-700)"
   grep -E "⚡️|Capacitor|\[portia\]" "$OUT/ios-$name-consola.txt" | head -15
+  # a portia:// link from outside the app: iOS asks "Open in Porția?" (from the widget it opens straight away)
+  limit 30 xcrun simctl openurl "$udid" "portia://scan" || err "$name: iOS nu recunoaște linkurile portia://"
+  sleep 4; limit 60 xcrun simctl io "$udid" screenshot "$OUT/ios-$name-4-link-scanare.png" >/dev/null
   limit 60 xcrun simctl shutdown "$udid" 2>/dev/null
 }
 
