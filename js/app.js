@@ -985,6 +985,7 @@ function afterLoad(){
   renderAll();
   if (S.profileKnown && !hasConsent()){ if (!anySheetOpen()) openConsent(); }
   else if (S.profileKnown && !S.profile && !anySheetOpen()) openSetup(true);
+  maybeHold();
   maybeAutoAdapt();
   flushShares();
 }
@@ -1419,6 +1420,7 @@ function saveWeight(){
   mutateDay(k, d => { d.weight = w; });
   inp.value = ''; inp.blur();
   toast('Greutate notată: ' + fmt1(w) + ' kg', 'Anulează', () => mutateDay(k, d => { if (prev) d.weight = prev; else delete d.weight; }));
+  maybeHold(false, true);
 }
 function delWeight(){
   const k = S.view, prev = getDay(k).weight; if (!prev) return;
@@ -1538,6 +1540,10 @@ function adaptReason(A){
   const X = A.plan;
   if (!X) return 'Pentru ' + esc(A.goal.t.toLowerCase()) + ', ținta potrivită e <strong>' + fmt(A.ideal) + ' kcal</strong>.';
   const parts = ['cât arzi'];
+  if (!X.dir){
+    if (X.corr) parts.push((X.corr > 0 ? 'plus ' : 'minus ') + fmt(Math.abs(X.corr)) + ' kcal pentru că ești de două săptămâni ' + PLAN_OFF[X.zone] + ', cu ' + fmt1(Math.abs(X.off)) + ' kg');
+    return (X.hold ? 'Pentru mentenanță' : 'Ca să rămâi la greutatea ta') + ', ținta potrivită e <strong>' + fmt(A.ideal) + ' kcal</strong>: ' + parts.join(', ') + '.';
+  }
   if (X.pace) parts.push((X.pace > 0 ? 'plus ' : 'minus ') + fmt(Math.abs(X.pace)) + ' kcal pe zi pentru ritmul planului (' + (X.dir > 0 ? '+' : '−') + fmtRate(X.rate) + ' kg pe săptămână)');
   if (X.corr) parts.push((X.corr > 0 ? 'plus ' : 'minus ') + fmt(Math.abs(X.corr)) + ' kcal pentru că ești de două săptămâni ' + PLAN_OFF[X.zone] + ', cu ' + fmt1(Math.abs(X.off)) + ' kg');
   return 'Pentru planul tău, ținta potrivită e <strong>' + fmt(A.ideal) + ' kcal</strong>: ' + parts.join(', ') + '.';
@@ -1548,6 +1554,9 @@ function adaptReason(A){
 // It never asks for more than guidelines usually call safe: at most 1% of body weight a week down, 0.5% up.
 // Every number here is computed by the app from the journal; none comes from the AI.
 const PLAN_MAX_LOSS = 0.01, PLAN_MAX_GAIN = 0.005, PLAN_MIN_RATE = 0.1, PLAN_WAIT = 7, PLAN_WEIGHS = 3, PLAN_KEEP_TOL = 1;
+// Maintenance after a plan: a wider zone (weight swings with water and salt), three weeks in which the refilled
+// glycogen and water may add a kilo without the target cutting back, and a drift of 0.2 kg a week that warns early.
+const PLAN_HOLD_TOL = 1.5, PLAN_HOLD_SETTLE = 21, PLAN_DRIFT = 0.2;
 const daysBetween = (a, b) => Math.round((parseKey(b) - parseKey(a)) / 864e5);
 const r05 = v => Math.round(v * 2) / 2;
 const planDir = (from, to) => to <= from - 0.5 ? -1 : to >= from + 0.5 ? 1 : 0;
@@ -1561,7 +1570,17 @@ function normPlan(x){
   if (!(from >= 35 && from <= 250 && to >= 35 && to <= 250 && isFinite(rate))) return null;
   const dir = planDir(from, to);
   if (dir ? !(rate * dir >= PLAN_MIN_RATE - 1e-9 && rate * dir <= from * PLAN_MAX_LOSS + 1e-9) : rate !== 0) return null;
-  return { start: String(x.start), from: r1(from), to: r1(to), rate: Math.round(rate * 1000) / 1000 };
+  const out = { start: String(x.start), from: r1(from), to: r1(to), rate: Math.round(rate * 1000) / 1000 };
+  // hold: the maintenance phase that follows a plan; prev: the phase that reached the target
+  if (x.hold && !dir){
+    out.hold = true;
+    const v = x.prev, day = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
+    if (v && typeof v === 'object' && day(v.start) && day(v.end) && v.start <= v.end){
+      const f = num(v.from), t = num(v.to);
+      if (f >= 35 && f <= 250 && t >= 35 && t <= 250) out.prev = { start: String(v.start), end: String(v.end), from: r1(f), to: r1(t) };
+    }
+  }
+  return out;
 }
 // A body mass index under 18.5 counts as underweight, so a weight-loss plan never aims below it
 const minHealthyWeight = h => h >= 120 ? Math.ceil(18.5 * Math.pow(h / 100, 2) * 2) / 2 : null;
@@ -1620,13 +1639,15 @@ function planState(asOf){
   const today = asOf || todayKey(); if (pl.start > today && asOf) return null;
   const start = pl.start > today ? today : pl.start, age = daysBetween(start, today);
   const dir = Math.sign(pl.rate), total = Math.abs(pl.to - pl.from), weeks = dir ? total / Math.abs(pl.rate) : 0;
+  const hold = !!pl.hold && !dir;
   const at = d => dir ? pl.from + pl.rate * Math.min(Math.max(d, 0) / 7, weeks) : pl.from;
-  const since = n => { const o = []; for (let i = n - 1; i >= 0; i--){ const k = addDays(today, -i), w = S.days[k] && S.days[k].weight; if (w && k >= start) o.push({ d: daysBetween(start, k), w }); } return o; };
-  // the meter compares the average of the last 10 days' weigh-ins with what the plan wanted on their average day
-  const win = since(10), n = win.length;
+  const since = (n, from) => { const o = []; for (let i = n - 1; i >= 0; i--){ const k = addDays(today, -i), w = S.days[k] && S.days[k].weight; if (w && k >= (from || start)) o.push({ d: daysBetween(start, k), w }); } return o; };
+  // the meter compares the average of the last 10 days' weigh-ins with what the plan wanted on their average day;
+  // maintenance goes on from the plan that reached the target, so its meter also counts the weigh-ins just before it
+  const win = since(10, hold ? addDays(start, -10) : null), n = win.length;
   const trend = n ? win.reduce((a, x) => a + x.w, 0) / n : null, meanD = n ? win.reduce((a, x) => a + x.d, 0) / n : age;
-  const planned = at(meanD), tol = dir ? Math.max(0.5, Math.abs(pl.rate)) : PLAN_KEEP_TOL;
-  const ready = age >= PLAN_WAIT && n >= PLAN_WEIGHS;
+  const planned = at(meanD), tol = dir ? Math.max(0.5, Math.abs(pl.rate)) : hold ? PLAN_HOLD_TOL : PLAN_KEEP_TOL;
+  const ready = (hold || age >= PLAN_WAIT) && n >= PLAN_WEIGHS;
   const off = trend == null ? 0 : dir ? (trend - planned) * dir : trend - pl.from;   // above 0: ahead of the plan (or heavier, when keeping)
   const reached = !!dir && n >= 2 && (trend - pl.to) * dir >= -0.2;
   const zone = reached ? 'done' : !ready ? 'wait' : Math.abs(off) <= tol ? 'on' : dir ? (off > 0 ? 'ahead' : 'behind') : (off > 0 ? 'up' : 'down');
@@ -1643,7 +1664,7 @@ function planState(asOf){
   // food: the finished days of the last week that were logged in full
   let logged = 0, inT = 0, sum = 0, tsum = 0;
   for (let i = 1; i <= 7; i++){
-    const k = addDays(today, -i), d = S.days[k]; if (!d || k < start) continue;
+    const k = addDays(today, -i), d = S.days[k]; if (!d || (k < start && !hold)) continue;
     const t = dayTotals(d), T = targetsFor(k); if (!T || !t.n || t.kcal < Math.max(800, T.kcal * 0.5)) continue;
     logged++; sum += t.kcal; tsum += T.kcal; if (Math.abs(t.kcal - T.kcal) <= T.kcal * 0.1) inT++;
   }
@@ -1651,7 +1672,23 @@ function planState(asOf){
   if (slope != null && age >= 28 && dir <= 0 && -slope > cur * PLAN_MAX_LOSS) warn.push('fast-loss');
   if (slope != null && age >= 28 && dir > 0 && slope > cur * PLAN_MAX_GAIN) warn.push('fast-gain');
   if (logged >= 4 && sum < tsum * 0.8) warn.push('low-food');
-  return { pl, dir, start, age, total, weeks, at, endKey: dir ? addDays(start, Math.ceil(weeks * 7)) : null, planned, trend, n, ready, off, tol, zone, slope, cur, done,
+  // the early warning: still inside the zone, but three weeks of weigh-ins point out of it
+  if (hold && zone === 'on' && slope != null){
+    if (slope >= PLAN_DRIFT && off > 0){ if (age >= PLAN_HOLD_SETTLE) warn.push('drift-up'); }
+    else if (slope <= -PLAN_DRIFT && off < 0) warn.push('drift-down');
+  }
+  // maintenance, week by week: how many finished weeks with weigh-ins had their average inside the zone
+  let held = null;
+  if (hold){
+    held = { weeks: Math.floor(age / 7), counted: 0, inZone: 0 };
+    for (let w = 0; w < held.weeks; w++){
+      const ws = [];
+      for (let i = 0; i < 7; i++){ const v = S.days[addDays(start, w * 7 + i)]; if (v && v.weight) ws.push(v.weight); }
+      if (!ws.length) continue;
+      held.counted++; if (Math.abs(ws.reduce((a, x) => a + x, 0) / ws.length - pl.from) <= tol) held.inZone++;
+    }
+  }
+  return { pl, dir, hold, held, start, age, total, weeks, at, endKey: dir ? addDays(start, Math.ceil(weeks * 7)) : null, planned, trend, n, ready, off, tol, zone, slope, cur, done,
     frac: dir ? Math.max(0, Math.min(1, done / total)) : 0, planFrac: dir ? Math.max(0, Math.min(1, Math.abs(at(age) - pl.from) / total)) : 0,
     eta, food: { logged, inT, avg: logged ? sum / logged : 0, target: logged ? tsum / logged : 0 }, warn, readyOn: addDays(start, PLAN_WAIT) };
 }
@@ -1666,7 +1703,9 @@ function planTarget(tdee){
   const pl = P.pl, pace = pl.rate * 7700 / 7, prev = planState(addDays(todayKey(), -7));
   const outside = z => z === 'behind' || z === 'ahead' || z === 'up' || z === 'down';
   let corr = 0;
-  if (P.ready && prev && prev.ready && outside(P.zone) && prev.zone === P.zone){
+  // in the first weeks of maintenance a kilo up is glycogen and water coming back, so it does not cut the calories
+  const settling = P.hold && P.zone === 'up' && P.age < PLAN_HOLD_SETTLE && P.off <= P.tol + 1;
+  if (P.ready && prev && prev.ready && outside(P.zone) && prev.zone === P.zone && !settling){
     const need = P.dir ? -P.off * P.dir : -P.off;   // kilos to gain (above 0) or to lose (below 0) to be back on the plan
     corr = Math.max(-PLAN_CATCHUP, Math.min(PLAN_CATCHUP, need * 7700 / PLAN_CATCHUP_DAYS));
   }
@@ -1675,7 +1714,25 @@ function planTarget(tdee){
   if (P.dir > 0) kcal = Math.min(Math.max(kcal, tdee), tdee + room);
   else if (P.dir < 0) kcal = Math.max(Math.min(kcal, tdee), tdee - room);
   else kcal = Math.min(Math.max(kcal, tdee - PLAN_CATCHUP), tdee + PLAN_CATCHUP);
-  return { kcal: Math.round(kcal / 10) * 10, pace: Math.round(pace / 5) * 5, corr: Math.round(corr / 10) * 10, zone: P.zone, off: Math.round(P.off * 10) / 10, rate: pl.rate, dir: P.dir };
+  return { kcal: Math.round(kcal / 10) * 10, pace: Math.round(pace / 5) * 5, corr: Math.round(corr / 10) * 10, zone: P.zone, off: Math.round(P.off * 10) / 10, rate: pl.rate, dir: P.dir, hold: P.hold };
+}
+
+// The second phase: once the trend reaches the plan's target, the plan turns into maintenance around that weight.
+// Without it, a reached plan would hand the calories back to the goal (−20% when losing) and keep you losing.
+// The calories then climb towards what you burn through the smart target, at most ADAPT_STEP a week.
+function maybeHold(force, tapped){
+  const p = S.profile, pl = p && p.plan; if (!pl || !pl.rate || pl.hold) return false;
+  if (!force && S.holdSkip === pl.start) return false;
+  const P = planState(); if (!P || P.zone !== 'done') return false;
+  const old = clone(p), k = todayKey();
+  const plan = normPlan({ start: k, from: pl.to, to: pl.to, rate: 0, hold: true, prev: { start: pl.start, end: k, from: pl.from, to: pl.to } });
+  if (!plan) return false;
+  S.profile = Object.assign(clone(p), { plan });
+  saveProfile(); renderAll();
+  if (tapped) buzz('success');   // only after a tap: at start-up the browser blocks vibration
+  toast('Ai ajuns la ' + fmt1(pl.to) + ' kg. Urmează mentenanța.', 'Anulează', () => { S.holdSkip = pl.start; S.profile = old; saveProfile(); renderAll(); },
+    { sub: 'Zona ta: ' + fmt1(pl.to - PLAN_HOLD_TOL) + '–' + fmt1(pl.to + PLAN_HOLD_TOL) + ' kg. Caloriile urcă treptat.' });
+  return true;
 }
 
 // The meter: a half dial; the green middle is the plan's margin, the needle is how far ahead or behind you are
@@ -1694,8 +1751,9 @@ function renderPlan(){
   const el = $('#plan'); if (!el) return;
   const p = S.profile; if (!p){ el.hidden = true; el.innerHTML = ''; return; }
   el.hidden = false;
-  const P = planState();
-  const head = '<div class="panel-head"><h2 id="plTitle">Aliniere cu planul</h2>' + (P ? '<span class="meta">' + (P.dir ? fmt1(P.pl.from) + ' → ' + fmt1(P.pl.to) + ' kg' : 'în jur de ' + fmt1(P.pl.from) + ' kg') + '</span>' : '') + '</div>';
+  const P = planState(), hold = !!(P && P.hold);
+  const zoneTxt = P ? fmt1(P.pl.from - P.tol) + '–' + fmt1(P.pl.from + P.tol) + ' kg' : '';
+  const head = '<div class="panel-head"><h2 id="plTitle">' + (hold ? 'Mentenanță' : 'Aliniere cu planul') + '</h2>' + (P ? '<span class="meta">' + (hold ? 'zona ' + zoneTxt : P.dir ? fmt1(P.pl.from) + ' → ' + fmt1(P.pl.to) + ' kg' : 'în jur de ' + fmt1(P.pl.from) + ' kg') + '</span>' : '') + '</div>';
   if (!P){
     el.innerHTML = head + '<div class="align"><div class="al-g">' + alGauge(0, true) + '</div></div>' +
       '<p class="pl-cta">Spune-mi ce greutate vrei să ai și îți fac planul: cât de repede, până când și, pe parcurs, dacă ești pe drum.</p>' +
@@ -1705,11 +1763,15 @@ function renderPlan(){
   const pl = P.pl, kg = v => fmt1(Math.abs(v)) + ' kg', wk = Math.max(1, Math.round(Math.abs(P.off) / Math.max(0.05, Math.abs(pl.rate))));
   let label, sub;
   if (P.zone === 'wait'){
-    const miss = Math.max(0, PLAN_WEIGHS - P.n), more = miss === 1 ? 'încă o cântărire' : 'încă ' + miss + ' cântăriri';
-    label = P.age < PLAN_WAIT ? 'Abia ai pornit' : 'Mai cântărește-te';
-    sub = P.age < PLAN_WAIT ? 'Acul pornește pe ' + planDate(P.readyOn) + (miss ? ', după ' + more + '.' : '.') : 'Acul pornește după ' + more + ' în următoarele zile.';
+    const miss = Math.max(0, PLAN_WEIGHS - P.n), more = miss === 1 ? 'încă o cântărire' : 'încă ' + miss + ' cântăriri', early = P.age < PLAN_WAIT && !hold;
+    label = early ? 'Abia ai pornit' : 'Mai cântărește-te';
+    sub = early ? 'Acul pornește pe ' + planDate(P.readyOn) + (miss ? ', după ' + more + '.' : '.') : 'Acul pornește după ' + more + ' în următoarele zile.';
   } else if (P.zone === 'done'){
     label = 'Ținta atinsă'; sub = 'Media ta e ' + fmt1(P.trend) + ' kg, ' + (P.dir < 0 ? 'sub' : 'peste') + ' ținta de ' + fmt1(pl.to) + ' kg.';
+  } else if (hold){
+    label = { on: 'În zona ta', up: 'Peste zonă', down: 'Sub zonă' }[P.zone];
+    sub = Math.abs(P.off) < 0.05 ? 'Exact la ' + fmt1(pl.from) + ' kg.'
+      : 'Cu ' + kg(P.off) + ' ' + (P.off > 0 ? 'peste' : 'sub') + ' ' + fmt1(pl.from) + ' kg, ' + (P.zone === 'on' ? 'în zona' : 'în afara zonei') + ' de ±' + fmt1(P.tol) + ' kg.';
   } else if (P.dir){
     label = { on: 'Pe plan', ahead: 'Înaintea planului', behind: 'În urma planului' }[P.zone];
     sub = P.zone === 'on' ? (Math.abs(P.off) < 0.05 ? 'Exact pe linia planului.' : 'Cu ' + kg(P.off) + ' ' + (P.off > 0 ? 'înainte' : 'în urmă') + ', în marja planului.') : 'Cu ' + kg(P.off) + ', cam ' + nWeeks(wk) + '.';
@@ -1719,11 +1781,20 @@ function renderPlan(){
   }
   const idle = P.zone === 'wait', deg = idle ? 0 : Math.max(-86, Math.min(86, P.off / (3 * P.tol) * 90));
   const sides = P.dir ? ['În urmă', 'Înainte'] : ['Mai ușor', 'Mai greu'];
-  const basis = P.trend != null && !idle ? '<p class="al-basis">Media cântăririlor din ultimele 10 zile e ' + fmt1(P.trend) + ' kg' + (P.zone === 'done' ? '.' : '; planul cerea ' + fmt1(P.planned) + ' kg.') + '</p>' : '';
+  const basis = P.trend != null && !idle ? '<p class="al-basis">Media cântăririlor din ultimele 10 zile e ' + fmt1(P.trend) + ' kg' + (P.zone === 'done' || hold ? '.' : '; planul cerea ' + fmt1(P.planned) + ' kg.') + '</p>' : '';
   let body = '<div class="align"><div class="al-g" role="img" aria-label="' + esc('Aliniere cu planul: ' + label + '. ' + sub) + '">' + alGauge(deg, idle) +
     '<div class="al-sides" aria-hidden="true"><span>' + sides[0] + '</span><span>' + sides[1] + '</span></div></div>' +
     '<div class="al-read" data-z="' + P.zone + '"><b>' + label + '</b><span>' + esc(sub) + '</span></div>' + basis + '</div>';
-  if (P.dir){
+  if (hold){
+    // the two phases: the plan that reached the target, then maintenance
+    const pv = pl.prev, H = P.held;
+    if (pv) body += '<ol class="pl-phases" aria-label="Fazele planului">' +
+      '<li class="done"><span class="pl-ph-n" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>' +
+        '<div><b>' + (pv.to < pv.from ? 'Slăbire' : 'Creștere') + '</b><small>' + fmt1(pv.from) + ' → ' + fmt1(pv.to) + ' kg, ' + nWeeks(Math.max(1, Math.round(daysBetween(pv.start, pv.end) / 7))) + '</small></div></li>' +
+      '<li class="cur" aria-current="step"><span class="pl-ph-n" aria-hidden="true">2</span><div><b>Mentenanță</b><small>din ' + esc(planDate(pl.start)) + ', săptămâna ' + (Math.floor(P.age / 7) + 1) + '</small></div></li></ol>';
+    body += '<dl class="hstats pl-tiles"><div><dt>Greutatea de menținut</dt><dd>' + fmt1(pl.from) + '<small> kg</small></dd></div>' +
+      '<div><dt>Săptămâni în zonă</dt><dd>' + (H.counted ? H.inZone + '<small> din ' + H.counted + '</small>' : '<small>după prima săptămână</small>') + '</dd></div></dl>';
+  } else if (P.dir){
     const moved = P.done >= 0 ? 'Ai ' + (P.dir < 0 ? 'slăbit' : 'câștigat') + ' ' + fmt1(P.done) + ' kg din ' + fmt1(P.total) + '.' : 'Ești cu ' + fmt1(-P.done) + ' kg ' + (P.dir < 0 ? 'peste' : 'sub') + ' greutatea de start.';
     const want = Math.abs(P.at(P.age) - pl.from);
     body += '<div class="pl-prog"><div class="pl-bar" role="img" aria-label="' + esc(moved + ' Planul cerea ' + fmt1(want) + ' kg până azi.') + '"><i class="pl-fill" style="width:' + (P.frac * 100).toFixed(1) + '%"></i><i class="pl-mark" style="left:' + (P.planFrac * 100).toFixed(1) + '%"><span>plan</span></i></div>' +
@@ -1741,27 +1812,66 @@ function renderPlan(){
   }
   // the calorie target and the plan: what was last adjusted and why, or what is waiting to be
   const A = adaptInfo(), L = p.adapt && p.adapt.log, ago = L ? Date.now() - L.at : Infinity;
+  const auto = !!(p.adapt && p.adapt.auto), canApply = !!A && adaptDue(A) && !auto && Date.now() - ((p.adapt && p.adapt.last) || 0) >= 7 * 864e5;
+  if (hold){
+    // after a deficit the calories climb to what you burn, a step a week, so the weight does not jump
+    if (A && A.ready){
+      const corr = A.plan ? A.plan.corr : 0;
+      lines.push('<b>Caloriile pentru mentenanță:</b> arzi cam ' + fmt(A.tdee) + ' kcal pe zi, iar ținta e acum ' + fmt(A.cur) + ' kcal' +
+        (A.cur < A.ideal - 50 ? (corr > 0 ? ' și urcă spre ' + fmt(A.ideal) + ' până revii în zonă.' : ' și urcă treptat spre ' + fmt(A.ideal) + ', cu cel mult ' + ADAPT_STEP + ' kcal pe săptămână, ca greutatea să nu sară.')
+          : A.cur > A.ideal + 50 ? (corr < 0 ? ' și coboară puțin, spre ' + fmt(A.ideal) + ', până revii în zonă.' : ' și coboară spre ' + fmt(A.ideal) + ', cât arzi de fapt, ca greutatea să nu urce.')
+          : ', cât îți trebuie ca să rămâi aici.'));
+    }
+    else lines.push('<b>Caloriile pentru mentenanță</b> urcă singure spre cât arzi după ce Ținta inteligentă are două săptămâni de date. Până atunci, le poți urca din Profil → Ținte zilnice, cu cel mult ' + ADAPT_STEP + ' kcal pe săptămână.');
+  }
   if (L && ago < 28 * 864e5 && (L.dk || L.dp)){
     const what = [L.dk ? (L.dk > 0 ? '+' : '−') + fmt(Math.abs(L.dk)) + ' kcal (acum ' + fmt(L.kcal) + ')' : '', L.dp ? (L.dp > 0 ? '+' : '−') + fmt(Math.abs(L.dp)) + ' g proteine (acum ' + fmt(L.protein) + ')' : ''].filter(Boolean).join(' și ');
-    const why = L.corr ? ', pentru că erai de două săptămâni ' + PLAN_OFF[L.zone] + ', cu ' + fmt1(Math.abs(L.off)) + ' kg.' : !L.dk ? ', pentru că s-a schimbat greutatea.' : L.zone ? ', ca să urmeze ritmul planului.' : '.';
+    const why = L.corr ? ', pentru că erai de două săptămâni ' + PLAN_OFF[L.zone] + ', cu ' + fmt1(Math.abs(L.off)) + ' kg.' : !L.dk ? ', pentru că s-a schimbat greutatea.'
+      : hold ? (L.dk > 0 ? ', ca să urce spre cât arzi.' : ', ca să rămâi în zonă.') : L.zone ? ', ca să urmeze ritmul planului.' : '.';
     lines.push('<b>Ultima ajustare, ' + esc(shortDate(keyOf(new Date(L.at)))) + ':</b> ' + what + why);
-  } else if (A && !A.ready) lines.push('<b>Ținta de calorii</b> se ajustează după plan din Ținta inteligentă, la Greutate, după ce are două săptămâni de date.');
-  else if (A && adaptDue(A) && !(p.adapt && p.adapt.auto)) lines.push('<b>Ținta de calorii:</b> pentru plan ar trebui ' + fmt(Math.abs(A.diff) >= 50 ? A.kcal : A.cur) + ' kcal' + (A.pdiff ? ' și ' + fmt(A.protein) + ' g proteine' : '') + ' (acum ' + fmt(A.cur) + ' kcal). O aplici din Ținta inteligentă, la Greutate.');
+  } else if (A && !A.ready){ if (!hold) lines.push('<b>Ținta de calorii</b> se ajustează după plan din Ținta inteligentă, la Greutate, după ce are două săptămâni de date.'); }
+  else if (A && adaptDue(A) && !auto && !hold) lines.push('<b>Ținta de calorii:</b> pentru plan ar trebui ' + fmt(Math.abs(A.diff) >= 50 ? A.kcal : A.cur) + ' kcal' + (A.pdiff ? ' și ' + fmt(A.protein) + ' g proteine' : '') + ' (acum ' + fmt(A.cur) + ' kcal). O aplici din Ținta inteligentă, la Greutate.');
   const F = P.food;
   lines.push(F.logged >= 3 ? '<b>Mâncarea, ultimele 7 zile:</b> ' + F.inT + ' din ' + F.logged + ' zile notate complet au fost în țintă (±10%), în medie ' + fmt(F.avg) + ' kcal din ' + fmt(F.target) + '.'
     : '<b>Mâncarea:</b> notează mesele câteva zile la rând ca să văd dacă mănânci după plan.');
   body += '<div class="pl-lines">' + lines.map(l => '<p>' + l + '</p>').join('') + '</div>';
+  if (hold && canApply) body += '<div class="row pl-act"><button class="btn primary sm" data-action="adapt-apply">Aplică ' + fmt(Math.abs(A.diff) >= 50 ? A.kcal : A.cur) + ' kcal' + (A.pdiff ? ' și ' + fmt(A.protein) + ' g proteine' : '') + '</button></div>';
+  const ahead = P.slope ? Math.max(1, Math.ceil((P.tol - Math.abs(P.off)) / Math.abs(P.slope))) : 0;
   const W = {
+    'drift-up': 'Greutatea urcă de trei săptămâni, cu +' + fmtRate(P.slope || 0) + ' kg pe săptămână. Ești încă în zonă, dar la ritmul ăsta ieși din ea în cam ' + nWeeks(ahead) + '. Acum e cel mai ușor de oprit: uită-te la gustări și la porții, fără o dietă nouă.',
+    'drift-down': 'Slăbești în continuare, cu −' + fmtRate(P.slope || 0) + ' kg pe săptămână. Dacă vrei să rămâi aici, mănâncă puțin mai mult. Dacă vrei să mai slăbești, pune-ți o țintă nouă.',
     'fast-loss': 'Slăbești ' + fmtRate(P.slope || 0) + ' kg pe săptămână, peste 1% din greutate. Ghidurile recomandă de obicei mai încet, ca să nu pierzi mușchi. Mănâncă mai aproape de ținta de calorii.',
     'fast-gain': 'Câștigi ' + fmtRate(P.slope || 0) + ' kg pe săptămână, mai repede de 0,5% din greutate. La ritmul ăsta crește partea de grăsime. Mănâncă mai aproape de țintă.',
     'low-food': 'În zilele notate ai mâncat în medie ' + fmt(F.avg) + ' kcal, mult sub ținta de ' + fmt(F.target) + '. Dacă n-ai uitat să notezi ceva, un deficit mai mare nu ajută: costă mușchi și energie.'
   };
-  body += P.warn.map(w => '<div class="banner warn"><p>' + W[w] + '</p></div>').join('');
+  body += P.warn.map(w => '<div class="banner' + (w === 'drift-down' ? '' : ' warn') + '"><p>' + W[w] + '</p></div>').join('');
+  if (hold) body += holdNotes(P, A);
   if (P.zone === 'ahead' && P.dir < 0 && P.age < 21) body += '<p class="hint pl-note">În primele săptămâni o parte din scădere e apă, așa că ritmul se poate tempera.</p>';
-  if (P.zone === 'done') body += '<p class="hint pl-note">Ca să rămâi aici, refă interviul din Profil și alege Menținere. Sau pune-ți o țintă nouă.</p>';
-  body += '<div class="pl-foot"><button class="btn ' + (P.zone === 'done' ? 'primary' : 'ghost') + ' sm" data-action="plan-open">' + (P.zone === 'done' ? 'Pune o țintă nouă' : 'Schimbă ținta') + '</button>' +
-    '<p class="hint">Planul e o estimare din ținta de calorii. Greutatea nu scade în linie dreaptă: contează tendința pe câteva săptămâni.</p></div>';
+  if (P.zone === 'done') body += '<p class="hint pl-note">Ca să rămâi aici, treci la mentenanță: o zonă de ±' + fmt1(PLAN_HOLD_TOL) + ' kg în jurul țintei, cu caloriile care urcă treptat spre cât arzi.</p>';
+  body += '<div class="pl-foot">' + (P.zone === 'done' ? '<div class="row"><button class="btn primary sm" data-action="plan-hold">Treci la mentenanță</button><button class="btn ghost sm" data-action="plan-open">Pune o țintă nouă</button></div>'
+      : '<button class="btn ghost sm" data-action="plan-open">' + (hold ? 'Pune o țintă nouă' : 'Schimbă ținta') + '</button>') +
+    '<p class="hint">' + (hold ? 'Greutatea urcă și coboară de la o zi la alta, cu apa și sarea. Contează ca media să rămână în zonă.' : 'Planul e o estimare din ținta de calorii. Greutatea nu scade în linie dreaptă: contează tendința pe câteva săptămâni.') + '</p></div>';
   el.innerHTML = head + body;
+}
+// What maintenance says when the average leaves the zone: water and glycogen in the first weeks, then a gentle correction
+function holdNotes(P, A){
+  if (P.zone !== 'up' && P.zone !== 'down'){
+    return P.age < PLAN_HOLD_SETTLE ? '<p class="hint pl-note">În primele trei săptămâni greutatea poate urca puțin: când mănânci mai mult, mușchii își refac glicogenul și apa. Nu e grăsime.</p>' : '';
+  }
+  const prev = planState(addDays(todayKey(), -7)), twice = !!prev && prev.ready && prev.zone === P.zone;
+  const smart = !!A && A.ready, edge = fmt1(P.pl.from + (P.zone === 'up' ? P.tol : -P.tol));
+  let t;
+  if (P.zone === 'up' && P.age < PLAN_HOLD_SETTLE && P.off <= P.tol + 1){
+    t = 'Ești puțin peste zonă, ceea ce e obișnuit după o dietă: mușchii își refac glicogenul și apa. Până pe ' + planDate(addDays(P.start, PLAN_HOLD_SETTLE)) + ', ținta nu coboară pentru asta.';
+    return '<div class="banner"><p>' + t + '</p></div>';
+  }
+  if (P.zone === 'up') t = twice
+    ? 'Ești de două săptămâni la rând peste zona ta (până la ' + edge + ' kg). Nu e nevoie de o dietă nouă: ' + (smart ? 'ținta coboară cu cel mult ' + PLAN_CATCHUP + ' kcal pe zi până revii.' : 'taie cam ' + PLAN_CATCHUP + ' kcal pe zi din gustări sau porții, câteva săptămâni.')
+    : 'Media a ieșit peste zona ta (până la ' + edge + ' kg). Poate fi apă sau sare. Dacă rămâne așa și săptămâna viitoare, ' + (smart ? 'ținta coboară puțin până revii.' : 'taie puțin din porții până revii.');
+  else t = twice
+    ? 'Ești de două săptămâni la rând sub zona ta (de la ' + edge + ' kg): slăbești în continuare. ' + (smart ? 'Ținta urcă cu cel mult ' + PLAN_CATCHUP + ' kcal pe zi ca să te oprești aici.' : 'Mănâncă cam ' + PLAN_CATCHUP + ' kcal mai mult pe zi ca să te oprești aici.') + ' Dacă vrei să mai slăbești, pune-ți o țintă nouă.'
+    : 'Media a coborât sub zona ta (de la ' + edge + ' kg). Dacă rămâne așa și săptămâna viitoare, ' + (smart ? 'ținta urcă puțin.' : 'mănâncă puțin mai mult.');
+  return '<div class="banner warn"><p>' + t + '</p></div>';
 }
 // The needle swings in from the left when you open Progres
 function alignSweep(){
@@ -1781,6 +1891,7 @@ function openPlan(){
   const g = GOALS.find(x => x.id === p.goal);
   $('#miniCard').innerHTML = sheetHead('miniTitle', 'Planul tău', 'close-mini') +
     '<p class="pl-now">Acum: <b>' + fmt1(now.w) + ' kg</b>, ' + src + '.' + (g ? ' Obiectiv: ' + esc(g.t.toLowerCase()) + '.' : '') + '</p>' +
+    (p.plan && p.plan.hold ? '<p class="hint">Acum ești în mentenanță, în jurul a ' + fmt1(p.plan.from) + ' kg. O țintă nouă pornește un plan nou.</p>' : '') +
     (dir ? '<label class="lbl" for="plTo">' + (dir < 0 ? 'Greutatea pe care vrei s-o atingi' : 'Până la ce greutate vrei să crești') + '</label>' +
       '<div class="numfield"><button class="round" data-action="plan-step" data-d="-0.5" aria-label="Mai puțin">−</button><div class="unit"><input type="text" inputmode="decimal" id="plTo" value="' + esc(fmt1(S.mini.to)) + '"><em>kg</em></div><button class="round" data-action="plan-step" data-d="0.5" aria-label="Mai mult">+</button></div>' +
       '<p class="ferr" id="plErr"></p>'
@@ -4206,7 +4317,7 @@ function profGroups(){
   const p = S.profile, f = fastOf(), c = cycleOf();
   return [
     ['Personalizare', [['appear', 'Aspect', { auto: 'Automat', light: 'Luminos', dark: 'Întunecat' }[S.appearance] || 'Automat'], ['theme', 'Teme de culori', (THEMES[S.theme] || {}).t || '']]],
-    ['Nutriție', [['targets', 'Ținte zilnice', fmt(p.targets.kcal) + ' kcal'], ['goalw', 'Ținta de greutate', p.plan ? fmt1(p.plan.to) + ' kg' : 'Fă-ți planul'], ['habits', 'Somn și motive', (habitsOf().why || habitsOf().sleep) ? 'Pornite' : 'Oprite'], ['cycle', 'Zile de sală și de pauză', c.on ? 'Activat' : 'Oprit'], ['fast', 'Fasting intermitent', f.hide ? 'Ascuns' : f.plan]]],
+    ['Nutriție', [['targets', 'Ținte zilnice', fmt(p.targets.kcal) + ' kcal'], ['goalw', 'Ținta de greutate', p.plan ? (p.plan.hold ? 'Mentenanță, ' : '') + fmt1(p.plan.to) + ' kg' : 'Fă-ți planul'], ['habits', 'Somn și motive', (habitsOf().why || habitsOf().sleep) ? 'Pornite' : 'Oprite'], ['cycle', 'Zile de sală și de pauză', c.on ? 'Activat' : 'Oprit'], ['fast', 'Fasting intermitent', f.hide ? 'Ascuns' : f.plan]]],
     ['Cont', (SELL ? [['plan', 'Abonament', S.isOwner ? 'Proprietar' : 'Gratuit']] : []).concat([['data', 'Datele tale', S.noSample ? '' : aiConsentOn() ? 'AI pornit' : 'AI oprit'], ['backup', 'Cod de backup', '']])],
     ['Despre', [['tips', 'Cum îl folosești cel mai bine', ''], ['about', 'Despre Porția', '']]]
   ];
@@ -4760,6 +4871,7 @@ function bindStatic(){
       case 'sleep': setSleep(S.view, Number(b.dataset.h)); break;
       case 'habit-why': case 'habit-sleep': setHabit(a === 'habit-why' ? 'why' : 'sleep', b.getAttribute('aria-checked') !== 'true'); break;
       case 'plan-open': openPlan(); break;
+      case 'plan-hold': maybeHold(true, true); break;
       case 'plan-save': savePlan(); break;
       case 'plan-step': if (S.mini && S.mini.kind === 'plan'){ const v = r1((isFinite(S.mini.to) ? S.mini.to : S.mini.from) + Number(b.dataset.d)); S.mini.to = v; $('#plTo').value = fmt1(v); updatePlanPrev(); } break;
       case 'save-targets': saveTargets(); break;
