@@ -89,8 +89,10 @@ function webviewBox(){
 const toScreen = (x, y) => ({ x: Math.round(VIEW.x + x * VIEW.k), y: Math.round(VIEW.y + y * VIEW.k) });
 // a real finger tap through Android's input system, at the element's place on the screen
 const tap = async (page, sel) => {
-  const r = await page.ev(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); if (!el) return null; el.scrollIntoView({ block: 'nearest' }); const b = el.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; })()`);
+  const r = await page.ev(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); if (!el) return null; el.scrollIntoView({ block: 'center' }); const b = el.getBoundingClientRect(), x = b.left + b.width / 2, y = b.top + b.height / 2, hit = document.elementFromPoint(x, y); return { x, y, covered: !!hit && hit !== el && !el.contains(hit) }; })()`);
   if (!r){ ok('găsesc ' + sel, false); return; }
+  // the tab bar floats over the bottom of the page: an element under it would get the tap of the button above it
+  if (r.covered) info('acoperit de alt element: ' + sel);
   const p = toScreen(r.x, r.y);
   await page.ev(`window.__tap = null; document.addEventListener('click', e => { window.__tap = (e.target.closest('[data-action],[data-nav],[id]') || e.target).outerHTML.slice(0, 80); }, { capture: true, once: true }); true`);
   sh(`adb shell input tap ${p.x} ${p.y}`); await sleep(800);
