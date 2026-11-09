@@ -135,7 +135,7 @@ const TIERS = {
   ] }
 };
 const TIER_IDS = ['plus', 'platinum', 'vip'];
-const FREE_FOREVER = 'Jurnalul, codul de bare, apa, greutatea, seriile, provocările și postul intermitent.';
+const FREE_FOREVER = 'Jurnalul, codul de bare, apa, greutatea, seriile, provocările și fastingul intermitent.';
 const PROMISES = ['7 zile gratuit: dacă anulezi înainte să se termine, nu plătești nimic', 'Vezi data primei plăți înainte să confirmi', 'Anulezi oricând, din Profil → Gestionează abonamentul'];
 const SKINS_PRICE = 9.99;
 const LOCK_ICON = '<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
@@ -942,7 +942,7 @@ function renderConsent(){
       '<h2 id="cTitle" tabindex="-1">Bun venit în Porția</h2><p>Îți calculez ținta de calorii și macronutrienți, iar mesele le notezi în câteva secunde.</p></div>' +
     '<h3 class="cs-t">Înainte să începi</h3>' +
     '<p>Porția păstrează date despre sănătatea ta, așa că îți cerem acordul explicit. Nimic nu e bifat dinainte.</p>' +
-    box('health', true, 'Datele despre alimentație și greutate', 'Sunt de acord ca Porția să-mi păstreze mesele, apa, greutatea, țintele și posturile, ca să-mi calculeze progresul. Le văd doar eu și le pot șterge oricând.') +
+    box('health', true, 'Datele despre alimentație și greutate', 'Sunt de acord ca Porția să-mi păstreze mesele, apa, greutatea, țintele și fastingul, ca să-mi calculeze progresul. Le văd doar eu și le pot șterge oricând.') +
     (S.noSample ? '' : box('ai', false, 'Estimări cu AI', 'Sunt de acord ca textul și pozele meselor, plus totalurile zilelor pentru idei și raport, să fie trimise la Claude, un AI al companiei Anthropic, ca să estimeze caloriile. Fără numele sau e-mailul meu. Fără acest acord notez valorile manual.')) +
     box('age', true, 'Am cel puțin 16 ani', 'Porția nu e pentru copii.') +
     '<div class="medwarn"><b>Porția nu e un dispozitiv medical.</b> Nu înlocuiește sfatul unui medic sau nutriționist, iar estimările sunt aproximative. Dacă ai o afecțiune, ești însărcinată sau ai avut tulburări de alimentație, vorbește întâi cu medicul.</div>' +
@@ -961,13 +961,13 @@ function acceptConsent(){
 function dataSection(){
   const c = consentOf(), ai = aiConsentOn();
   const where = S.mode === 'cloud' ? 'în contul tău Claude' : S.mode === 'local' ? 'doar ' + HERE : 'doar cât timp e deschisă pagina';
-  return '<h3>Datele tale</h3><p>Porția păstrează mesele, apa, greutatea, țintele, posturile și setările, ' + where + '.' + (S.noSample ? (NATIVE ? ' Nu le trimite nicăieri. Singura legătură la internet e căutarea unui cod de bare în Open Food Facts, care primește doar codul.' : '') : ' Când folosești AI, textul sau poza mesei merg la Claude (Anthropic) doar ca să fie estimate, fără numele sau e-mailul tău.') + '</p>' +
+  return '<h3>Datele tale</h3><p>Porția păstrează mesele, apa, greutatea, țintele, fastingul și setările, ' + where + '.' + (S.noSample ? (NATIVE ? ' Nu le trimite nicăieri. Singura legătură la internet e căutarea unui cod de bare în Open Food Facts, care primește doar codul.' : '') : ' Când folosești AI, textul sau poza mesei merg la Claude (Anthropic) doar ca să fie estimate, fără numele sau e-mailul tău.') + '</p>' +
     (S.noSample ? '' : swRow('Estimări cu AI (Claude)', 'consent-ai', ai)) +
     (c ? '<p class="hint" style="margin-bottom:12px">Ai dat acordul pentru datele de sănătate pe ' + esc(new Date(c.health).toLocaleDateString('ro-RO', { day: 'numeric', month: 'long', year: 'numeric' })) + '. Ca să-l retragi, șterge contul, pentru că fără aceste date aplicația nu poate funcționa. Codul de backup de mai jos îți dă o copie a tuturor datelor.</p>' : '') +
     '<div id="delBox"><button class="btn danger-ghost" data-action="del-account">Șterge contul și toate datele</button></div>';
 }
 function delConfirmHtml(){
-  return '<div class="confirm"><p><b>Ștergi definitiv contul și toate datele?</b> Mesele, greutatea, țintele, rețetele, favoritele, rapoartele și posturile dispar și nu mai pot fi recuperate. Dacă vrei să le păstrezi, generează întâi codul de backup.</p>' +
+  return '<div class="confirm"><p><b>Ștergi definitiv contul și toate datele?</b> Mesele, greutatea, țintele, rețetele, favoritele, rapoartele și istoricul de fasting dispar și nu mai pot fi recuperate. Dacă vrei să le păstrezi, generează întâi codul de backup.</p>' +
     (SELL ? '<p class="hint">Dacă ai un abonament, ștergerea contului nu îl oprește. Plata continuă prin App Store sau Google Play până îl anulezi din Gestionează abonamentul.</p>' : '') +
     '<label class="lbl" for="delIn">Scrie ȘTERGE ca să confirmi</label><input type="text" id="delIn" autocomplete="off" autocapitalize="characters">' +
     '<div class="row"><button class="btn ghost" data-action="del-cancel">Renunță</button><button class="btn danger" data-action="del-confirm">Șterge definitiv</button></div><p class="ferr" id="delErr"></p></div>';
@@ -1427,13 +1427,13 @@ function lastMealAt(){ let best = 0; const t = todayKey(); [t, addDays(t, -1)].f
 const hm = ms => { const m = Math.max(0, Math.round(ms / 6e4)), h = Math.floor(m / 60), r = m % 60; return h ? h + ' h' + (r ? ' ' + r + ' min' : '') : r + ' min'; };
 const clockOf = ts => new Date(ts).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
 function whenOf(ts){ const k = keyOf(new Date(ts)), t = todayKey(); return (k === t ? 'azi' : k === addDays(t, -1) ? 'ieri' : k === addDays(t, 1) ? 'mâine' : shortDate(k)) + ' la ' + clockOf(ts); }
-function startFast(fromLast){ const at = fromLast ? lastMealAt() : Date.now(); if (!at) return; setFast({ start: at }); toast('Post pornit. Se termină ' + whenOf(at + fastHours(fastOf()) * 36e5) + '.'); }
+function startFast(fromLast){ const at = fromLast ? lastMealAt() : Date.now(); if (!at) return; setFast({ start: at }); toast('Fasting pornit. Se termină ' + whenOf(at + fastHours(fastOf()) * 36e5) + '.'); }
 function stopFast(auto){
   const f = fastOf(); if (!f.start) return;
   const end = Date.now(), dur = end - f.start, goal = fastHours(f);
   if (dur < 6e4){ setFast({ start: null }); return; }
   setFast({ start: null, log: [{ start: f.start, end, goal }].concat(f.log).slice(0, 30) });
-  if (!auto) toast('Post încheiat: ' + hm(dur) + (dur >= goal * 36e5 ? '. Ținta atinsă!' : '.'));
+  if (!auto) toast('Fasting încheiat: ' + hm(dur) + (dur >= goal * 36e5 ? '. Ținta atinsă!' : '.'));
 }
 function renderFast(){
   const el = $('#fast'); if (!el) return;
@@ -1441,15 +1441,15 @@ function renderFast(){
   if (!p || f.hide){ el.hidden = true; el.innerHTML = ''; return; }
   el.hidden = false;
   const goalH = fastHours(f), now = Date.now(), last = f.log[0];
-  const head = (meta) => '<div class="panel-head"><h2 id="fastTitle">Post intermitent</h2><span class="meta">' + meta + '</span></div>';
+  const head = (meta) => '<div class="panel-head"><h2 id="fastTitle">Fasting intermitent</h2><span class="meta">' + meta + '</span></div>';
   if (!f.start){
     const lm = lastMealAt(), since = lm ? now - lm : 0, canLast = lm && since > 6e4 && since < goalH * 36e5;
-    el.innerHTML = head(goalH + ' h post, ' + (24 - goalH) + ' h mese') +
-      '<div class="row" role="radiogroup" aria-label="Planul de post">' + FAST_PLANS.map(x => '<button class="chip" role="radio" data-action="fast-plan" data-plan="' + x.id + '" aria-checked="' + (f.plan === x.id) + '">' + x.id + '</button>').join('') + '</div>' +
-      '<p class="fast-meal">' + (lm ? 'Ultima masă notată: ' + whenOf(lm) + ', acum ' + hm(since) + '.' : 'Pornește postul după ultima masă a zilei.') + '</p>' +
+    el.innerHTML = head(goalH + ' h fasting, ' + (24 - goalH) + ' h mese') +
+      '<div class="row" role="radiogroup" aria-label="Planul de fasting">' + FAST_PLANS.map(x => '<button class="chip" role="radio" data-action="fast-plan" data-plan="' + x.id + '" aria-checked="' + (f.plan === x.id) + '">' + x.id + '</button>').join('') + '</div>' +
+      '<p class="fast-meal">' + (lm ? 'Ultima masă notată: ' + whenOf(lm) + ', acum ' + hm(since) + '.' : 'Pornește fastingul după ultima masă a zilei.') + '</p>' +
       '<div class="row"><button class="btn primary sm" data-action="fast-start">Pornește acum</button>' + (canLast ? '<button class="btn soft sm" data-action="fast-start-last">De la ultima masă</button>' : '') + '</div>' +
-      (last ? '<p class="hint" style="margin-top:12px">Ultimul post: ' + hm(last.end - last.start) + ((last.end - last.start) / 36e5 >= last.goal - 0.01 ? ', ținta de ' + last.goal + ' h atinsă.' : ', din ' + last.goal + ' h.') + '</p>' : '') +
-      '<button class="rm fast-hide" data-action="fast-hide">Nu țin post, ascunde panoul</button>';
+      (last ? '<p class="hint" style="margin-top:12px">Ultimul fasting: ' + hm(last.end - last.start) + ((last.end - last.start) / 36e5 >= last.goal - 0.01 ? ', ținta de ' + last.goal + ' h atinsă.' : ', din ' + last.goal + ' h.') + '</p>' : '') +
+      '<button class="rm fast-hide" data-action="fast-hide">Nu fac fasting, ascunde panoul</button>';
     return;
   }
   const ms = now - f.start, goal = goalH * 36e5, frac = Math.min(1, ms / goal), done = ms >= goal;
@@ -1457,12 +1457,12 @@ function renderFast(){
   el.innerHTML = head(f.plan + ', ' + (done ? 'ținta atinsă' : 'în desfășurare')) +
     '<div class="fast-run"><div class="fring' + (done ? ' done' : '') + '" role="img" aria-label="' + hm(ms) + ' din ' + goalH + ' ore"><svg viewBox="0 0 128 128" aria-hidden="true"><circle class="trk" cx="64" cy="64" r="52"/><circle class="val" cx="64" cy="64" r="52" stroke-dasharray="' + C.toFixed(2) + '" stroke-dashoffset="' + (C * (1 - frac)).toFixed(2) + '"/></svg><div aria-hidden="true"><b>' + clock + '</b><small>' + (done ? 'gata!' : 'din ' + goalH + ' h') + '</small></div></div>' +
     '<dl class="fast-info"><div><dt>A început</dt><dd>' + whenOf(f.start) + '</dd></div><div><dt>' + (done ? 'Ținta atinsă' : 'Se termină') + '</dt><dd>' + whenOf(f.start + goal) + '</dd></div><div><dt>' + (done ? 'Peste țintă' : 'Mai ai') + '</dt><dd>' + hm(Math.abs(goal - ms)) + '</dd></div></dl></div>' +
-    '<div class="row"><button class="btn ' + (done ? 'primary' : 'ghost') + ' sm" data-action="fast-stop">' + (done ? 'Încheie postul' : 'Oprește postul') + '</button></div>' +
-    '<p class="hint" style="margin-top:10px">Când notezi o masă, postul se oprește singur.</p>';
+    '<div class="row"><button class="btn ' + (done ? 'primary' : 'ghost') + ' sm" data-action="fast-stop">' + (done ? 'Încheie fastingul' : 'Oprește fastingul') + '</button></div>' +
+    '<p class="hint" style="margin-top:10px">Când notezi o masă, fastingul se oprește singur.</p>';
 }
 function fastSection(){
   const f = fastOf();
-  return '<h3>Post intermitent</h3><p>Panoul cu cronometrul de post apare pe ecranul Azi, sub apă.</p>' + swRow('Arată panoul pe ecranul Azi', 'fast-show', !f.hide);
+  return '<h3>Fasting intermitent</h3><p>Panoul cu cronometrul de fasting apare pe ecranul Azi, sub apă.</p>' + swRow('Arată panoul pe ecranul Azi', 'fast-show', !f.hide);
 }
 
 /* ---------- streaks and challenges ---------- */
@@ -1507,7 +1507,7 @@ const BADGES = [
   { id: 'w1', t: 'Prima cântărire', d: 'Notează-ți greutatea', icon: 'scale', v: s => s.weighIns, goal: 1 },
   { id: 'w10', t: '10 dimineți', d: 'Cântărește-te în 10 dimineți', icon: 'scale', v: s => s.weighIns, goal: 10 },
   { id: 'kg1', t: 'Primul kilogram', d: 'Primul kg spre obiectivul tău', icon: 'star', v: s => s.kg, goal: 1, skip: () => !S.profile || S.profile.goal === 'keep' },
-  { id: 'fast1', t: 'Primul post', d: 'Termină un post intermitent', icon: 'clock', v: s => s.fasts, goal: 1 }
+  { id: 'fast1', t: 'Primul fasting', d: 'Termină un fasting intermitent', icon: 'clock', v: s => s.fasts, goal: 1 }
 ];
 const B_ICON = {
   flame: '<path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2.2 1-3.8 2.4-5 .1 1.6.8 2.7 1.8 3.2C11 8.6 11.3 5.6 12 3z"/>',
@@ -3506,7 +3506,7 @@ function profGroups(){
   const p = S.profile, f = fastOf(), c = cycleOf();
   return [
     ['Personalizare', [['appear', 'Aspect', { auto: 'Automat', light: 'Luminos', dark: 'Întunecat' }[S.appearance] || 'Automat'], ['theme', 'Teme de culori', (THEMES[S.theme] || {}).t || '']]],
-    ['Nutriție', [['targets', 'Ținte zilnice', fmt(p.targets.kcal) + ' kcal'], ['cycle', 'Zile de sală și de pauză', c.on ? 'Activat' : 'Oprit'], ['fast', 'Post intermitent', f.hide ? 'Ascuns' : f.plan]]],
+    ['Nutriție', [['targets', 'Ținte zilnice', fmt(p.targets.kcal) + ' kcal'], ['cycle', 'Zile de sală și de pauză', c.on ? 'Activat' : 'Oprit'], ['fast', 'Fasting intermitent', f.hide ? 'Ascuns' : f.plan]]],
     ['Cont', (SELL ? [['plan', 'Abonament', S.isOwner ? 'Proprietar' : 'Gratuit']] : []).concat([['data', 'Datele tale', S.noSample ? '' : aiConsentOn() ? 'AI pornit' : 'AI oprit'], ['backup', 'Cod de backup', '']])],
     ['Despre', [['tips', 'Cum îl folosești cel mai bine', ''], ['about', 'Despre Porția', '']]]
   ];
@@ -4091,7 +4091,7 @@ function bindStatic(){
       case 'fast-start': startFast(false); break;
       case 'fast-start-last': startFast(true); break;
       case 'fast-stop': stopFast(false); break;
-      case 'fast-hide': setFast({ hide: true }); toast('Panoul de post e ascuns. Îl readuci din Profil.', 'Anulează', () => setFast({ hide: false })); break;
+      case 'fast-hide': setFast({ hide: true }); toast('Panoul de fasting e ascuns. Îl readuci din Profil.', 'Anulează', () => setFast({ hide: false })); break;
       case 'fast-show': setFast({ hide: b.getAttribute('aria-checked') === 'true' }); { const n = $('[data-action="fast-show"]'); if (n) n.focus(); } break;
       case 'rl-mode': {
         const v = recipeCalc(); if (!v) break;

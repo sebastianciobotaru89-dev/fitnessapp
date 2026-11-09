@@ -1,6 +1,6 @@
 # Porția
 
-Aplicație de calorii și macronutrienți, în română. Calculează ținta zilnică după un interviu scurt și ține jurnalul de mese, apa, greutatea, seriile și postul intermitent. Are teme de culori, inclusiv Gheață, Bujor și Futurist.
+Aplicație de calorii și macronutrienți, în română. Calculează ținta zilnică după un interviu scurt și ține jurnalul de mese, apa, greutatea, seriile și fastingul intermitent. Are teme de culori, inclusiv Gheață, Bujor și Futurist.
 
 ## Structura
 
