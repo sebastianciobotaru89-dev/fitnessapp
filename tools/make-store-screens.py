@@ -34,7 +34,8 @@ def journal():
         E('h', 'Brânză cottage', 200, 196, 25, 7, 8, 'snack', 16, 41)]}
     consent = {'v': 1, 'health': at(8, 0, 30), 'ai': 0, 'age': True}
     prof = {'sex': 'm', 'age': 34, 'height': 181, 'weight': 86.4, 'activity': 'mod', 'goal': 'recomp',
-            'targets': {'kcal': 2520, 'protein': 186, 'carbs': 290, 'fat': 70, 'water': 3000}, 'consent': consent, 'fast': {'plan': '16:8', 'hide': True}}
+            'targets': {'kcal': 2520, 'protein': 186, 'carbs': 290, 'fat': 70, 'water': 3000}, 'consent': consent, 'fast': {'plan': '16:8', 'hide': True},
+            'plan': {'start': k(30), 'from': 86.4, 'to': 82, 'rate': -0.29}}
     lib = {'recipes': [], 'favorites': [], 'reports': [], 'products': [
         {'code': '5941234567890', 'name': 'Iaurt grecesc 2%', 'unit': 'g', 'per100': {'kcal': 73, 'protein': 9.2, 'carbs': 4, 'fat': 2}, 'serving': 150, 'pack': 400}]}
     return {'profile': prof, 'days': days, 'library': lib}, consent

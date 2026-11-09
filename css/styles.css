@@ -913,6 +913,9 @@ html[data-native] button,html[data-native] .tab,html[data-native] .chip,html[dat
   .diary > .diary-sum,.diary > .diary-hint,.diary > .skel{grid-column:1 / -1}
   #scr-progres{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 22px;align-items:start}
   #scr-progres > .scr-head{grid-column:1 / -1}
+  /* the plan fills the left column; the week and the weight stack on the right */
+  #scr-progres > #plan:not([hidden]){grid-column:1;grid-row:2 / span 2}
+  #scr-progres:has(> #plan:not([hidden])) > #history,#scr-progres:has(> #plan:not([hidden])) > #weight{grid-column:2}
   #scr-add,#scr-profil{max-width:720px;width:100%;margin-inline:auto}
   .toast{bottom:calc(110px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))}
 }
@@ -1480,3 +1483,49 @@ button.lib-main:active{background:color-mix(in srgb,var(--ink) 5%,transparent)}
 .about-logo svg{display:block;border-radius:16px}
 .about-id b{display:block;font-family:var(--f-display);font-stretch:100%;font-weight:800;font-size:22px;letter-spacing:-.02em}
 .about-id span#aboutVer{font-size:13.5px;color:var(--muted)}
+
+/* Progres: alignment with the weight plan. A half dial whose green middle is the plan's margin; the needle is how far ahead or behind you are */
+#plan .panel-head{margin-bottom:6px}
+.align{display:flex;flex-direction:column;align-items:center;text-align:center}
+.al-g{position:relative;width:min(100%,300px)}
+.al-svg{display:block;width:100%;height:auto;overflow:visible}
+.al-ticks line{stroke:var(--line);stroke-width:1.5;stroke-linecap:round}
+.al-ticks line.mj{stroke:var(--muted);stroke-width:2;opacity:.55}
+.al-trk{fill:none;stroke:var(--track);stroke-width:16;stroke-linecap:round}
+.al-zone{fill:none;stroke:var(--kcal);stroke-width:16}
+.al-needle{transform:rotate(var(--a));transform-origin:120px 122px;transition:transform 1.1s cubic-bezier(.3,1.35,.45,1)}
+.al-needle.rest{transform:rotate(-90deg);transition:none}
+.al-needle path,.al-needle circle{fill:var(--ink)}
+.al-needle .al-hub{fill:var(--surface)}
+.al-svg.idle .al-zone{stroke:color-mix(in srgb,var(--kcal) 30%,var(--track))}
+.al-svg.idle .al-needle path{fill:none;stroke:var(--muted);stroke-width:1.6;stroke-dasharray:3 3;stroke-linejoin:round}
+.al-svg.idle .al-needle circle:not(.al-hub){fill:var(--muted)}
+.al-sides{display:flex;justify-content:space-between;margin-top:4px;padding:0 2px;font-size:12.5px;font-weight:650;color:var(--muted)}
+.al-read{margin-top:4px}
+.al-read b{display:block;font-family:var(--f-display);font-stretch:96%;font-weight:820;font-size:30px;line-height:1.05;letter-spacing:-.03em}
+.al-read span{display:block;margin-top:5px;font-size:15px;color:var(--ink)}
+.al-read[data-z="on"] b,.al-read[data-z="done"] b{color:var(--kcal)}
+.al-read[data-z="behind"] b,.al-read[data-z="up"] b,.al-read[data-z="down"] b{color:var(--over)}
+.al-read[data-z="wait"] b{color:var(--muted)}
+.al-basis{margin:6px 0 0;max-width:34ch;font-size:13px;color:var(--muted)}
+.pl-cta{margin:14px 0 16px;text-align:center;color:var(--muted);text-wrap:pretty}
+.pl-prog{margin-top:22px}
+.pl-bar{position:relative;height:12px;margin-top:20px;border-radius:99px;background:var(--track)}
+.pl-fill{position:absolute;inset:0 auto 0 0;min-width:12px;border-radius:inherit;background:var(--kcal)}
+.pl-mark{position:absolute;top:-5px;bottom:-5px;width:3px;margin-left:-1.5px;border-radius:2px;background:var(--ink)}
+.pl-mark span{font-style:normal;position:absolute;bottom:calc(100% + 3px);left:50%;transform:translateX(-50%);font-size:11.5px;font-weight:650;color:var(--muted);white-space:nowrap}
+.pl-ends{display:flex;justify-content:space-between;margin-top:7px;font-size:12.5px;font-weight:650;color:var(--muted);font-variant-numeric:tabular-nums}
+.pl-done{margin:10px 0 0}
+.pl-tiles{margin-top:14px}
+.pl-lines{margin-top:14px;display:grid;gap:8px}
+.pl-lines p{margin:0;text-wrap:pretty}
+.banner.warn{background:color-mix(in srgb,var(--over) 13%,var(--surface))}
+.banner.warn p{margin:0}
+.pl-note{margin-top:10px}
+.pl-foot{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);display:grid;gap:10px;justify-items:start}
+.plan-prev{margin:14px 0 0;padding:12px 14px;border-radius:14px;background:var(--sunk);text-wrap:pretty}
+.plan-prev:empty{display:none}
+.res-plan{margin-top:12px;text-align:left}
+.pl-now{margin:0 0 14px}
+.chart .wplan{fill:none;stroke:var(--ink);stroke-width:1.5;stroke-dasharray:4 4;opacity:.5}
+@media (prefers-reduced-motion: reduce){.al-needle{transition:none}}

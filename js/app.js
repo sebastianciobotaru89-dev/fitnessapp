@@ -536,6 +536,7 @@ function normProfile(p){
     adapt: normAdapt(p.adapt),
     consent: normConsent(p.consent),
     fast: normFast(p.fast),
+    plan: normPlan(p.plan),
     targets: { kcal: Math.round(kcal), protein: Math.round(num(t.protein) || 0), carbs: Math.round(num(t.carbs) || 0), fat: Math.round(num(t.fat) || 0), water: Math.round(num(t.water) || 2500) }
   };
 }
@@ -1412,6 +1413,245 @@ function renderAdapt(){
   el.innerHTML = '<div class="adapt">' + head + body +
     swRow('Ajustează automat, săptămânal', 'adapt-auto', auto) +
     '<p class="hint">Proteinele rămân la fel. Se schimbă glucidele și grăsimile.</p></div>';
+}
+
+/* ---------- weight plan: from the weight you have to the one you want, and a meter that says if you are on it ---------- */
+// The pace comes from the calorie target: what the body burns minus what the target lets you eat, 7700 kcal to a kilo.
+// It never asks for more than guidelines usually call safe: at most 1% of body weight a week down, 0.5% up.
+// Every number here is computed by the app from the journal; none comes from the AI.
+const PLAN_MAX_LOSS = 0.01, PLAN_MAX_GAIN = 0.005, PLAN_MIN_RATE = 0.1, PLAN_WAIT = 7, PLAN_WEIGHS = 3, PLAN_KEEP_TOL = 1;
+const daysBetween = (a, b) => Math.round((parseKey(b) - parseKey(a)) / 864e5);
+const r05 = v => Math.round(v * 2) / 2;
+const planDir = (from, to) => to <= from - 0.5 ? -1 : to >= from + 0.5 ? 1 : 0;
+const goalDir = g => g === 'cut' || g === 'recomp' ? -1 : g === 'bulk' ? 1 : 0;
+const fmtRate = v => nf2.format(Math.round(Math.abs(v) * 20) / 20);
+const nWeeks = n => n <= 1 ? 'o săptămână' : n + (n >= 20 ? ' de săptămâni' : ' săptămâni');
+const planDate = (k, short) => { const d = parseKey(k), o = { day: 'numeric', month: short ? 'short' : 'long' }; if (d.getFullYear() !== new Date().getFullYear()) o.year = 'numeric'; return d.toLocaleDateString('ro-RO', o); };
+function normPlan(x){
+  if (!x || typeof x !== 'object' || !/^\d{4}-\d{2}-\d{2}$/.test(String(x.start || ''))) return null;
+  const from = num(x.from), to = num(x.to), rate = num(x.rate);
+  if (!(from >= 35 && from <= 250 && to >= 35 && to <= 250 && isFinite(rate))) return null;
+  const dir = planDir(from, to);
+  if (dir ? !(rate * dir >= PLAN_MIN_RATE - 1e-9 && rate * dir <= from * PLAN_MAX_LOSS + 1e-9) : rate !== 0) return null;
+  return { start: String(x.start), from: r1(from), to: r1(to), rate: Math.round(rate * 1000) / 1000 };
+}
+// A body mass index under 18.5 counts as underweight, so a weight-loss plan never aims below it
+const minHealthyWeight = h => h >= 120 ? Math.ceil(18.5 * Math.pow(h / 100, 2) * 2) / 2 : null;
+function defaultTarget(goal, w, h){
+  const dir = goalDir(goal); if (!dir) return w;
+  const t = r05(w * ({ cut: 0.92, recomp: 0.96, bulk: 1.04 }[goal]));
+  const lo = minHealthyWeight(h);
+  return dir < 0 && lo ? Math.max(lo, Math.min(t, r05(w - 1))) : t;
+}
+function planCheck(goal, from, to, h){
+  const dir = goalDir(goal); if (!dir) return '';
+  if (!(to >= 35 && to <= 250)) return 'Introdu o greutate între 35 și 250 kg.';
+  if (dir < 0){
+    if (to > from - 1) return 'Pentru ' + (goal === 'cut' ? 'slăbire' : 'recompoziție') + ', alege o greutate cu cel puțin 1 kg sub cea de acum (' + fmt1(from) + ' kg).';
+    const lo = minHealthyWeight(h);
+    if (lo && to < lo) return 'Sub ' + fmt1(lo) + ' kg, indicele de masă corporală ar coborî sub 18,5, adică sub greutatea normală pentru înălțimea ta. Alege cel puțin ' + fmt1(lo) + ' kg.';
+  } else {
+    if (to < from + 1) return 'Pentru masă musculară, alege o greutate cu cel puțin 1 kg peste cea de acum (' + fmt1(from) + ' kg).';
+    if (to > r05(from * 1.3)) return 'Alege cel mult ' + fmt1(r05(from * 1.3)) + ' kg. Pentru mai mult, fă planul în etape.';
+  }
+  return '';
+}
+function planRate(goal, from, to, kcal, tdee){
+  const dir = planDir(from, to);
+  if (!dir) return { ok: true, dir, rate: 0 };
+  const raw = tdee ? (kcal - tdee) * 7 / 7700 : from * ({ cut: -0.005, recomp: -0.0025, bulk: 0.0025 }[goal] || 0);
+  if (raw * dir < PLAN_MIN_RATE) return { ok: false, dir, rate: 0, raw, kcal, tdee };
+  const max = from * (dir < 0 ? PLAN_MAX_LOSS : PLAN_MAX_GAIN);
+  return { ok: true, dir, rate: dir * Math.min(raw * dir, max), capped: raw * dir > max, raw, kcal, tdee };
+}
+// What the body really burns once the journal knows it, the formula before that
+function planTdee(p, from){
+  const A = adaptInfo(); if (A && A.ready) return A.tdee;
+  return p.sex && p.age && p.height && p.activity ? computeTargets(Object.assign({}, p, { weight: from })).tdee : null;
+}
+function planSentence(goal, from, to, kcal, tdee, setup){
+  const R = planRate(goal, from, to, kcal, tdee);
+  if (!R.dir) return { ok: true, R, html: 'Planul: rămâi în jur de <b>' + fmt1(from) + ' kg</b>, cu o marjă de ' + PLAN_KEEP_TOL + ' kg în plus sau în minus.' };
+  if (!R.ok) return { ok: false, R, html: setup
+    ? 'Cu ' + fmt(kcal) + ' kcal pe zi greutatea abia s-ar mișca: arzi în jur de ' + fmt(tdee) + ' kcal, iar ' + fmt(kcal) + ' kcal e minimul sigur pe care îl folosește aplicația. Poți continua fără plan; mai multă mișcare ajută.'
+    : 'Cu ținta de acum, ' + fmt(kcal) + ' kcal pe zi, greutatea abia s-ar mișca' + (tdee ? ': corpul tău arde în jur de ' + fmt(tdee) + ' kcal' : '') + '. Refă interviul sau ajustează ținta de calorii din Profil.' };
+  const end = addDays(todayKey(), Math.ceil(Math.abs(to - from) / Math.abs(R.rate) * 7));
+  return { ok: true, R, end, html: 'Cu ' + fmt(kcal) + ' kcal pe zi ' + (R.dir < 0 ? 'slăbești' : 'câștigi') + ' cam <b>' + fmtRate(R.rate) + ' kg pe săptămână</b> și ajungi la ' + fmt1(to) + ' kg în jur de <b>' + planDate(end) + '</b>.' +
+    (R.capped ? ' Ținta de calorii ar duce la ' + fmtRate(R.raw) + ' kg pe săptămână; planul merge cu cel mult ' + (R.dir < 0 ? '1%' : '0,5%') + ' din greutate pe săptămână, cât recomandă de obicei ghidurile, așa că ia în calcul să mănânci ceva mai mult.' : '') };
+}
+// Where the plan starts: the average of this week's weigh-ins, else the last one, else the profile
+function currentWeight(){
+  const t = todayKey(), wk = weightSeries(t, 7);
+  if (wk.length) return { w: r1(wk.reduce((a, x) => a + x.w, 0) / wk.length), src: wk.length > 1 ? 'avg' : 'last' };
+  const keys = Object.keys(S.days).filter(k => S.days[k].weight && k <= t).sort();
+  if (keys.length) return { w: S.days[keys[keys.length - 1]].weight, src: 'last' };
+  return S.profile && S.profile.weight ? { w: S.profile.weight, src: 'profile' } : null;
+}
+function planState(){
+  const p = S.profile, pl = p && p.plan; if (!pl) return null;
+  const today = todayKey(), start = pl.start > today ? today : pl.start, age = daysBetween(start, today);
+  const dir = Math.sign(pl.rate), total = Math.abs(pl.to - pl.from), weeks = dir ? total / Math.abs(pl.rate) : 0;
+  const at = d => dir ? pl.from + pl.rate * Math.min(Math.max(d, 0) / 7, weeks) : pl.from;
+  const since = n => { const o = []; for (let i = n - 1; i >= 0; i--){ const k = addDays(today, -i), w = S.days[k] && S.days[k].weight; if (w && k >= start) o.push({ d: daysBetween(start, k), w }); } return o; };
+  // the meter compares the average of the last 10 days' weigh-ins with what the plan wanted on their average day
+  const win = since(10), n = win.length;
+  const trend = n ? win.reduce((a, x) => a + x.w, 0) / n : null, meanD = n ? win.reduce((a, x) => a + x.d, 0) / n : age;
+  const planned = at(meanD), tol = dir ? Math.max(0.5, Math.abs(pl.rate)) : PLAN_KEEP_TOL;
+  const ready = age >= PLAN_WAIT && n >= PLAN_WEIGHS;
+  const off = trend == null ? 0 : dir ? (trend - planned) * dir : trend - pl.from;   // above 0: ahead of the plan (or heavier, when keeping)
+  const reached = !!dir && n >= 2 && (trend - pl.to) * dir >= -0.2;
+  const zone = reached ? 'done' : !ready ? 'wait' : Math.abs(off) <= tol ? 'on' : dir ? (off > 0 ? 'ahead' : 'behind') : (off > 0 ? 'up' : 'down');
+  // the real pace: a straight line through the last three weeks of weigh-ins
+  const pts = since(21); let slope = null;
+  if (pts.length >= 4 && pts[pts.length - 1].d - pts[0].d >= 14){
+    const mx = pts.reduce((a, x) => a + x.d, 0) / pts.length, my = pts.reduce((a, x) => a + x.w, 0) / pts.length;
+    let sxy = 0, sxx = 0; pts.forEach(x => { sxy += (x.d - mx) * (x.w - my); sxx += (x.d - mx) * (x.d - mx); });
+    slope = sxx ? sxy / sxx * 7 : null;
+  }
+  const cur = trend != null ? trend : pl.from, done = dir ? (cur - pl.from) * dir : 0;
+  let eta = null;
+  if (dir && slope != null && slope * dir >= PLAN_MIN_RATE && !reached){ const wk = Math.abs(pl.to - cur) / Math.abs(slope); if (wk <= 104) eta = addDays(today, Math.round(wk * 7)); }
+  // food: the finished days of the last week that were logged in full
+  let logged = 0, inT = 0, sum = 0, tsum = 0;
+  for (let i = 1; i <= 7; i++){
+    const k = addDays(today, -i), d = S.days[k]; if (!d || k < start) continue;
+    const t = dayTotals(d), T = targetsFor(k); if (!T || !t.n || t.kcal < Math.max(800, T.kcal * 0.5)) continue;
+    logged++; sum += t.kcal; tsum += T.kcal; if (Math.abs(t.kcal - T.kcal) <= T.kcal * 0.1) inT++;
+  }
+  const warn = [];
+  if (slope != null && age >= 28 && dir <= 0 && -slope > cur * PLAN_MAX_LOSS) warn.push('fast-loss');
+  if (slope != null && age >= 28 && dir > 0 && slope > cur * PLAN_MAX_GAIN) warn.push('fast-gain');
+  if (logged >= 4 && sum < tsum * 0.8) warn.push('low-food');
+  return { pl, dir, start, age, total, weeks, at, endKey: dir ? addDays(start, Math.ceil(weeks * 7)) : null, planned, trend, n, ready, off, tol, zone, slope, cur, done,
+    frac: dir ? Math.max(0, Math.min(1, done / total)) : 0, planFrac: dir ? Math.max(0, Math.min(1, Math.abs(at(age) - pl.from) / total)) : 0,
+    eta, food: { logged, inT, avg: logged ? sum / logged : 0, target: logged ? tsum / logged : 0 }, warn, readyOn: addDays(start, PLAN_WAIT) };
+}
+
+// The meter: a half dial; the green middle is the plan's margin, the needle is how far ahead or behind you are
+const AL_X = 120, AL_Y = 122, AL_R = 94;
+const alPt = (deg, r) => [(AL_X + r * Math.sin(deg * Math.PI / 180)).toFixed(1), (AL_Y - r * Math.cos(deg * Math.PI / 180)).toFixed(1)];
+const alArc = (a, b, r) => { const p = alPt(a, r), q = alPt(b, r); return 'M' + p[0] + ' ' + p[1] + ' A' + r + ' ' + r + ' 0 0 1 ' + q[0] + ' ' + q[1]; };
+const AL_TICKS = (() => {
+  let s = '';
+  for (let a = -90; a <= 90; a += 10){ const mj = a % 30 === 0, p = alPt(a, mj ? 107 : 110), q = alPt(a, 116); s += '<line' + (mj ? ' class="mj"' : '') + ' x1="' + p[0] + '" y1="' + p[1] + '" x2="' + q[0] + '" y2="' + q[1] + '"/>'; }
+  return '<g class="al-ticks">' + s + '</g>';
+})();
+const alGauge = (deg, idle) => '<svg class="al-svg' + (idle ? ' idle' : '') + '" viewBox="0 0 240 134" aria-hidden="true">' + AL_TICKS +
+  '<path class="al-trk" d="' + alArc(-90, 90, AL_R) + '"/><path class="al-zone" d="' + alArc(-30, 30, AL_R) + '"/>' +
+  '<g class="al-needle" style="--a:' + deg.toFixed(1) + 'deg"><path d="M' + (AL_X - 4.5) + ' ' + AL_Y + ' L' + AL_X + ' ' + (AL_Y - 82) + ' L' + (AL_X + 4.5) + ' ' + AL_Y + ' Z"/><circle cx="' + AL_X + '" cy="' + AL_Y + '" r="10"/><circle class="al-hub" cx="' + AL_X + '" cy="' + AL_Y + '" r="3.6"/></g></svg>';
+function renderPlan(){
+  const el = $('#plan'); if (!el) return;
+  const p = S.profile; if (!p){ el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+  const P = planState();
+  const head = '<div class="panel-head"><h2 id="plTitle">Aliniere cu planul</h2>' + (P ? '<span class="meta">' + (P.dir ? fmt1(P.pl.from) + ' → ' + fmt1(P.pl.to) + ' kg' : 'în jur de ' + fmt1(P.pl.from) + ' kg') + '</span>' : '') + '</div>';
+  if (!P){
+    el.innerHTML = head + '<div class="align"><div class="al-g">' + alGauge(0, true) + '</div></div>' +
+      '<p class="pl-cta">Spune-mi ce greutate vrei să ai și îți fac planul: cât de repede, până când și, pe parcurs, dacă ești pe drum.</p>' +
+      '<button class="btn primary wide" data-action="plan-open">Fă-ți planul</button>';
+    return;
+  }
+  const pl = P.pl, kg = v => fmt1(Math.abs(v)) + ' kg', wk = Math.max(1, Math.round(Math.abs(P.off) / Math.max(0.05, Math.abs(pl.rate))));
+  let label, sub;
+  if (P.zone === 'wait'){
+    const miss = Math.max(0, PLAN_WEIGHS - P.n), more = miss === 1 ? 'încă o cântărire' : 'încă ' + miss + ' cântăriri';
+    label = P.age < PLAN_WAIT ? 'Abia ai pornit' : 'Mai cântărește-te';
+    sub = P.age < PLAN_WAIT ? 'Acul pornește pe ' + planDate(P.readyOn) + (miss ? ', după ' + more + '.' : '.') : 'Acul pornește după ' + more + ' în următoarele zile.';
+  } else if (P.zone === 'done'){
+    label = 'Ținta atinsă'; sub = 'Media ta e ' + fmt1(P.trend) + ' kg, ' + (P.dir < 0 ? 'sub' : 'peste') + ' ținta de ' + fmt1(pl.to) + ' kg.';
+  } else if (P.dir){
+    label = { on: 'Pe plan', ahead: 'Înaintea planului', behind: 'În urma planului' }[P.zone];
+    sub = P.zone === 'on' ? (Math.abs(P.off) < 0.05 ? 'Exact pe linia planului.' : 'Cu ' + kg(P.off) + ' ' + (P.off > 0 ? 'înainte' : 'în urmă') + ', în marja planului.') : 'Cu ' + kg(P.off) + ', cam ' + nWeeks(wk) + '.';
+  } else {
+    label = { on: 'Stabil', up: 'Ai urcat', down: 'Ai coborât' }[P.zone];
+    sub = P.zone === 'on' ? (Math.abs(P.off) < 0.05 ? 'Exact la ' + fmt1(pl.from) + ' kg.' : 'La ' + kg(P.off) + ' de ' + fmt1(pl.from) + ' kg, în marjă.') : 'Cu ' + kg(P.off) + ' ' + (P.off > 0 ? 'peste' : 'sub') + ' ' + fmt1(pl.from) + ' kg.';
+  }
+  const idle = P.zone === 'wait', deg = idle ? 0 : Math.max(-86, Math.min(86, P.off / (3 * P.tol) * 90));
+  const sides = P.dir ? ['În urmă', 'Înainte'] : ['Mai ușor', 'Mai greu'];
+  const basis = P.trend != null && !idle ? '<p class="al-basis">Media cântăririlor din ultimele 10 zile e ' + fmt1(P.trend) + ' kg' + (P.zone === 'done' ? '.' : '; planul cerea ' + fmt1(P.planned) + ' kg.') + '</p>' : '';
+  let body = '<div class="align"><div class="al-g" role="img" aria-label="' + esc('Aliniere cu planul: ' + label + '. ' + sub) + '">' + alGauge(deg, idle) +
+    '<div class="al-sides" aria-hidden="true"><span>' + sides[0] + '</span><span>' + sides[1] + '</span></div></div>' +
+    '<div class="al-read" data-z="' + P.zone + '"><b>' + label + '</b><span>' + esc(sub) + '</span></div>' + basis + '</div>';
+  if (P.dir){
+    const moved = P.done >= 0 ? 'Ai ' + (P.dir < 0 ? 'slăbit' : 'câștigat') + ' ' + fmt1(P.done) + ' kg din ' + fmt1(P.total) + '.' : 'Ești cu ' + fmt1(-P.done) + ' kg ' + (P.dir < 0 ? 'peste' : 'sub') + ' greutatea de start.';
+    const want = Math.abs(P.at(P.age) - pl.from);
+    body += '<div class="pl-prog"><div class="pl-bar" role="img" aria-label="' + esc(moved + ' Planul cerea ' + fmt1(want) + ' kg până azi.') + '"><i class="pl-fill" style="width:' + (P.frac * 100).toFixed(1) + '%"></i><i class="pl-mark" style="left:' + (P.planFrac * 100).toFixed(1) + '%"><span>plan</span></i></div>' +
+      '<div class="pl-ends" aria-hidden="true"><span>' + fmt1(pl.from) + ' kg</span><span>' + fmt1(pl.to) + ' kg</span></div>' +
+      '<p class="pl-done"><b>' + moved + '</b> Planul cerea ' + fmt1(want) + ' kg până azi.</p></div>' +
+      '<dl class="hstats pl-tiles"><div><dt>Ritmul planului</dt><dd>' + (P.dir < 0 ? '−' : '+') + fmtRate(pl.rate) + '<small> kg pe săpt.</small></dd></div><div><dt>Ajungi la ' + fmt1(pl.to) + ' kg</dt><dd>' + esc(planDate(P.endKey, true)) + '</dd></div></dl>';
+  } else {
+    body += '<dl class="hstats pl-tiles"><div><dt>Greutatea de menținut</dt><dd>' + fmt1(pl.from) + '<small> kg</small></dd></div><div><dt>Marja</dt><dd>±' + PLAN_KEEP_TOL + '<small> kg</small></dd></div></dl>';
+  }
+  const lines = [];
+  if (P.slope != null){
+    const s = P.slope, wrong = P.dir && s * P.dir < -0.05;
+    lines.push('<b>Ritmul tău, ultimele 3 săptămâni:</b> ' + (Math.abs(s) < 0.05 ? 'greutatea stă pe loc' : (s < 0 ? '−' : '+') + fmtRate(s) + ' kg pe săptămână') +
+      (P.eta ? ', deci ajungi la ' + fmt1(pl.to) + ' kg în jur de ' + planDate(P.eta) + '.' : wrong ? ', invers față de plan.' : '.'));
+  }
+  const F = P.food;
+  lines.push(F.logged >= 3 ? '<b>Mâncarea, ultimele 7 zile:</b> ' + F.inT + ' din ' + F.logged + ' zile notate complet au fost în țintă (±10%), în medie ' + fmt(F.avg) + ' kcal din ' + fmt(F.target) + '.'
+    : '<b>Mâncarea:</b> notează mesele câteva zile la rând ca să văd dacă mănânci după plan.');
+  body += '<div class="pl-lines">' + lines.map(l => '<p>' + l + '</p>').join('') + '</div>';
+  const W = {
+    'fast-loss': 'Slăbești ' + fmtRate(P.slope || 0) + ' kg pe săptămână, peste 1% din greutate. Ghidurile recomandă de obicei mai încet, ca să nu pierzi mușchi. Mănâncă mai aproape de ținta de calorii.',
+    'fast-gain': 'Câștigi ' + fmtRate(P.slope || 0) + ' kg pe săptămână, mai repede de 0,5% din greutate. La ritmul ăsta crește partea de grăsime. Mănâncă mai aproape de țintă.',
+    'low-food': 'În zilele notate ai mâncat în medie ' + fmt(F.avg) + ' kcal, mult sub ținta de ' + fmt(F.target) + '. Dacă n-ai uitat să notezi ceva, un deficit mai mare nu ajută: costă mușchi și energie.'
+  };
+  body += P.warn.map(w => '<div class="banner warn"><p>' + W[w] + '</p></div>').join('');
+  if (P.zone === 'ahead' && P.dir < 0 && P.age < 21) body += '<p class="hint pl-note">În primele săptămâni o parte din scădere e apă, așa că ritmul se poate tempera.</p>';
+  if (P.zone === 'done') body += '<p class="hint pl-note">Ca să rămâi aici, refă interviul din Profil și alege Menținere. Sau pune-ți o țintă nouă.</p>';
+  body += '<div class="pl-foot"><button class="btn ' + (P.zone === 'done' ? 'primary' : 'ghost') + ' sm" data-action="plan-open">' + (P.zone === 'done' ? 'Pune o țintă nouă' : 'Schimbă ținta') + '</button>' +
+    '<p class="hint">Planul e o estimare din ținta de calorii. Greutatea nu scade în linie dreaptă: contează tendința pe câteva săptămâni.</p></div>';
+  el.innerHTML = head + body;
+}
+// The needle swings in from the left when you open Progres
+function alignSweep(){
+  const n = $('#plan .al-svg:not(.idle) .al-needle'); if (!n || reduceMotion()) return;
+  n.classList.add('rest'); void n.getBoundingClientRect();
+  requestAnimationFrame(() => requestAnimationFrame(() => n.classList.remove('rest')));
+}
+
+// The sheet that makes or changes the plan
+function openPlan(){
+  const p = S.profile; if (!p) return;
+  const now = currentWeight();
+  if (!now){ toast('Notează-ți întâi greutatea, în Progres.'); return; }
+  const dir = goalDir(p.goal), keep = p.plan && planDir(now.w, p.plan.to) === dir && dir;
+  S.mini = { kind: 'plan', from: now.w, to: keep ? p.plan.to : defaultTarget(p.goal, now.w, p.height) };
+  const src = { avg: 'media cântăririlor din ultima săptămână', last: 'ultima cântărire', profile: 'greutatea din profil' }[now.src];
+  const g = GOALS.find(x => x.id === p.goal);
+  $('#miniCard').innerHTML = sheetHead('miniTitle', 'Planul tău', 'close-mini') +
+    '<p class="pl-now">Acum: <b>' + fmt1(now.w) + ' kg</b>, ' + src + '.' + (g ? ' Obiectiv: ' + esc(g.t.toLowerCase()) + '.' : '') + '</p>' +
+    (dir ? '<label class="lbl" for="plTo">' + (dir < 0 ? 'Greutatea pe care vrei s-o atingi' : 'Până la ce greutate vrei să crești') + '</label>' +
+      '<div class="numfield"><button class="round" data-action="plan-step" data-d="-0.5" aria-label="Mai puțin">−</button><div class="unit"><input type="text" inputmode="decimal" id="plTo" value="' + esc(fmt1(S.mini.to)) + '"><em>kg</em></div><button class="round" data-action="plan-step" data-d="0.5" aria-label="Mai mult">+</button></div>' +
+      '<p class="ferr" id="plErr"></p>'
+      : '') +
+    '<p class="plan-prev" id="plPrev"></p>' +
+    (dir ? '' : '<p class="hint">Ca să slăbești sau să crești în greutate, refă interviul din Profil și alege alt obiectiv.</p>') +
+    '<div class="row ebtns"><button class="btn primary wide" data-action="plan-save" id="plSave">Pornește planul</button></div>';
+  updatePlanPrev();
+  showSheet('#miniSheet'); $('#miniTitle').focus({ preventScroll: true });
+}
+function updatePlanPrev(){
+  const m = S.mini; if (!m || m.kind !== 'plan') return;
+  const p = S.profile, err = planCheck(p.goal, m.from, m.to, p.height);
+  const e = $('#plErr'); if (e) e.textContent = err;
+  const to = goalDir(p.goal) ? m.to : m.from;
+  const s = err ? null : planSentence(p.goal, m.from, to, p.targets.kcal, planTdee(p, m.from));
+  $('#plPrev').innerHTML = s ? s.html : '';
+  $('#plSave').disabled = !!err || !s || !s.ok;
+}
+function savePlan(){
+  const m = S.mini, p = S.profile; if (!m || m.kind !== 'plan' || !p) return;
+  const to = goalDir(p.goal) ? m.to : m.from;
+  if (planCheck(p.goal, m.from, to, p.height)) return;
+  const R = planRate(p.goal, m.from, to, p.targets.kcal, planTdee(p, m.from)); if (!R.ok) return;
+  const old = clone(p);
+  S.profile = Object.assign(clone(p), { plan: { start: todayKey(), from: m.from, to, rate: Math.round(R.rate * 1000) / 1000 } });
+  saveProfile(); closeMini(); renderAll();
+  const P = planState();
+  toast(P && P.dir ? 'Planul e gata: ' + fmt1(to) + ' kg în jur de ' + planDate(P.endKey) : 'Planul e gata: rămâi în jur de ' + fmt1(to) + ' kg', 'Anulează', () => { S.profile = old; saveProfile(); renderAll(); });
+  if (S.screen !== 'progres') go('progres'); else setTimeout(alignSweep, 60);
 }
 
 /* ---------- intermittent fasting ---------- */
@@ -2729,8 +2969,8 @@ function toast(msg, label, fn, opt){
 }
 
 /* ---------- render ---------- */
-function renderAll(){ renderSync(); renderHeader(); renderHero(); renderMeals(); renderTabs(); renderRecent(); renderPreview(); renderIdeas(); renderDiary(); renderWater(); renderFast(); renderWeight(); renderHistory(); widgetSync(); }
-function renderDayParts(){ renderHeader(); renderHero(); renderRecent(); renderManualFit(); renderDiary(); renderWater(); renderFast(); renderWeight(); renderHistory(); renderPreview(); widgetSync(); }
+function renderAll(){ renderSync(); renderHeader(); renderHero(); renderMeals(); renderTabs(); renderRecent(); renderPreview(); renderIdeas(); renderDiary(); renderWater(); renderFast(); renderPlan(); renderWeight(); renderHistory(); widgetSync(); }
+function renderDayParts(){ renderHeader(); renderHero(); renderRecent(); renderManualFit(); renderDiary(); renderWater(); renderFast(); renderPlan(); renderWeight(); renderHistory(); renderPreview(); widgetSync(); }
 // ---------- home screen and lock screen widgets ----------
 // The store app hands its widgets today's figures, tomorrow's targets and the theme's colours.
 // They stay on the phone: iOS keeps them in the app's own App Group, Android in the app's preferences.
@@ -2829,6 +3069,7 @@ function go(name){
   moveTabInd(!prev);
   if (name === 'profil'){ if (S.profile) renderSettings(); else renderProfileEmpty(); }
   if (name === 'progres' && (S.histPick || S.wPick)){ S.histPick = null; S.wPick = null; histPaint(); wPaint(); }
+  if (name === 'progres') alignSweep();
   const q = name === 'azi' && CHEER.queued; CHEER.queued = null;
   window.scrollTo(0, name === 'add' || q ? 0 : (S.scrollY[name] || 0));
   onScroll();
@@ -3226,10 +3467,15 @@ function renderWeight(){
   // the line is the 7-day average (the trend); each morning's weigh-in is a small dot around it
   pts.forEach(p => { const win = pts.filter(q => q.x <= p.x && q.x > p.x - 7); p.t = win.reduce((a, q) => a + q.w, 0) / win.length; });
   S.wGeo = null;
+  // the plan's line over the same 30 days, from the day it started
+  const PS = planState(), plan = [];
+  if (PS) for (let i = 0; i < N; i++){ const k = addDays(today, -(N - 1 - i)); if (k >= PS.start) plan.push({ x: i, w: PS.at(daysBetween(PS.start, k)) }); }
+  const showPlan = pts.length >= 2 && plan.length >= 2;
+  $('#wLeg').hidden = !showPlan;
   if (pts.length < 2){
     chart.innerHTML = '<p class="wempty">' + (pts.length ? 'Ai o greutate notată. După încă câteva dimineți apare aici graficul tendinței.' : 'Notează-ți greutatea câteva dimineți la rând și aici apare tendința pe 30 de zile.') + '</p>';
   } else {
-    const ws = pts.map(p => p.w);
+    const ws = pts.map(p => p.w).concat(showPlan ? plan.map(p => p.w) : []);
     let lo = Math.min(...ws), hi = Math.max(...ws);
     if (hi - lo < 2){ const mid = (hi + lo)/2; lo = mid - 1; hi = mid + 1; }
     lo -= 0.3; hi += 0.3;
@@ -3240,11 +3486,12 @@ function renderWeight(){
     const area = line + ' L' + x(pts[pts.length-1].x).toFixed(1) + ' ' + base + ' L' + x(pts[0].x).toFixed(1) + ' ' + base + ' Z';
     const last = pts[pts.length - 1];
     S.wGeo = { pts, x: pts.map(p => x(p.x)), y: pts.map(p => y(p.w)), Wd, top, base };
-    chart.innerHTML = '<div class="chart wchart" data-scrub="weight"><svg viewBox="0 0 ' + Wd + ' 132" role="img" aria-label="Greutatea în ultimele 30 de zile, de la ' + fmt1(pts[0].w) + ' la ' + fmt1(last.w) + ' kg. Linia arată media pe 7 zile.">' +
+    chart.innerHTML = '<div class="chart wchart" data-scrub="weight"><svg viewBox="0 0 ' + Wd + ' 132" role="img" aria-label="Greutatea în ultimele 30 de zile, de la ' + fmt1(pts[0].w) + ' la ' + fmt1(last.w) + ' kg. Linia arată media pe 7 zile' + (showPlan ? ', iar linia punctată planul, care cerea ' + fmt1(plan[plan.length - 1].w) + ' kg azi' : '') + '.">' +
       '<defs><linearGradient id="wG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--kcal);stop-opacity:.26"/><stop offset="1" style="stop-color:var(--kcal);stop-opacity:0"/></linearGradient></defs>' +
       '<line class="wgrid" x1="' + left + '" x2="' + right + '" y1="' + top + '" y2="' + top + '"/><line class="wgrid" x1="' + left + '" x2="' + right + '" y1="' + base + '" y2="' + base + '"/>' +
       '<text x="' + (left - 6) + '" y="' + (top + 4) + '" text-anchor="end">' + fmt1(hi) + '</text><text x="' + (left - 6) + '" y="' + (base + 4) + '" text-anchor="end">' + fmt1(lo) + '</text>' +
       '<path class="warea" d="' + area + '" fill="url(#wG)"/>' +
+      (showPlan ? '<path class="wplan" d="' + plan.map((p, i) => (i ? 'L' : 'M') + x(p.x).toFixed(1) + ' ' + y(p.w).toFixed(1)).join(' ') + '"/>' : '') +
       pts.map((p, i) => '<circle class="wdot" cx="' + S.wGeo.x[i].toFixed(1) + '" cy="' + S.wGeo.y[i].toFixed(1) + '" r="2.4"/>').join('') +
       '<path class="wline" d="' + line + '"/>' +
       '<line class="wguide" x1="0" x2="0" y1="' + (top - 6) + '" y2="' + base + '"/><circle class="wpick" r="5.5" cx="0" cy="0"/>' +
@@ -3387,12 +3634,15 @@ function histPaint(){
 }
 
 /* ---------- setup interview ---------- */
-const STEPS = ['intro','sex','age','body','activity','goal','result'];
+const STEPS = ['intro','sex','age','body','activity','goal','target','result'];
+// Keeping your weight needs no target, so that step is skipped
+const stepOn = (st, d) => !(st === 'target' && d.goal === 'keep');
+function nextStep(dlt){ let i = S.setup.step; do { i += dlt; } while (i > 0 && i < STEPS.length - 1 && !stepOn(STEPS[i], S.setup.d)); return Math.max(0, Math.min(STEPS.length - 1, i)); }
 function openSetup(first){
   const base = S.profile ? S.profile : PREFILL;
   S.setup = {
     step: S.profile ? 1 : 0, first: !S.profile && !!first,
-    d: { sex: base.sex || null, age: base.age || PREFILL.age, height: base.height || PREFILL.height, weight: base.weight || PREFILL.weight, activity: base.activity || null, goal: base.goal || PREFILL.goal }
+    d: { sex: base.sex || null, age: base.age || PREFILL.age, height: base.height || PREFILL.height, weight: base.weight || PREFILL.weight, activity: base.activity || null, goal: base.goal || PREFILL.goal, target: S.profile && S.profile.plan ? S.profile.plan.to : NaN }
   };
   $('#sClose').hidden = S.setup.first;
   showSheet('#setup');
@@ -3405,6 +3655,7 @@ function stepValid(){
   if (st === 'body') return d.height >= 120 && d.height <= 230 && d.weight >= 35 && d.weight <= 250;
   if (st === 'activity') return !!d.activity;
   if (st === 'goal') return !!d.goal;
+  if (st === 'target') return !planCheck(d.goal, d.weight, d.target, d.height);
   return true;
 }
 function optList(field, list){
@@ -3413,11 +3664,12 @@ function optList(field, list){
 }
 function renderSetup(){
   const s = S.setup, d = s.d, st = STEPS[s.step];
-  $('#sProg').innerHTML = [1,2,3,4,5].map(i => '<i class="' + (i <= s.step ? 'on' : '') + '"></i>').join('');
+  const vis = STEPS.filter(x => x !== 'intro' && x !== 'result' && stepOn(x, d)), at = st === 'result' ? vis.length : vis.indexOf(st);
+  $('#sProg').innerHTML = vis.map((x, i) => '<i class="' + (i <= at ? 'on' : '') + '"></i>').join('');
   let b = '';
   if (st === 'intro'){
     const tick = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
-    b = '<div class="intro-art" aria-hidden="true"><svg viewBox="0 0 160 160"><circle cx="80" cy="80" r="66" class="ia-t"/><circle cx="80" cy="80" r="66" class="ia-k" stroke-dasharray="414.7" stroke-dashoffset="120"/><circle cx="80" cy="80" r="50" class="ia-t"/><circle cx="80" cy="80" r="50" class="ia-p" stroke-dasharray="314.2" stroke-dashoffset="110"/><circle cx="80" cy="80" r="34" class="ia-t"/><circle cx="80" cy="80" r="34" class="ia-c" stroke-dasharray="213.6" stroke-dashoffset="60"/><circle cx="80" cy="80" r="18" class="ia-t"/><circle cx="80" cy="80" r="18" class="ia-f" stroke-dasharray="113.1" stroke-dashoffset="40"/></svg></div>' + '<h2 id="sTitle" tabindex="-1">Hai să-ți calculăm ținta</h2><p>Cinci întrebări scurte. La final îți calculez caloriile, proteinele, glucidele, grăsimile și apa.</p>' +
+    b = '<div class="intro-art" aria-hidden="true"><svg viewBox="0 0 160 160"><circle cx="80" cy="80" r="66" class="ia-t"/><circle cx="80" cy="80" r="66" class="ia-k" stroke-dasharray="414.7" stroke-dashoffset="120"/><circle cx="80" cy="80" r="50" class="ia-t"/><circle cx="80" cy="80" r="50" class="ia-p" stroke-dasharray="314.2" stroke-dashoffset="110"/><circle cx="80" cy="80" r="34" class="ia-t"/><circle cx="80" cy="80" r="34" class="ia-c" stroke-dasharray="213.6" stroke-dashoffset="60"/><circle cx="80" cy="80" r="18" class="ia-t"/><circle cx="80" cy="80" r="18" class="ia-f" stroke-dasharray="113.1" stroke-dashoffset="40"/></svg></div>' + '<h2 id="sTitle" tabindex="-1">Hai să-ți calculăm ținta</h2><p>Câteva întrebări scurte. La final îți calculez caloriile, proteinele, glucidele, grăsimile, apa și planul până la greutatea pe care o vrei.</p>' +
       '<ul class="intro-list"><li>' + tick + 'Nu trebuie să știi niciun număr</li><li>' + tick + 'Durează cam un minut</li><li>' + tick + 'Poți schimba totul oricând, din Profil</li></ul>' + (S.profile ? '<p>Am completat deja ce știu despre tine. Verifică și corectează unde e cazul.</p>' : '');
   } else if (st === 'sex'){
     b = '<h2 id="sTitle" tabindex="-1">Sexul biologic</h2><p>Formula metabolismului diferă puțin între bărbați și femei.</p>' + optList('sex', [{ id:'m', t:'Bărbat' }, { id:'f', t:'Femeie' }]);
@@ -3432,6 +3684,10 @@ function renderSetup(){
     b = '<h2 id="sTitle" tabindex="-1">Cât de activ ești într-o săptămână obișnuită?</h2><p>Numără toate antrenamentele: sală, alergare, cardio, sport.</p>' + optList('activity', ACT);
   } else if (st === 'goal'){
     b = '<h2 id="sTitle" tabindex="-1">Ce vrei să obții?</h2>' + optList('goal', GOALS);
+  } else if (st === 'target'){
+    if (!isFinite(d.target) || planDir(d.weight, d.target) !== goalDir(d.goal)) d.target = defaultTarget(d.goal, d.weight, d.height);
+    b = '<h2 id="sTitle" tabindex="-1">' + (d.goal === 'bulk' ? 'Până la ce greutate vrei să crești?' : 'Ce greutate vrei să atingi?') + '</h2><p>Acum ai ' + fmt1(d.weight) + ' kg. Îți fac planul: cât de repede și până când. În Progres vezi apoi dacă ești pe drum.</p>' +
+      '<div class="numfield"><button class="round" data-action="s-step" data-field="target" data-d="-0.5" aria-label="Mai puțin">−</button><div class="unit"><label class="sr" for="sTarget">Greutatea țintă</label><input type="text" inputmode="decimal" id="sTarget" data-field="target" value="' + esc(fmt1(d.target)) + '"><em>kg</em></div><button class="round" data-action="s-step" data-field="target" data-d="0.5" aria-label="Mai mult">+</button></div><p class="ferr" id="sErr"></p><p class="plan-prev" id="sPlanPrev"></p>';
   } else {
     const T = computeTargets(d);
     const g = GOALS.find(x => x.id === d.goal);
@@ -3442,9 +3698,11 @@ function renderSetup(){
         DIAL_TICKS + '<circle class="r-trk" cx="120" cy="120" r="96"/><circle class="r-val" cx="120" cy="120" r="96"/><g class="d-knob"><circle cx="120" cy="24" r="9"/><circle class="d-knob-in" cx="120" cy="24" r="3.4"/></g></svg>' +
         '<span class="d-center" aria-hidden="true"><span class="d-label">pe zi</span><b class="big-num" id="resNum">' + fmt(T.kcal) + '</b><span class="hc-sub">kcal pentru ' + esc(g.t.toLowerCase()) + '</span></span></div>' +
       '<dl class="rgrid"><div><dt><i class="dot p"></i>Proteine</dt><dd>' + fmt(T.protein) + '<small> g</small></dd></div><div><dt><i class="dot c"></i>Glucide</dt><dd>' + fmt(T.carbs) + '<small> g</small></dd></div><div><dt><i class="dot f"></i>Grăsimi</dt><dd>' + fmt(T.fat) + '<small> g</small></dd></div><div><dt><i class="dot w"></i>Apă</dt><dd>' + fmtL(T.water) + '<small> L</small></dd></div></dl>' +
+      setupPlanLine(d, T) +
       '<details class="how"><summary>Cum am calculat</summary><p>Metabolismul bazal e ' + fmt(T.bmr) + ' kcal (formula Mifflin-St Jeor). Înmulțit cu ' + nf3.format(T.actF) + ' pentru activitate dă ' + fmt(T.tdee) + ' kcal de menținere, apoi ' + adjTxt + '. Proteine ' + fmt1(T.protPerKg) + ' g pe kg, grăsimi 25% din calorii, restul glucide. Poți ajusta oricând numerele din Profil.</p></details></div>';
   }
   $('#sBody').innerHTML = b;
+  if (st === 'target') updateSetupPlan();
   if (st === 'result') playResult(computeTargets(d).kcal);
   const isLast = st === 'result';
   $('#sFoot').innerHTML = (s.step > (S.profile ? 1 : 0) ? '<button class="btn ghost" data-action="s-back">Înapoi</button>' : '') +
@@ -3469,16 +3727,34 @@ function playResult(kcal){
 }
 function setupInput(field, raw){
   const v = num(raw);
-  S.setup.d[field] = isFinite(v) ? (field === 'weight' ? r1(v) : Math.round(v)) : NaN;
-  const ok = stepValid();
+  S.setup.d[field] = isFinite(v) ? (field === 'weight' || field === 'target' ? r1(v) : Math.round(v)) : NaN;
+  const ok = stepValid(), st = STEPS[S.setup.step];
   $('#sNext').disabled = !ok;
   const err = $('#sErr');
-  if (err) err.textContent = ok ? '' : (STEPS[S.setup.step] === 'age' ? 'Introdu o vârstă între 14 și 90 de ani.' : 'Verifică valorile: înălțime 120–230 cm, greutate 35–250 kg.');
+  if (err) err.textContent = ok ? '' : st === 'age' ? 'Introdu o vârstă între 14 și 90 de ani.' : st === 'target' ? planCheck(S.setup.d.goal, S.setup.d.weight, S.setup.d.target, S.setup.d.height) : 'Verifică valorile: înălțime 120–230 cm, greutate 35–250 kg.';
+  if (st === 'target') updateSetupPlan();
+}
+function setupPlanLine(d, T){
+  const s = planSentence(d.goal, d.weight, goalDir(d.goal) ? d.target : d.weight, T.kcal, T.tdee);
+  return goalDir(d.goal) && s.ok ? '<p class="plan-prev res-plan">' + s.html + '</p>' : '';
+}
+function updateSetupPlan(){
+  const d = S.setup.d, el = $('#sPlanPrev'); if (!el) return;
+  const T = computeTargets(d), err = planCheck(d.goal, d.weight, d.target, d.height);
+  el.innerHTML = err ? '' : planSentence(d.goal, d.weight, d.target, T.kcal, T.tdee, true).html;
+}
+// The plan made in the interview; redoing the interview with the same target keeps the plan already running
+function setupPlan(d, T){
+  const to = goalDir(d.goal) ? d.target : d.weight, old = S.profile && S.profile.plan;
+  if (old && old.to === to && planDir(old.from, old.to) === planDir(d.weight, to)) return old;
+  if (goalDir(d.goal) && planCheck(d.goal, d.weight, to, d.height)) return null;
+  const R = planRate(d.goal, d.weight, to, T.kcal, T.tdee);
+  return R.ok ? normPlan({ start: todayKey(), from: d.weight, to, rate: R.rate }) : null;
 }
 function saveSetup(){
   const d = S.setup.d, T = computeTargets(d);
   S.profile = { sex: d.sex, age: d.age, height: d.height, weight: d.weight, activity: d.activity, goal: d.goal, custom: false, updatedAt: Date.now(), skin: S.profile ? (S.profile.skin || null) : (lsGet('portia-skin') || null), cycle: S.profile ? (S.profile.cycle || null) : null,
-    adapt: S.profile ? (S.profile.adapt || null) : null, fast: S.profile ? (S.profile.fast || null) : null, consent: (S.profile && S.profile.consent) || normConsent(lsGet('portia-consent')),
+    adapt: S.profile ? (S.profile.adapt || null) : null, fast: S.profile ? (S.profile.fast || null) : null, plan: setupPlan(d, T), consent: (S.profile && S.profile.consent) || normConsent(lsGet('portia-consent')),
     targets: { kcal: T.kcal, protein: T.protein, carbs: T.carbs, fat: T.fat, water: T.water } };
   saveProfile();
   closeSheet('#setup');
@@ -3492,6 +3768,7 @@ const PICON = {
   appear: '<path d="M12 3.5a8.5 8.5 0 1 0 0 17z" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="8.5"/>',
   theme: '<path d="M12 3.5a8.5 8.5 0 0 0 0 17c1.3 0 1.8-.9 1.8-1.8 0-1.4-1.2-1.8-1.2-3 0-1 .8-1.7 1.8-1.7h2.3c2.3 0 3.8-1.6 3.8-3.8 0-3.7-3.8-6.7-8.5-6.7z"/><circle cx="8" cy="11" r="1.2" fill="currentColor" stroke="none"/><circle cx="11" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.2" fill="currentColor" stroke="none"/>',
   targets: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>',
+  goalw: '<path d="M4.5 17.5a7.5 7.5 0 0 1 15 0"/><path d="M12 17.5l3.2-4.6"/><path d="M4.5 17.5h15"/>',
   cycle: '<path d="M6.5 8v8M17.5 8v8M3.5 10v4M20.5 10v4M6.5 12h11"/>',
   fast: '<circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.5 1.5M10 3h4"/>',
   plan: '<path d="M4 8.5l4 3.5 4-6 4 6 4-3.5-1.5 9.5h-13z"/>',
@@ -3506,7 +3783,7 @@ function profGroups(){
   const p = S.profile, f = fastOf(), c = cycleOf();
   return [
     ['Personalizare', [['appear', 'Aspect', { auto: 'Automat', light: 'Luminos', dark: 'Întunecat' }[S.appearance] || 'Automat'], ['theme', 'Teme de culori', (THEMES[S.theme] || {}).t || '']]],
-    ['Nutriție', [['targets', 'Ținte zilnice', fmt(p.targets.kcal) + ' kcal'], ['cycle', 'Zile de sală și de pauză', c.on ? 'Activat' : 'Oprit'], ['fast', 'Fasting intermitent', f.hide ? 'Ascuns' : f.plan]]],
+    ['Nutriție', [['targets', 'Ținte zilnice', fmt(p.targets.kcal) + ' kcal'], ['goalw', 'Ținta de greutate', p.plan ? fmt1(p.plan.to) + ' kg' : 'Fă-ți planul'], ['cycle', 'Zile de sală și de pauză', c.on ? 'Activat' : 'Oprit'], ['fast', 'Fasting intermitent', f.hide ? 'Ascuns' : f.plan]]],
     ['Cont', (SELL ? [['plan', 'Abonament', S.isOwner ? 'Proprietar' : 'Gratuit']] : []).concat([['data', 'Datele tale', S.noSample ? '' : aiConsentOn() ? 'AI pornit' : 'AI oprit'], ['backup', 'Cod de backup', '']])],
     ['Despre', [['tips', 'Cum îl folosești cel mai bine', ''], ['about', 'Despre Porția', '']]]
   ];
@@ -3583,7 +3860,7 @@ function renderSettingsInner(){
     '<p class="foot">' + store + '</p>';
 }
 // Each row's icon sits on its own soft colour, the same four colours the meals use
-const PTINT = { appear: 4, theme: 3, targets: 2, cycle: 1, fast: 4, plan: 1, data: 2, backup: 4, tips: 1, about: 0 };
+const PTINT = { appear: 4, theme: 3, targets: 2, goalw: 3, cycle: 1, fast: 4, plan: 1, data: 2, backup: 4, tips: 1, about: 0 };
 const SEG_ICON = {
   light: '<circle cx="12" cy="12" r="4"/><path d="M12 2.8v2M12 19.2v2M2.8 12h2M19.2 12h2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M5.5 18.5l1.4-1.4M17.1 6.9l1.4-1.4"/>',
   auto: '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/>',
@@ -3946,7 +4223,7 @@ function bindStatic(){
     switch (a){
       case 'open-settings': openSettings(); break;
       case 'close-settings': go('azi'); break;
-      case 'prof-open': S.profScroll = window.scrollY; S.profSec = b.dataset.sec; renderSettings(); window.scrollTo(0, 0); { const h = $('#setTitle'); if (h) h.focus({ preventScroll: true }); } break;
+      case 'prof-open': if (b.dataset.sec === 'goalw'){ openPlan(); break; } S.profScroll = window.scrollY; S.profSec = b.dataset.sec; renderSettings(); window.scrollTo(0, 0); { const h = $('#setTitle'); if (h) h.focus({ preventScroll: true }); } break;
       case 'prof-back': S.profSec = null; renderSettings(); window.scrollTo(0, S.profScroll || 0); break;
       case 'open-setup': openSetup(false); break;
       case 'redo-setup': openSetup(false); break;
@@ -4041,15 +4318,18 @@ function bindStatic(){
       case 's-pick': S.setup.d[b.dataset.field] = b.dataset.v; renderSetup(); break;
       case 's-step': {
         const f = b.dataset.field, dlt = Number(b.dataset.d);
-        const cur = isFinite(S.setup.d[f]) ? S.setup.d[f] : PREFILL[f];
-        const v = f === 'weight' ? r1(cur + dlt) : Math.round(cur + dlt);
+        const cur = isFinite(S.setup.d[f]) ? S.setup.d[f] : f === 'target' ? S.setup.d.weight : PREFILL[f];
+        const v = f === 'weight' || f === 'target' ? r1(cur + dlt) : Math.round(cur + dlt);
         S.setup.d[f] = v;
-        const inp = $('input[data-field="' + f + '"]', $('#sBody')); if (inp) inp.value = f === 'weight' ? fmt1(v) : v;
+        const inp = $('input[data-field="' + f + '"]', $('#sBody')); if (inp) inp.value = f === 'weight' || f === 'target' ? fmt1(v) : v;
         setupInput(f, String(v)); break;
       }
-      case 's-next': if (stepValid()){ S.setup.step = Math.min(STEPS.length - 1, S.setup.step + 1); renderSetup(); } break;
-      case 's-back': S.setup.step = Math.max(0, S.setup.step - 1); renderSetup(); break;
+      case 's-next': if (stepValid()){ S.setup.step = nextStep(1); renderSetup(); } break;
+      case 's-back': S.setup.step = nextStep(-1); renderSetup(); break;
       case 's-save': saveSetup(); break;
+      case 'plan-open': openPlan(); break;
+      case 'plan-save': savePlan(); break;
+      case 'plan-step': if (S.mini && S.mini.kind === 'plan'){ const v = r1((isFinite(S.mini.to) ? S.mini.to : S.mini.from) + Number(b.dataset.d)); S.mini.to = v; $('#plTo').value = fmt1(v); updatePlanPrev(); } break;
       case 'save-targets': saveTargets(); break;
       case 'make-backup': makeBackup(); break;
       case 'copy-backup': copyBackup(); break;
@@ -4174,6 +4454,7 @@ function bindStatic(){
     if (S.rdraft && t.id === 'rName') S.rdraft.name = t.value;
     if (S.rdraft && t.id === 'rServ'){ const v = Math.round(num(t.value)); if (v >= 1 && v <= 50){ S.rdraft.servings = v; renderRecipeItems(); } }
     if (S.rdraft && t.id === 'rWeight'){ const v = num(t.value); S.rdraft.totalGrams = v > 0 ? Math.round(v) : null; }
+    if (S.mini && S.mini.kind === 'plan' && t.id === 'plTo'){ S.mini.to = r1(num(t.value)); updatePlanPrev(); }
     if (S.mini && S.mini.kind === 'recipe' && t.id === 'rlG'){ S.mini.qty = Math.max(0, num(t.value) || 0); updateRecipeLogPrev(); }
     if (S.bc && t.id === 'bcQty'){ S.bc.qty = t.value; $$('[data-action="bc-qty"]').forEach(x => x.setAttribute('aria-pressed', String(num(x.dataset.q) === num(t.value)))); updateBcPrev(); }
     const BPF = { bpName: 'name', bpK: 'kcal', bpP: 'protein', bpC: 'carbs', bpF: 'fat', bpServ: 'serving', bpPack: 'pack' };

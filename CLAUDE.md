@@ -28,3 +28,4 @@
 ## AI
 - Orice număr venit de la AI trece prin verificările din `js/app.js` (`itemIssues`, `per100Issues`). Ce nu trece e marcat „verifică” și nu se salvează fără confirmarea utilizatorului.
 - Nota și cifrele din raportul săptămânal le calculează aplicația (`weekStats`), nu modelul.
+- Planul de greutate și acul de aliniere din Progres le calculează aplicația (`planRate`, `planState`), nu modelul. Ritmul planului e cel mult 1% din greutate pe săptămână la slăbire și 0,5% la creștere, iar ținta nu coboară sub un indice de masă corporală de 18,5 (`planCheck`).

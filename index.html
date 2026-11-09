@@ -159,10 +159,11 @@
     </section>
 
     <section class="screen" id="scr-progres" data-screen="progres" hidden aria-labelledby="hProg">
-      <div class="scr-head"><div><h1 id="hProg">Progres</h1><p>Ultimele 7 zile, greutatea și ținta</p></div></div>
+      <div class="scr-head"><div><h1 id="hProg">Progres</h1><p>Planul, ultimele 7 zile și greutatea</p></div></div>
+      <section class="panel" id="plan" aria-labelledby="plTitle" hidden></section>
       <section class="panel" id="history" aria-label="Ultimele 7 zile"></section>
       <section class="panel" id="weight" aria-labelledby="wTitle">
-        <div class="panel-head"><h2 id="wTitle">Greutate</h2></div>
+        <div class="panel-head"><h2 id="wTitle">Greutate</h2><span class="meta tleg" id="wLeg" hidden>planul</span></div>
         <div class="w-read" id="wRead" aria-live="polite"></div>
         <div id="wChart"></div>
         <dl class="hstats" id="wStats" hidden></dl>
