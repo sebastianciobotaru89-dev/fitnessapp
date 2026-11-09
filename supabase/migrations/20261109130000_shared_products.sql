@@ -34,7 +34,7 @@ create table if not exists public.product_contributions (
   fat          numeric(5,1) not null check (fat between 0 and 100),
   serving      integer check (serving between 1 and 5000),
   pack         integer check (pack between 1 and 20000),
-  created_at   timestamptz not null default now(),
+  created_at   timestamptz not null default clock_timestamp(),
   unique (code, install_hash)
 );
 create index if not exists product_contributions_by_code on public.product_contributions (code, created_at desc);
@@ -139,7 +139,7 @@ begin
   values (p_code, p_install_hash, p_net_hash, p_name, p_unit, p_kcal, p_protein, p_carbs, p_fat, p_serving, p_pack)
   on conflict (code, install_hash) do update set
     net_hash = excluded.net_hash, name = excluded.name, unit = excluded.unit, kcal = excluded.kcal, protein = excluded.protein,
-    carbs = excluded.carbs, fat = excluded.fat, serving = excluded.serving, pack = excluded.pack, created_at = now();
+    carbs = excluded.carbs, fat = excluded.fat, serving = excluded.serving, pack = excluded.pack, created_at = clock_timestamp();
   return portia_product_rebuild(p_code);
 end $$;
 

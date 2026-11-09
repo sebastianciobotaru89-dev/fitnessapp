@@ -10,28 +10,28 @@ declare
   code text := '5901234123457';
 begin
   r := portia_product_contribute(code, i1, n1, 'Iaurt grecesc', 'g', 73, 9.2, 4, 2, 150, 400);
-  assert r->>'status' = 'pending' and (r->>'confirmations')::int = 1, 'one person: pending ' || r;
+  assert r->>'status' = 'pending' and (r->>'confirmations')::int = 1, 'one person: pending ' || r::text;
 
   r := portia_product_contribute(code, i2, n1, 'Iaurt grecesc', 'g', 74, 9.3, 4, 2, 150, 400);
-  assert r->>'status' = 'pending' and (r->>'confirmations')::int = 1, 'a second install on the same network does not confirm ' || r;
+  assert r->>'status' = 'pending' and (r->>'confirmations')::int = 1, 'a second install on the same network does not confirm ' || r::text;
 
   r := portia_product_contribute(code, i3, n2, 'Iaurt grecesc 2%', 'g', 72, 9.0, 4.1, 2, null, 400);
-  assert r->>'status' = 'verified' and (r->>'confirmations')::int = 2, 'two networks confirm ' || r;
+  assert r->>'status' = 'verified' and (r->>'confirmations')::int = 2, 'two networks confirm ' || r::text;
 
   r := portia_product_get(code);
-  assert (r->'product'->'per100'->>'kcal')::numeric = 73, 'the median of the agreeing values ' || r;
-  assert r->'product'->>'name' = 'Iaurt grecesc 2%' and (r->'product'->>'pack')::int = 400 and (r->'product'->>'serving')::int = 150, 'name and portions ' || r;
+  assert (r->'product'->'per100'->>'kcal')::numeric = 73, 'the median of the agreeing values ' || r::text;
+  assert r->'product'->>'name' = 'Iaurt grecesc 2%' and (r->'product'->>'pack')::int = 400 and (r->'product'->>'serving')::int = 150, 'name and portions ' || r::text;
 
   r := portia_product_contribute(code, i4, n3, 'Altceva', 'g', 500, 50, 40, 10, null, null);
   r := portia_product_get(code);
-  assert r->>'status' = 'verified' and r->'product'->>'name' <> 'Altceva' and (r->'product'->'per100'->>'kcal')::numeric = 73, 'one wrong reading does not override ' || r;
+  assert r->>'status' = 'verified' and r->'product'->>'name' <> 'Altceva' and (r->'product'->'per100'->>'kcal')::numeric = 73, 'one wrong reading does not override ' || r::text;
 
   r := portia_product_contribute(code, i3, n2, 'Iaurt grecesc 2%', 'g', 72, 9.0, 4.1, 2, null, 400);
   assert (select count(*) from product_contributions where code = '5901234123457') = 4, 'sending again replaces, never doubles';
 
   r := portia_product_contribute('4006381333931', i1, n1, 'Lapte', 'ml', 64, 3.3, 4.8, 3.5, null, 1000);
   r := portia_product_contribute('4006381333931', i3, n2, 'Lapte', 'g', 64, 3.3, 4.8, 3.5, null, 1000);
-  assert r->>'status' = 'pending', 'g and ml never agree ' || r;
+  assert r->>'status' = 'pending', 'g and ml never agree ' || r::text;
 
   begin
     perform portia_product_contribute('96385074', i1, n1, 'Imposibil', 'g', 400, 60, 40, 30, null, null);
@@ -50,9 +50,9 @@ begin
   end;
 
   r := portia_forget(i3);
-  assert (r->>'removed')::int = 2, 'forget counts the products ' || r;
+  assert (r->>'removed')::int = 2, 'forget counts the products ' || r::text;
   r := portia_product_get(code);
-  assert r->>'status' = 'pending' and r->'product'->>'name' = 'Iaurt grecesc', 'withdrawing a confirmation makes it pending again, and the larger group still wins ' || r;
+  assert r->>'status' = 'pending' and r->'product'->>'name' = 'Iaurt grecesc', 'withdrawing a confirmation makes it pending again, and the larger group still wins ' || r::text;
   perform portia_forget(i1); perform portia_forget(i2); perform portia_forget(i4);
   assert portia_product_get(code)->>'status' = 'none' and (select count(*) from product_contributions) = 0, 'withdrawing everything removes the product';
 
