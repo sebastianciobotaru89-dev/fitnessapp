@@ -101,6 +101,24 @@ const tap = async (page, sel) => {
 let taps = 0;
 const swipe = (a, b, ms = 260) => sh(`adb shell input swipe ${a.x} ${a.y} ${b.x} ${b.y} ${ms}`);
 const back = () => sh('adb shell input keyevent 4');
+// A slow emulator can put a system window over the app ("… isn't responding", a crash notice from another app).
+// Then the back key and the taps go to that window, not to the app. This finds one and closes it.
+async function clearDialogs(){
+  for (let i = 0; i < 4; i++){
+    let focus = ''; try { focus = sh('adb shell dumpsys window').split('\n').filter(l => /mCurrentFocus/.test(l)).join(' ').trim(); } catch {}
+    if (!focus || /com\.portia\.app/.test(focus)) return true;
+    info('fereastră peste aplicație: ' + focus.slice(0, 160));
+    try { sh('adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS'); } catch {}
+    try {
+      sh('adb shell uiautomator dump /sdcard/ui.xml');
+      const m = sh('adb shell cat /sdcard/ui.xml').match(/text="(Wait|Așteaptă|OK|Close app|Închide aplicația)"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      if (m) sh(`adb shell input tap ${(+m[2] + +m[4]) >> 1} ${(+m[3] + +m[5]) >> 1}`);
+      else if (i >= 2) start();
+    } catch {}
+    await sleep(1200);
+  }
+  return false;
+}
 const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity activities').split('\n').filter(l => /mResumedActivity|topResumedActivity|ResumedActivity:/.test(l)).join('\n'));
 
 (async () => {
@@ -120,11 +138,12 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   for (const p of ['App', 'Clipboard', 'Filesystem', 'Haptics', 'Keyboard', 'Preferences', 'Share', 'SplashScreen', 'SystemBars', 'PortiaWindow', 'PortiaWidget']) ok('pluginul ' + p + ' e disponibil', nfo.plugins.includes(p));
   ok('primul ecran e bun venit', await page.ev(`!document.querySelector('#consentSheet').hidden`));
   ok('fără bifa pentru AI când nu există AI', await page.ev(`!document.querySelector('[data-consent="ai"]')`));
+  await clearDialogs();
   back();
   let away = false;
   for (let i = 0; i < 6 && !away; i++){ await sleep(500); away = !resumed(); }
   ok('Înapoi pe bun venit ascunde aplicația', away);
-  start(); await sleep(2500);
+  start(); await sleep(2500); await clearDialogs();
 
   // a journal with content, then a restart, as a returning user sees it
   const { data, consent } = seed();
@@ -132,7 +151,9 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   await sleep(4000);
   ok('jurnalul se încarcă', await page.ev(`!document.querySelector('#hero.is-empty') && document.querySelectorAll('#mealsToday .mt.has').length === 2`));
   shot('2-azi');
-  const box = webviewBox(), iw = await page.ev('innerWidth'), ih = await page.ev('innerHeight');
+  await clearDialogs();
+  let box = webviewBox(); if (!box){ await clearDialogs(); await sleep(1000); box = webviewBox(); }
+  const iw = await page.ev('innerWidth'), ih = await page.ev('innerHeight');
   VIEW = box ? Object.assign(box, { k: box.w / iw }) : { x: 0, y: 0, k: await page.ev('devicePixelRatio') };
   info('web view pe ecran: ' + JSON.stringify(VIEW) + ', pagina ' + iw + '×' + ih);
   const mirrored = await page.ev(`new Promise(r => setTimeout(async () => { const v = await Capacitor.Plugins.Preferences.get({ key: 'mt-local' }); r(!!(v && v.value && JSON.parse(v.value).profile)); }, 900))`);
@@ -142,7 +163,7 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   // real touches through Android's input system. Each check starts from a known state,
   // so one failure doesn't leave the next checks tapping somewhere else.
   const screenNow = () => page.ev(`document.documentElement.dataset.screen`);
-  const front = async () => { if (!resumed()){ start(); await sleep(2000); } };
+  const front = async () => { if (!resumed()){ start(); await sleep(2000); } await clearDialogs(); };
   const act = a => page.ev(`(() => { const b = document.createElement('button'); b.dataset.action = ${JSON.stringify(a)}; b.hidden = true; document.body.append(b); b.click(); b.remove(); return true; })()`);
   const nav = async name => {
     await front();
