@@ -26,9 +26,31 @@ const WHY = [
 ];
 const SLEEP_OPTS = [{ h: 5, t: '≤5', a: '5 ore sau mai puțin' }, { h: 6, t: '6', a: '6 ore' }, { h: 7, t: '7', a: '7 ore' }, { h: 8, t: '8', a: '8 ore' }, { h: 9, t: '9+', a: '9 ore sau mai mult' }];
 const SHORT_SLEEP = 6;   // 6 hours or less is a short night: adults are usually advised at least 7
+// The targets each past day had: when targets change, the old ones stay as the targets of the days up to yesterday
+function normTHist(h){
+  if (!Array.isArray(h)) return [];
+  return h.filter(x => x && /^\d{4}-\d{2}-\d{2}$/.test(String(x.upto)) && num(x.kcal) > 0)
+    .map(x => ({ upto: String(x.upto), kcal: Math.round(num(x.kcal)), protein: Math.round(num(x.protein) || 0), carbs: Math.round(num(x.carbs) || 0), fat: Math.round(num(x.fat) || 0), water: Math.round(num(x.water) || 2500) }))
+    .sort((a, b) => a.upto < b.upto ? -1 : a.upto > b.upto ? 1 : 0).slice(-60);
+}
+function keepTargetHistory(prev, next){
+  if (!next) return next;
+  const hist = ((prev && prev.tHist) || []).slice(), a = prev && prev.targets, b = next.targets;
+  if (a && b && ['kcal', 'protein', 'carbs', 'fat', 'water'].some(x => a[x] !== b[x])){
+    const upto = addDays(todayKey(), -1);
+    // a second change on the same day keeps the first record: yesterday had the targets from before both
+    if (!hist.length || hist[hist.length - 1].upto < upto) hist.push({ upto, kcal: a.kcal, protein: a.protein, carbs: a.carbs, fat: a.fat, water: a.water });
+  }
+  next.tHist = hist.slice(-60);
+  return next;
+}
 function normHabits(h){ return { why: !(h && h.why === false), sleep: !(h && h.sleep === false) }; }
 function normConsent(c){ return (c && typeof c === 'object' && Number(c.v)) ? { v: Number(c.v), health: Number(c.health) || 0, ai: Number(c.ai) || 0, age: !!c.age } : null; }
-function normAdapt(a){ return (a && typeof a === 'object') ? { auto: !!a.auto, last: Number(a.last) || 0 } : null; }
+function normAdapt(a){
+  if (!a || typeof a !== 'object') return null;
+  const l = a.log && typeof a.log === 'object' ? a.log : null, n = v => Math.round(Number(v) || 0);
+  return { auto: !!a.auto, last: Number(a.last) || 0, log: l && Number(l.at) ? { at: Number(l.at), kcal: n(l.kcal), dk: n(l.dk), protein: n(l.protein), dp: n(l.dp), corr: n(l.corr), off: Math.round((Number(l.off) || 0) * 10) / 10, zone: String(l.zone || '').slice(0, 8) } : null };
+}
 function normFast(f){
   if (!f || typeof f !== 'object') return null;
   const log = Array.isArray(f.log) ? f.log.map(x => ({ start: Number(x && x.start) || 0, end: Number(x && x.end) || 0, goal: Number(x && x.goal) || 16 })).filter(x => x.start && x.end > x.start).slice(0, 30) : [];
@@ -550,6 +572,7 @@ function normProfile(p){
     fast: normFast(p.fast),
     plan: normPlan(p.plan),
     habits: normHabits(p.habits),
+    tHist: normTHist(p.tHist),
     share: p.share === true,
     targets: { kcal: Math.round(kcal), protein: Math.round(num(t.protein) || 0), carbs: Math.round(num(t.carbs) || 0), fat: Math.round(num(t.fat) || 0), water: Math.round(num(t.water) || 2500) }
   };
@@ -1365,7 +1388,7 @@ function recalcFromWeight(w){
   const p = S.profile; if (!p || !p.sex || !p.activity || !p.goal || !p.age || !p.height) return;
   const old = clone(p);
   const T = computeTargets(Object.assign({}, p, { weight: w }));
-  S.profile = Object.assign(clone(p), { weight: w, updatedAt: Date.now(), targets: { kcal: T.kcal, protein: T.protein, carbs: T.carbs, fat: T.fat, water: T.water } });
+  S.profile = keepTargetHistory(p, Object.assign(clone(p), { weight: w, updatedAt: Date.now(), targets: { kcal: T.kcal, protein: T.protein, carbs: T.carbs, fat: T.fat, water: T.water } }));
   saveProfile(); renderAll();
   toast('Ținta nouă: ' + fmt(T.kcal) + ' kcal', 'Anulează', () => { S.profile = old; saveProfile(); renderAll(); });
 }
@@ -1395,23 +1418,33 @@ function adaptInfo(){
   const formula = (p.sex && p.age && p.height && p.weight && p.activity) ? computeTargets(p).tdee : null;
   const trust = Math.min(1, logged.length / 21);
   const tdee = Math.max(1300, Math.min(5000, formula ? trust * observed + (1 - trust) * formula : observed));
-  const g = GOALS.find(x => x.id === p.goal) || GOALS[2], cur = p.targets.kcal;
-  let ideal = Math.max(Math.round(tdee * (1 + g.adj) / 10) * 10, p.sex === 'f' ? 1200 : 1500);
+  const g = GOALS.find(x => x.id === p.goal) || GOALS[2], cur = p.targets.kcal, floor = p.sex === 'f' ? 1200 : 1500;
+  // with a weight plan the calories follow the plan's pace; without one, the goal's percentage
+  const plan = planTarget(tdee);
+  const ideal = Math.max(plan ? plan.kcal : Math.round(tdee * (1 + g.adj) / 10) * 10, floor);
   const kcal = Math.round((cur + Math.max(-ADAPT_STEP, Math.min(ADAPT_STEP, ideal - cur))) / 10) * 10;
-  return { ready: true, intake: Math.round(intake), slopeWeek: slope * 7, tdee: Math.round(tdee / 10) * 10, kcal, ideal, cur, diff: kcal - cur, logged: logged.length, weights: n, goal: g };
+  // protein follows the weight: the same grams per kilo, on the average of the last 7 days, once it moved by a kilo
+  const avg = recentAvgWeight(), perKg = p.weight ? p.targets.protein / p.weight : null;
+  const protein = avg && perKg && Math.abs(avg - p.weight) >= 1 ? Math.round(perKg * avg) : p.targets.protein;
+  return { ready: true, intake: Math.round(intake), slopeWeek: slope * 7, tdee: Math.round(tdee / 10) * 10, kcal, ideal, cur, diff: kcal - cur, logged: logged.length, weights: n, goal: g,
+    plan, protein, pdiff: protein - p.targets.protein, perKg, avg };
 }
-function adaptTargets(kcal){
+function adaptTargets(kcal, prot){
   const T = S.profile.targets, share = T.kcal ? Math.max(0.15, Math.min(0.4, T.fat * 9 / T.kcal)) : 0.25;
-  const fat = Math.round(kcal * share / 9), protein = T.protein;
+  const fat = Math.round(kcal * share / 9), protein = prot || T.protein;
   return { kcal, protein, carbs: Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4)), fat, water: T.water };
 }
+const adaptDue = A => !!A && A.ready && (Math.abs(A.diff) >= 50 || Math.abs(A.pdiff) >= 3);
 function applyAdapt(auto){
-  const A = adaptInfo(); if (!A || !A.ready || Math.abs(A.diff) < 50) return false;
+  const A = adaptInfo(); if (!adaptDue(A)) return false;
   if (!auto && S.profile.adapt && Date.now() - (S.profile.adapt.last || 0) < 7 * 864e5) return false;
   const old = clone(S.profile), avg = recentAvgWeight();
-  S.profile = Object.assign(clone(S.profile), { updatedAt: Date.now(), targets: adaptTargets(A.kcal), adapt: Object.assign({ auto: false }, S.profile.adapt || {}, { last: Date.now() }) }, avg ? { weight: r1(avg) } : {});
+  // a change under 50 kcal is not worth making: then only the protein moves
+  const kcal = Math.abs(A.diff) >= 50 ? A.kcal : A.cur, dk = kcal - A.cur;
+  const log = { at: Date.now(), kcal, dk, protein: A.protein, dp: A.pdiff, corr: dk && A.plan ? A.plan.corr : 0, off: A.plan ? A.plan.off : 0, zone: A.plan ? A.plan.zone : '' };
+  S.profile = keepTargetHistory(S.profile, Object.assign(clone(S.profile), { updatedAt: Date.now(), targets: adaptTargets(kcal, A.protein), adapt: Object.assign({ auto: false }, S.profile.adapt || {}, { last: Date.now(), log }) }, avg ? { weight: r1(avg) } : {}));
   saveProfile(); renderAll();
-  toast((auto ? 'Ținta s-a ajustat singură: ' : 'Ținta nouă: ') + fmt(A.kcal) + ' kcal', 'Anulează', () => { S.profile = old; saveProfile(); renderAll(); });
+  toast((auto ? 'Ținta s-a ajustat singură: ' : 'Ținta nouă: ') + fmt(kcal) + ' kcal', 'Anulează', () => { S.profile = old; saveProfile(); renderAll(); }, A.pdiff ? { sub: 'Proteinele: ' + fmt(A.protein) + ' g (' + (A.pdiff > 0 ? '+' : '−') + fmt(Math.abs(A.pdiff)) + ' g)' } : null);
   return true;
 }
 function maybeAutoAdapt(){
@@ -1419,7 +1452,7 @@ function maybeAutoAdapt(){
   S.adaptChecked = true;
   if (Date.now() - (p.adapt.last || 0) < 7 * 864e5) return;
   const A = adaptInfo(); if (!A || !A.ready) return;
-  if (Math.abs(A.diff) < 50){ S.profile = Object.assign(clone(p), { adapt: Object.assign({}, p.adapt, { last: Date.now() }) }); saveProfile(); return; }
+  if (!adaptDue(A)){ S.profile = Object.assign(clone(p), { adapt: Object.assign({}, p.adapt, { last: Date.now() }) }); saveProfile(); return; }
   applyAdapt(true);
 }
 function setAdaptAuto(on){
@@ -1449,15 +1482,24 @@ function renderAdapt(){
   const body = '<p>Ai mâncat în medie <strong>' + fmt(A.intake) + ' kcal</strong> pe zi, iar greutatea ' + moved + '. Asta înseamnă că arzi cam <strong>' + fmt(A.tdee) + ' kcal</strong> pe zi.</p>' +
     (recent
       ? '<p>Pe ' + esc(shortDate(keyOf(new Date(last)))) + ' am ajustat ținta la <strong>' + fmt(A.cur) + ' kcal</strong>. Las câteva zile să se vadă efectul. Următoarea ajustare e posibilă de pe ' + esc(shortDate(keyOf(new Date(last + 7 * 864e5)))) + ', ' + (auto ? 'singură.' : 'din acest card.') + '</p>'
-      : Math.abs(A.diff) >= 50
-        ? (A.kcal !== A.ideal
-          ? '<p>Pentru ' + esc(A.goal.t.toLowerCase()) + ', ținta potrivită e <strong>' + fmt(A.ideal) + ' kcal</strong>. Ca să nu fie o schimbare bruscă, o mut treptat: întâi la <strong>' + fmt(A.kcal) + ' kcal</strong> (acum ai ' + fmt(A.cur) + ').</p>'
-          : '<p>Pentru ' + esc(A.goal.t.toLowerCase()) + ', ținta potrivită e <strong>' + fmt(A.kcal) + ' kcal</strong> (acum ai ' + fmt(A.cur) + ').</p>') +
-          '<div class="row"><button class="btn primary sm" data-action="adapt-apply">Aplică ' + fmt(A.kcal) + ' kcal</button></div>'
-        : '<p>Ținta ta de acum, ' + fmt(A.cur) + ' kcal, e potrivită pentru ' + esc(A.goal.t.toLowerCase()) + '.</p>');
+      : adaptDue(A)
+        ? '<p>' + adaptReason(A) + (A.kcal !== A.ideal ? ' Ca să nu fie o schimbare bruscă, o mut treptat: întâi la <strong>' + fmt(A.kcal) + ' kcal</strong> (acum ai ' + fmt(A.cur) + ').' : Math.abs(A.diff) >= 50 ? ' Acum ai ' + fmt(A.cur) + '.' : '') + '</p>' +
+          (A.pdiff ? '<p>Media greutății e ' + fmt1(A.avg) + ' kg, așa că proteinele trec la <strong>' + fmt(A.protein) + ' g</strong> (' + fmt1(A.perKg) + ' g pe kg, ca până acum).</p>' : '') +
+          '<div class="row"><button class="btn primary sm" data-action="adapt-apply">' + (Math.abs(A.diff) >= 50 ? 'Aplică ' + fmt(A.kcal) + ' kcal' + (A.pdiff ? ' și ' + fmt(A.protein) + ' g proteine' : '') : 'Aplică ' + fmt(A.protein) + ' g proteine') + '</button></div>'
+        : '<p>Ținta ta de acum, ' + fmt(A.cur) + ' kcal, e potrivită ' + (A.plan ? 'pentru planul tău' : 'pentru ' + esc(A.goal.t.toLowerCase())) + '.</p>');
   el.innerHTML = '<div class="adapt">' + head + body +
     swRow('Ajustează automat, săptămânal', 'adapt-auto', auto) +
-    '<p class="hint">Proteinele rămân la fel. Se schimbă glucidele și grăsimile.</p></div>';
+    '<p class="hint">Proteinele urmează greutatea, cu aceleași grame pe kilogram. Glucidele și grăsimile se ajustează după calorii.</p></div>';
+}
+const PLAN_OFF = { behind: 'în urma planului', ahead: 'înaintea planului', up: 'peste greutatea de menținut', down: 'sub greutatea de menținut' };
+// What the new target is made of, in words: maintenance, the plan's pace and any catch-up
+function adaptReason(A){
+  const X = A.plan;
+  if (!X) return 'Pentru ' + esc(A.goal.t.toLowerCase()) + ', ținta potrivită e <strong>' + fmt(A.ideal) + ' kcal</strong>.';
+  const parts = ['cât arzi'];
+  if (X.pace) parts.push((X.pace > 0 ? 'plus ' : 'minus ') + fmt(Math.abs(X.pace)) + ' kcal pe zi pentru ritmul planului (' + (X.dir > 0 ? '+' : '−') + fmtRate(X.rate) + ' kg pe săptămână)');
+  if (X.corr) parts.push((X.corr > 0 ? 'plus ' : 'minus ') + fmt(Math.abs(X.corr)) + ' kcal pentru că ești de două săptămâni ' + PLAN_OFF[X.zone] + ', cu ' + fmt1(Math.abs(X.off)) + ' kg');
+  return 'Pentru planul tău, ținta potrivită e <strong>' + fmt(A.ideal) + ' kcal</strong>: ' + parts.join(', ') + '.';
 }
 
 /* ---------- weight plan: from the weight you have to the one you want, and a meter that says if you are on it ---------- */
@@ -1532,9 +1574,10 @@ function currentWeight(){
   if (keys.length) return { w: S.days[keys[keys.length - 1]].weight, src: 'last' };
   return S.profile && S.profile.weight ? { w: S.profile.weight, src: 'profile' } : null;
 }
-function planState(){
+function planState(asOf){
   const p = S.profile, pl = p && p.plan; if (!pl) return null;
-  const today = todayKey(), start = pl.start > today ? today : pl.start, age = daysBetween(start, today);
+  const today = asOf || todayKey(); if (pl.start > today && asOf) return null;
+  const start = pl.start > today ? today : pl.start, age = daysBetween(start, today);
   const dir = Math.sign(pl.rate), total = Math.abs(pl.to - pl.from), weeks = dir ? total / Math.abs(pl.rate) : 0;
   const at = d => dir ? pl.from + pl.rate * Math.min(Math.max(d, 0) / 7, weeks) : pl.from;
   const since = n => { const o = []; for (let i = n - 1; i >= 0; i--){ const k = addDays(today, -i), w = S.days[k] && S.days[k].weight; if (w && k >= start) o.push({ d: daysBetween(start, k), w }); } return o; };
@@ -1570,6 +1613,28 @@ function planState(){
   return { pl, dir, start, age, total, weeks, at, endKey: dir ? addDays(start, Math.ceil(weeks * 7)) : null, planned, trend, n, ready, off, tol, zone, slope, cur, done,
     frac: dir ? Math.max(0, Math.min(1, done / total)) : 0, planFrac: dir ? Math.max(0, Math.min(1, Math.abs(at(age) - pl.from) / total)) : 0,
     eta, food: { logged, inT, avg: logged ? sum / logged : 0, target: logged ? tsum / logged : 0 }, warn, readyOn: addDays(start, PLAN_WAIT) };
+}
+
+// The calories the plan needs: what you really burn, plus the plan's pace (7700 kcal to a kilo), plus a catch-up
+// when you were outside the plan's margin, on the same side, at two weekly checks in a row. The catch-up closes the gap
+// over about four weeks and is at most 150 kcal a day. Never past the plan's limits: gaining stays between maintenance
+// and 0.5% of body weight a week, losing between maintenance and 1% a week.
+const PLAN_CATCHUP = 150, PLAN_CATCHUP_DAYS = 28;
+function planTarget(tdee){
+  const P = planState(); if (!P || P.zone === 'done') return null;
+  const pl = P.pl, pace = pl.rate * 7700 / 7, prev = planState(addDays(todayKey(), -7));
+  const outside = z => z === 'behind' || z === 'ahead' || z === 'up' || z === 'down';
+  let corr = 0;
+  if (P.ready && prev && prev.ready && outside(P.zone) && prev.zone === P.zone){
+    const need = P.dir ? -P.off * P.dir : -P.off;   // kilos to gain (above 0) or to lose (below 0) to be back on the plan
+    corr = Math.max(-PLAN_CATCHUP, Math.min(PLAN_CATCHUP, need * 7700 / PLAN_CATCHUP_DAYS));
+  }
+  const room = P.cur * (P.dir < 0 ? PLAN_MAX_LOSS : PLAN_MAX_GAIN) * 7700 / 7;
+  let kcal = tdee + pace + corr;
+  if (P.dir > 0) kcal = Math.min(Math.max(kcal, tdee), tdee + room);
+  else if (P.dir < 0) kcal = Math.max(Math.min(kcal, tdee), tdee - room);
+  else kcal = Math.min(Math.max(kcal, tdee - PLAN_CATCHUP), tdee + PLAN_CATCHUP);
+  return { kcal: Math.round(kcal / 10) * 10, pace: Math.round(pace / 5) * 5, corr: Math.round(corr / 10) * 10, zone: P.zone, off: Math.round(P.off * 10) / 10, rate: pl.rate, dir: P.dir };
 }
 
 // The meter: a half dial; the green middle is the plan's margin, the needle is how far ahead or behind you are
@@ -1633,6 +1698,14 @@ function renderPlan(){
     lines.push('<b>Ritmul tău, ultimele 3 săptămâni:</b> ' + (Math.abs(s) < 0.05 ? 'greutatea stă pe loc' : (s < 0 ? '−' : '+') + fmtRate(s) + ' kg pe săptămână') +
       (P.eta ? ', deci ajungi la ' + fmt1(pl.to) + ' kg în jur de ' + planDate(P.eta) + '.' : wrong ? ', invers față de plan.' : '.'));
   }
+  // the calorie target and the plan: what was last adjusted and why, or what is waiting to be
+  const A = adaptInfo(), L = p.adapt && p.adapt.log, ago = L ? Date.now() - L.at : Infinity;
+  if (L && ago < 28 * 864e5 && (L.dk || L.dp)){
+    const what = [L.dk ? (L.dk > 0 ? '+' : '−') + fmt(Math.abs(L.dk)) + ' kcal (acum ' + fmt(L.kcal) + ')' : '', L.dp ? (L.dp > 0 ? '+' : '−') + fmt(Math.abs(L.dp)) + ' g proteine (acum ' + fmt(L.protein) + ')' : ''].filter(Boolean).join(' și ');
+    const why = L.corr ? ', pentru că erai de două săptămâni ' + PLAN_OFF[L.zone] + ', cu ' + fmt1(Math.abs(L.off)) + ' kg.' : !L.dk ? ', pentru că s-a schimbat greutatea.' : L.zone ? ', ca să urmeze ritmul planului.' : '.';
+    lines.push('<b>Ultima ajustare, ' + esc(shortDate(keyOf(new Date(L.at)))) + ':</b> ' + what + why);
+  } else if (A && !A.ready) lines.push('<b>Ținta de calorii</b> se ajustează după plan din Ținta inteligentă, la Greutate, după ce are două săptămâni de date.');
+  else if (A && adaptDue(A) && !(p.adapt && p.adapt.auto)) lines.push('<b>Ținta de calorii:</b> pentru plan ar trebui ' + fmt(Math.abs(A.diff) >= 50 ? A.kcal : A.cur) + ' kcal' + (A.pdiff ? ' și ' + fmt(A.protein) + ' g proteine' : '') + ' (acum ' + fmt(A.cur) + ' kcal). O aplici din Ținta inteligentă, la Greutate.');
   const F = P.food;
   lines.push(F.logged >= 3 ? '<b>Mâncarea, ultimele 7 zile:</b> ' + F.inT + ' din ' + F.logged + ' zile notate complet au fost în țintă (±10%), în medie ' + fmt(F.avg) + ' kcal din ' + fmt(F.target) + '.'
     : '<b>Mâncarea:</b> notează mesele câteva zile la rând ca să văd dacă mănânci după plan.');
@@ -2037,8 +2110,9 @@ function cycleDeltas(){
 const schedType = k => cycleOf().days.includes(parseKey(k).getDay()) ? 'train' : 'rest';
 function dayType(k){ const d = S.days[k]; return (d && d.type) ? d.type : schedType(k); }
 function targetsFor(k){
-  const base = S.profile ? S.profile.targets : null;
-  if (!base) return null;
+  if (!S.profile || !S.profile.targets) return null;
+  // a past day is judged by the targets it had then
+  const h = S.profile.tHist, base = (h && h.length && k < todayKey() && h.find(x => x.upto >= k)) || S.profile.targets;
   const dl = cycleDeltas();
   if (!dl) return Object.assign({ type: null, delta: 0 }, base);
   const type = dayType(k);
@@ -4032,9 +4106,9 @@ function setupPlan(d, T){
 }
 function saveSetup(){
   const d = S.setup.d, T = computeTargets(d);
-  S.profile = { sex: d.sex, age: d.age, height: d.height, weight: d.weight, activity: d.activity, goal: d.goal, custom: false, updatedAt: Date.now(), skin: S.profile ? (S.profile.skin || null) : (lsGet('portia-skin') || null), cycle: S.profile ? (S.profile.cycle || null) : null,
+  S.profile = keepTargetHistory(S.profile, { sex: d.sex, age: d.age, height: d.height, weight: d.weight, activity: d.activity, goal: d.goal, custom: false, updatedAt: Date.now(), skin: S.profile ? (S.profile.skin || null) : (lsGet('portia-skin') || null), cycle: S.profile ? (S.profile.cycle || null) : null,
     adapt: S.profile ? (S.profile.adapt || null) : null, fast: S.profile ? (S.profile.fast || null) : null, plan: setupPlan(d, T), habits: S.profile ? (S.profile.habits || null) : null, share: !!(S.profile && S.profile.share), consent: (S.profile && S.profile.consent) || normConsent(lsGet('portia-consent')),
-    targets: { kcal: T.kcal, protein: T.protein, carbs: T.carbs, fat: T.fat, water: T.water } };
+    targets: { kcal: T.kcal, protein: T.protein, carbs: T.carbs, fat: T.fat, water: T.water } });
   saveProfile();
   closeSheet('#setup');
   renderAll();
@@ -4180,7 +4254,7 @@ function saveTargets(){
   if (![p, c, f].every(x => x >= 0 && x <= 600)){ err.textContent = 'Macronutrienții trebuie să fie între 0 și 600 g.'; return; }
   if (!(w >= 500 && w <= 8000)){ err.textContent = 'Apa trebuie să fie între 500 și 8000 ml.'; return; }
   err.textContent = '';
-  S.profile = Object.assign(clone(S.profile), { custom: true, updatedAt: Date.now(), targets: { kcal: k, protein: p, carbs: c, fat: f, water: w } });
+  S.profile = keepTargetHistory(S.profile, Object.assign(clone(S.profile), { custom: true, updatedAt: Date.now(), targets: { kcal: k, protein: p, carbs: c, fat: f, water: w } }));
   saveProfile();
   renderAll(); renderSettings();
   toast('Țintele au fost salvate.');
