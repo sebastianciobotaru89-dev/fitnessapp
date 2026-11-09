@@ -64,6 +64,16 @@ function sumMicro(list){
 }
 const SLEEP_OPTS = [{ h: 5, t: '≤5', a: '5 ore sau mai puțin' }, { h: 6, t: '6', a: '6 ore' }, { h: 7, t: '7', a: '7 ore' }, { h: 8, t: '8', a: '8 ore' }, { h: 9, t: '9+', a: '9 ore sau mai mult' }];
 const SHORT_SLEEP = 6;   // 6 hours or less is a short night: adults are usually advised at least 7
+// Strength as a signal for muscle: one tap for each session and, if you want, the heaviest set of one reference lift
+const LIFTS = [
+  { id: 'squat',    t: 'Genuflexiuni' },
+  { id: 'bench',    t: 'Împins la piept' },
+  { id: 'dead',     t: 'Îndreptări' },
+  { id: 'legpress', t: 'Presa pentru picioare' },
+  { id: 'ohp',      t: 'Împins deasupra capului' }
+];
+// Estimated one-rep max (Epley): one yardstick for sets of 1 to 20 reps of the same lift
+const e1rm = (kg, reps) => reps <= 1 ? kg : kg * (1 + reps / 30);
 // The targets each past day had: when targets change, the old ones stay as the targets of the days up to yesterday
 function normTHist(h){
   if (!Array.isArray(h)) return [];
@@ -82,7 +92,8 @@ function keepTargetHistory(prev, next){
   next.tHist = hist.slice(-60);
   return next;
 }
-function normHabits(h){ return { why: !(h && h.why === false), sleep: !(h && h.sleep === false) }; }
+function normHabits(h){ return { why: !(h && h.why === false), sleep: !(h && h.sleep === false), train: !(h && h.train === false) }; }
+function normMuscle(m){ return { lift: m && LIFTS.some(x => x.id === m.lift) ? m.lift : LIFTS[0].id }; }
 function normConsent(c){ return (c && typeof c === 'object' && Number(c.v)) ? { v: Number(c.v), health: Number(c.health) || 0, ai: Number(c.ai) || 0, age: !!c.age } : null; }
 function normAdapt(a){
   if (!a || typeof a !== 'object') return null;
@@ -584,9 +595,15 @@ function normDay(d, k){
   if (d && (d.type === 'train' || d.type === 'rest')) out.type = d.type;
   if (d && d.why && typeof d.why === 'object'){ const why = {}; for (const m of MEALS) if (WHY.some(x => x.id === d.why[m.id])) why[m.id] = d.why[m.id]; if (Object.keys(why).length) out.why = why; }
   const sl = num(d && d.sleep); if (sl >= 3 && sl <= 14) out.sleep = r1(sl);
+  if (d && d.trained === true) out.trained = true;
+  const L = d && d.lift;
+  if (L && typeof L === 'object' && LIFTS.some(x => x.id === L.ex)){
+    const kg = num(L.kg), reps = Math.round(num(L.reps));
+    if (kg > 0 && kg <= 500 && reps >= 1 && reps <= 20){ out.lift = { ex: L.ex, kg: r1(kg), reps }; out.trained = true; }
+  }
   return out;
 }
-const dayEmpty = d => !d.entries.length && !d.water && !d.weight && !d.type && !d.sleep && !d.why;
+const dayEmpty = d => !d.entries.length && !d.water && !d.weight && !d.type && !d.sleep && !d.why && !d.trained && !d.lift;
 function normDays(obj){
   const out = {};
   if (obj && typeof obj === 'object') for (const k of Object.keys(obj)) if (/^\d{4}-\d{2}-\d{2}$/.test(k)) {
@@ -611,6 +628,7 @@ function normProfile(p){
     fast: normFast(p.fast),
     plan: normPlan(p.plan),
     habits: normHabits(p.habits),
+    muscle: normMuscle(p.muscle),
     tHist: normTHist(p.tHist),
     share: p.share === true,
     targets: { kcal: Math.round(kcal), protein: Math.round(num(t.protein) || 0), carbs: Math.round(num(t.carbs) || 0), fat: Math.round(num(t.fat) || 0), water: Math.round(num(t.water) || 2500) }
@@ -991,7 +1009,7 @@ function afterLoad(){
 }
 
 /* ---------- consent: health data, AI, age ---------- */
-const CONSENT_V = 2;   // 2: sleep and why you eat joined the journal
+const CONSENT_V = 3;   // 2: sleep and why you eat joined the journal; 3: training and the reference lift
 const consentValid = c => !!(c && c.v >= CONSENT_V && c.health && c.age);
 function consentOf(){ const p = S.profile && S.profile.consent, l = normConsent(lsGet('portia-consent')); return consentValid(p) ? p : consentValid(l) ? l : null; }
 function hasConsent(){ return !!consentOf(); }
@@ -1021,11 +1039,11 @@ function renderConsent(){
   const box = (k, req, title, sub) => '<label class="cbox"><input type="checkbox" data-consent="' + k + '"' + (d[k] ? ' checked' : '') + '><span><b>' + title + (req ? '' : ' <em>opțional</em>') + '</b><small>' + sub + '</small></span></label>';
   $('#consentCard').innerHTML =
     '<div class="sbody"><div class="welcome"><span class="wl-logo" aria-hidden="true">' + logoSvg(S.theme, 64) + '</span>' +
-      (upd ? '<h2 id="cTitle" tabindex="-1">Am actualizat acordul</h2><p>Porția notează acum și somnul și motivul pentru care mănânci, ca să-ți arate tiparele tale. Bifează din nou ca să continui.</p></div>'
+      (upd ? '<h2 id="cTitle" tabindex="-1">Am actualizat acordul</h2><p>Porția notează acum ' + (old.v < 2 ? 'somnul, motivul pentru care mănânci și antrenamentele, ca să-ți arate tiparele tale și dacă îți păstrezi mușchii' : 'și antrenamentele, cu cea mai grea serie la un exercițiu, ca să-ți arate dacă îți păstrezi mușchii') + '. Bifează din nou ca să continui.</p></div>'
         : '<h2 id="cTitle" tabindex="-1">Bun venit în Porția</h2><p>Îți calculez ținta de calorii și macronutrienți, iar mesele le notezi în câteva secunde.</p></div>') +
     '<h3 class="cs-t">Înainte să începi</h3>' +
     '<p>' + (upd ? 'Porția păstrează date despre sănătatea ta, așa că îți cerem din nou acordul explicit. Alegerea pentru AI rămâne cum ai făcut-o.' : 'Porția păstrează date despre sănătatea ta, așa că îți cerem acordul explicit. Nimic nu e bifat dinainte.') + '</p>' +
-    box('health', true, 'Datele despre alimentație, greutate și somn', 'Sunt de acord ca Porția să-mi păstreze mesele, apa, greutatea, țintele, fastingul, somnul și motivul pentru care mănânc, ca să-mi calculeze progresul și tiparele. Le văd doar eu și le pot șterge oricând.') +
+    box('health', true, 'Datele despre alimentație, greutate, somn și antrenament', 'Sunt de acord ca Porția să-mi păstreze mesele, apa, greutatea, țintele, fastingul, somnul, motivul pentru care mănânc și antrenamentele, cu seriile notate, ca să-mi calculeze progresul și tiparele. Le văd doar eu și le pot șterge oricând.') +
     (S.noSample ? '' : box('ai', false, 'Estimări cu AI', 'Sunt de acord ca textul și pozele meselor, plus totalurile zilelor pentru idei și raport, să fie trimise la Claude, un AI al companiei Anthropic, ca să estimeze caloriile. Fără numele sau e-mailul meu. Fără acest acord notez valorile manual.')) +
     box('age', true, 'Am cel puțin 16 ani', 'Porția nu e pentru copii.') +
     '<div class="medwarn"><b>Porția nu e un dispozitiv medical.</b> Nu înlocuiește sfatul unui medic sau nutriționist, iar estimările sunt aproximative. Dacă ai o afecțiune, ești însărcinată sau ai avut tulburări de alimentație, vorbește întâi cu medicul.</div>' +
@@ -1922,6 +1940,113 @@ function savePlan(){
   const P = planState();
   toast(P && P.dir ? 'Planul e gata: ' + fmt1(to) + ' kg în jur de ' + planDate(P.endKey) : 'Planul e gata: rămâi în jur de ' + fmt1(to) + ' kg', 'Anulează', () => { S.profile = old; saveProfile(); renderAll(); });
   if (S.screen !== 'progres') go('progres'); else setTimeout(alignSweep, 60);
+}
+
+/* ---------- muscle first: protein, training and strength next to the weight ---------- */
+// Computed by the app from the journal, never by the AI. Losing weight while the reference lift gets weaker can mean
+// losing muscle too, so the advice is more protein and a gentler pace, not fewer calories.
+const MUSCLE_WIN = 28, PROT_OK = 0.9, TRAIN_MIN = 2, STRENGTH_DROP = 0.05, LOSING = 0.2;
+const liftOf = () => LIFTS.find(x => x.id === normMuscle(S.profile && S.profile.muscle).lift);
+function setLiftEx(id){
+  if (!S.profile || !LIFTS.some(x => x.id === id)) return;
+  S.profile = Object.assign(clone(S.profile), { muscle: Object.assign({}, normMuscle(S.profile.muscle), { lift: id }) });
+  saveProfile(); renderAll(); if (S.screen === 'profil') renderSettings();
+}
+function toggleTrained(){
+  const k = S.view, d = getDay(k), was = !!d.trained, lift = d.lift ? clone(d.lift) : null;
+  mutateDay(k, x => { if (was){ delete x.trained; delete x.lift; } else x.trained = true; });
+  buzz('tick');
+  if (was) toast(lift ? 'Antrenamentul și seria au fost șterse.' : 'Antrenamentul a fost șters.', 'Anulează', () => mutateDay(k, x => { x.trained = true; if (lift) x.lift = lift; }));
+}
+// An empty field takes the last set of the same lift, shown as its placeholder: the same set as last time in one tap
+function saveLift(){
+  const kIn = $('#liftKg'), rIn = $('#liftReps'); if (!kIn || !rIn) return;
+  const kg = num(kIn.value || kIn.placeholder), reps = Math.round(num(rIn.value || rIn.placeholder));
+  if (!(kg > 0 && kg <= 500)){ toast('Scrie greutatea în kg, de exemplu 60.'); kIn.focus(); return; }
+  if (!(reps >= 1 && reps <= 20)){ toast('Scrie câte repetări ai făcut, între 1 și 20.'); rIn.focus(); return; }
+  const k = S.view, prev = getDay(k).lift ? clone(getDay(k).lift) : null, ex = liftOf(), w = r1(kg);
+  mutateDay(k, d => { d.trained = true; d.lift = { ex: ex.id, kg: w, reps }; });
+  toast('Notat: ' + ex.t.toLowerCase() + ', ' + fmt1(w) + ' kg × ' + reps, 'Anulează', () => mutateDay(k, d => { if (prev) d.lift = prev; else delete d.lift; }),
+    { sub: 'Forța estimată: ' + fmt(e1rm(w, reps)) + ' kg la o repetare' });
+}
+function delLift(){
+  const k = S.view, prev = getDay(k).lift; if (!prev) return;
+  mutateDay(k, d => { delete d.lift; });
+  toast('Seria a fost ștearsă.', 'Anulează', () => mutateDay(k, d => { d.trained = true; d.lift = prev; }));
+}
+// Kilos a week, from a straight line through the weigh-ins of the last n days (at least 4, over at least 2 weeks)
+function weightSlope(n){
+  const pts = weightSeries(todayKey(), n);
+  if (pts.length < 4 || pts[pts.length - 1].x - pts[0].x < 14) return null;
+  const mx = pts.reduce((a, p) => a + p.x, 0) / pts.length, my = pts.reduce((a, p) => a + p.w, 0) / pts.length;
+  let sxy = 0, sxx = 0; pts.forEach(p => { sxy += (p.x - mx) * (p.w - my); sxx += (p.x - mx) * (p.x - mx); });
+  return sxx ? sxy / sxx * 7 : null;
+}
+// The heaviest set of a lift between i0 and i1 days ago, as an estimated one-rep max
+function bestLift(ex, i0, i1){
+  let best = null, n = 0;
+  for (let i = i0; i <= i1; i++){
+    const L = S.days[addDays(todayKey(), -i)] && S.days[addDays(todayKey(), -i)].lift; if (!L || L.ex !== ex) continue;
+    n++; const v = e1rm(L.kg, L.reps); if (!best || v > best.v) best = { v, kg: L.kg, reps: L.reps };
+  }
+  return best ? Object.assign(best, { n }) : null;
+}
+function muscleStats(){
+  const p = S.profile, today = todayKey(), ex = liftOf();
+  // protein: the finished days of the last two weeks that were logged in full
+  let days = 0, ok = 0, sum = 0;
+  for (let i = 1; i <= 14; i++){
+    const k = addDays(today, -i), d = S.days[k]; if (!d) continue;
+    const t = dayTotals(d), T = targetsFor(k); if (!T || !t.n || t.kcal < Math.max(800, T.kcal * 0.5)) continue;
+    days++; sum += t.protein; if (t.protein >= T.protein * PROT_OK) ok++;
+  }
+  const w = recentAvgWeight() || p.weight, avgP = days ? sum / days : 0;
+  // training: the sessions of the last four weeks, and whether any was noted in the last eight
+  let sessions = 0, ever = false;
+  for (let i = 0; i < MUSCLE_WIN * 2; i++){ const d = S.days[addDays(today, -i)]; if (d && d.trained){ ever = true; if (i < MUSCLE_WIN) sessions++; } }
+  // strength: the best set of the last two weeks against the three weeks before
+  const now = bestLift(ex.id, 0, 13), before = bestLift(ex.id, 14, 34), slope = weightSlope(21);
+  return { ex, days, ok, avgP, perKg: days && w ? avgP / w : null, target: p.targets.protein, sessions, perWeek: sessions / (MUSCLE_WIN / 7), ever,
+    now, before, change: now && before ? now.v / before.v - 1 : null, slope, w, losing: slope != null && slope <= -LOSING };
+}
+function renderMuscle(){
+  const el = $('#muscle'); if (!el) return;
+  const on = !!S.profile && habitsOf().train; el.hidden = !on; if (!on){ el.innerHTML = ''; return; }
+  const M = muscleStats(), lift = esc(M.ex.t.toLowerCase());
+  const pct = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(Math.round(v * 100)) + '%';
+  const head = '<div class="panel-head"><h2 id="muTitle">Mușchii tăi</h2><span class="meta">ultimele 4 săptămâni</span></div>';
+  if (!M.days && !M.ever){
+    el.innerHTML = head + '<p class="wy-lead">Când slăbești, vrei să pierzi grăsime, nu mușchi. Aici îți arăt dacă reușești: proteinele, antrenamentele și forța, lângă greutate.</p>' +
+      '<p class="hint">Notează mesele câteva zile și bifează pe Azi când te antrenezi. Dacă vrei, notează și cea mai grea serie la ' + lift + '.</p>';
+    return;
+  }
+  const tiles = '<dl class="hstats mu-tiles">' +
+    '<div><dt>Ținta de proteine</dt><dd>' + (M.days ? M.ok + '<small> din ' + cnt(M.days, 'zile') + '</small>' : '–') + '</dd></div>' +
+    '<div><dt>Proteine pe kg</dt><dd>' + (M.perKg ? fmt1(M.perKg) + '<small> g</small>' : '–') + '</dd></div>' +
+    '<div><dt>Antrenamente</dt><dd>' + (M.ever ? fmt1(M.perWeek) + '<small> pe săpt.</small>' : '–') + '</dd></div>' +
+    '<div><dt>Forța estimată</dt><dd>' + (M.now ? fmt(M.now.v) + '<small> kg' + (M.change != null ? ', ' + pct(M.change) : '') + '</small>' : '–') + '</dd></div></dl>';
+  const lines = [];
+  // „ai atins ținta în 3 din 14 zile”, but never „în 0 din 14”
+  const hit = what => M.ok ? 'ai atins ' + what + ' în ' + M.ok + ' din ' + cnt(M.days, 'zile') : 'n-ai atins ' + what + ' în niciuna din cele ' + cnt(M.days, 'zile');
+  if (M.days) lines.push('<b>Proteinele, ultimele 14 zile:</b> ' + hit('ținta de ' + fmt(M.target) + ' g') + ' notate complet, în medie ' + fmt(M.avgP) + ' g pe zi' + (M.perKg ? ' (' + fmt1(M.perKg) + ' g pe kg)' : '') + '.');
+  if (M.ever) lines.push('<b>Antrenamente:</b> ' + (M.sessions === 0 ? 'niciunul' : M.sessions === 1 ? 'unul' : M.sessions) + ' în ultimele 4 săptămâni, cam ' + fmt1(M.perWeek) + ' pe săptămână.');
+  if (M.now) lines.push('<b>Forța la ' + lift + ':</b> cea mai grea serie din ultimele 2 săptămâni, ' + fmt1(M.now.kg) + ' kg × ' + M.now.reps + ', înseamnă cam ' + fmt(M.now.v) + ' kg la o repetare' +
+    (M.before ? '. În cele 3 săptămâni de dinainte: ' + fmt(M.before.v) + ' kg (' + pct(M.change) + ').' : '.'));
+  else if (M.before) lines.push('<b>Forța la ' + lift + ':</b> ultima serie notată e mai veche de 2 săptămâni. Notează una ca să văd cum evoluează.');
+  // what it means: only from the numbers above, with the counts in view
+  const notes = [], fast = M.slope != null && -M.slope > M.w * PLAN_MAX_LOSS;
+  if (M.losing && M.change != null && M.change <= -STRENGTH_DROP){
+    notes.push(['warn', 'Slăbești ' + fmtRate(M.slope) + ' kg pe săptămână, iar forța la ' + lift + ' a scăzut cu ' + Math.round(-M.change * 100) + '%. Poate fi un semn că pierzi și mușchi. Mănâncă mai multe proteine, nu mai puține calorii' +
+      (M.days >= 5 && M.ok < M.days * 0.7 ? ': ' + hit('ținta de proteine') + '.' : '.') + (fast ? ' Și încetinește: slăbești mai repede de 1% din greutate pe săptămână.' : '')]);
+  } else if (M.losing && M.change != null){
+    notes.push(['good', 'Slăbești și forța ' + (M.change >= 0.01 ? 'crește' : 'se menține') + ': un semn bun că pierzi mai ales grăsime, nu mușchi.']);
+  }
+  if (!notes.some(n => n[0] === 'warn') && M.days >= 7 && M.ok < M.days * 0.5) notes.push(['tip', hit('ținta de proteine').replace(/^./, c => c.toUpperCase()) + '. ' +
+    (M.losing ? 'Când slăbești, proteinele te ajută să-ți păstrezi mușchii.' : 'Proteinele te ajută să construiești și să păstrezi mușchi.') + ' Pune o sursă de proteine la fiecare masă.']);
+  if (M.losing && M.ever && M.perWeek < TRAIN_MIN) notes.push(['tip', 'Ca să-ți păstrezi mușchii când slăbești, ajută cel puțin ' + TRAIN_MIN + ' antrenamente de forță pe săptămână. În ultimele 4 săptămâni ai notat ' + (M.sessions === 0 ? 'niciunul' : M.sessions === 1 ? 'unul' : M.sessions) + '.']);
+  el.innerHTML = head + tiles + '<div class="pl-lines">' + lines.map(l => '<p>' + l + '</p>').join('') + '</div>' +
+    notes.map(n => '<div class="banner' + (n[0] === 'warn' ? ' warn' : n[0] === 'good' ? ' good' : '') + '"><p>' + n[1] + '</p></div>').join('') +
+    '<p class="hint mu-foot">Forța estimată vine din cea mai grea serie (formula Epley) și se compară doar la același exercițiu. Toate cifrele le calculează aplicația din jurnal.</p>';
 }
 
 /* ---------- why you eat: personal patterns from the reason taps, sleep and the journal ---------- */
@@ -3466,8 +3591,8 @@ function toast(msg, label, fn, opt){
 }
 
 /* ---------- render ---------- */
-function renderAll(){ renderSync(); renderHeader(); renderHero(); renderMeals(); renderTabs(); renderRecent(); renderPreview(); renderIdeas(); renderDiary(); renderSleep(); renderWater(); renderFast(); renderPlan(); renderWhy(); renderWeight(); renderHistory(); widgetSync(); }
-function renderDayParts(){ renderHeader(); renderHero(); renderRecent(); renderManualFit(); renderDiary(); renderSleep(); renderWater(); renderFast(); renderPlan(); renderWhy(); renderWeight(); renderHistory(); renderPreview(); widgetSync(); }
+function renderAll(){ renderSync(); renderHeader(); renderHero(); renderMeals(); renderTabs(); renderRecent(); renderPreview(); renderIdeas(); renderDiary(); renderSleep(); renderTrain(); renderWater(); renderFast(); renderPlan(); renderMuscle(); renderWhy(); renderWeight(); renderHistory(); widgetSync(); }
+function renderDayParts(){ renderHeader(); renderHero(); renderRecent(); renderManualFit(); renderDiary(); renderSleep(); renderTrain(); renderWater(); renderFast(); renderPlan(); renderMuscle(); renderWhy(); renderWeight(); renderHistory(); renderPreview(); widgetSync(); }
 // ---------- home screen and lock screen widgets ----------
 // The store app hands its widgets today's figures, tomorrow's targets and the theme's colours.
 // They stay on the phone: iOS keeps them in the app's own App Group, Android in the app's preferences.
@@ -3951,6 +4076,34 @@ function renderSleep(){
       '<div class="ww-num"><b>' + (h ? (o ? o.t : fmt1(h)) + '<small> h</small>' : '–') + '</b>' + (h ? '<span>' + (h <= SHORT_SLEEP ? 'noapte scurtă' : 'odihnit') + '</span>' : '') + '</div></div>' +
     '<div class="sl-opts" role="radiogroup" aria-label="Ore de somn">' + SLEEP_OPTS.map(x => '<button role="radio" aria-checked="' + (h === x.h) + '" aria-label="' + x.a + '" data-action="sleep" data-h="' + x.h + '">' + x.t + '<small>ore</small></button>').join('') + '</div>';
 }
+const DUMBBELL = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 7v10M17.5 7v10M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/></svg>';
+// One tap for the session; once it is noted, the heaviest set of the reference lift, optional
+function renderTrain(){
+  const el = $('#train'); if (!el) return;
+  const on = !!S.profile && habitsOf().train; el.hidden = !on; if (!on){ el.innerHTML = ''; return; }
+  const k = S.view, d = getDay(k), done = !!d.trained, ex = liftOf(), L = d.lift && d.lift.ex === ex.id ? d.lift : null;
+  let n = 0, last = null;
+  for (let i = 0; i < 7; i++){ const x = S.days[addDays(k, -i)]; if (x && x.trained) n++; }
+  for (let i = 1; i <= 120 && !last; i++){ const x = S.days[addDays(k, -i)]; if (x && x.lift && x.lift.ex === ex.id) last = x.lift; }
+  const gym = cycleOf().on && dayType(k) === 'train';
+  const ask = k === todayKey() ? (gym ? 'Azi e zi de sală. Te-ai antrenat?' : 'Te-ai antrenat azi?') : 'Te-ai antrenat în ziua asta?';
+  let html = '<div class="ww-top"><span class="ww-ic tr-ic">' + DUMBBELL + '</span>' +
+      '<div class="ww-txt"><h2 id="trTitle">Antrenament</h2><span>' + ask + '</span></div>' +
+      '<div class="ww-num"><b>' + n + '</b><span>în 7 zile</span></div></div>' +
+    '<button class="tr-done" data-action="train-toggle" aria-pressed="' + done + '">' + CHECK_ICON + '<span>' + (done ? 'M-am antrenat' : 'Notează antrenamentul') + '</span></button>';
+  if (done){
+    html += '<div class="tr-lift"><p class="tr-lbl">Cea mai grea serie la <b>' + esc(ex.t.toLowerCase()) + '</b> <em>opțional</em></p>' +
+      '<div class="tr-row"><div class="unit"><label class="sr" for="liftKg">Greutatea în kilograme</label><input type="text" id="liftKg" inputmode="decimal" placeholder="' + (last ? fmt1(last.kg) : '0') + '" value="' + (L ? fmt1(L.kg) : '') + '"><em>kg</em></div>' +
+        '<span class="tr-x" aria-hidden="true">×</span>' +
+        '<div class="unit"><label class="sr" for="liftReps">Repetări</label><input type="text" id="liftReps" inputmode="numeric" placeholder="' + (last ? last.reps : '0') + '" value="' + (L ? L.reps : '') + '"><em>rep.</em></div>' +
+        '<button class="btn soft" data-action="lift-save">' + (L ? 'Schimbă' : 'Notează') + '</button></div>' +
+      '<p class="hint">' + (L ? 'Notat: ' + fmt1(L.kg) + ' kg × ' + L.reps + ', adică cam ' + fmt(e1rm(L.kg, L.reps)) + ' kg la o repetare.'
+        : last ? 'Ultima dată: ' + fmt1(last.kg) + ' kg × ' + last.reps + '. Lasă câmpurile goale ca să notezi aceeași serie.'
+        : 'Din serii văd dacă forța se menține când slăbești. Exercițiul îl schimbi din Profil.') + '</p>' +
+      (L ? '<button class="btn ghost sm" data-action="lift-del">Șterge seria</button>' : '') + '</div>';
+  }
+  el.innerHTML = html;
+}
 function renderMealsToday(day){
   const el = $('#mealsToday'); if (!el) return;
   el.hidden = !S.profile;
@@ -4286,7 +4439,7 @@ function setupPlan(d, T){
 }
 function saveSetup(){
   const d = S.setup.d, T = computeTargets(d);
-  S.profile = keepTargetHistory(S.profile, { sex: d.sex, age: d.age, height: d.height, weight: d.weight, activity: d.activity, goal: d.goal, custom: false, updatedAt: Date.now(), skin: S.profile ? (S.profile.skin || null) : (lsGet('portia-skin') || null), cycle: S.profile ? (S.profile.cycle || null) : null,
+  S.profile = keepTargetHistory(S.profile, { sex: d.sex, age: d.age, height: d.height, weight: d.weight, activity: d.activity, goal: d.goal, custom: false, updatedAt: Date.now(), skin: S.profile ? (S.profile.skin || null) : (lsGet('portia-skin') || null), cycle: S.profile ? (S.profile.cycle || null) : null, muscle: S.profile ? (S.profile.muscle || null) : null,
     adapt: S.profile ? (S.profile.adapt || null) : null, fast: S.profile ? (S.profile.fast || null) : null, plan: setupPlan(d, T), habits: S.profile ? (S.profile.habits || null) : null, share: !!(S.profile && S.profile.share), consent: (S.profile && S.profile.consent) || normConsent(lsGet('portia-consent')),
     targets: { kcal: T.kcal, protein: T.protein, carbs: T.carbs, fat: T.fat, water: T.water } });
   saveProfile();
@@ -4304,6 +4457,7 @@ const PICON = {
   habits: '<path d="M18.5 14.4A7.2 7.2 0 0 1 9.6 5.5a7.2 7.2 0 1 0 8.9 8.9z"/><path d="M16 3.5v3M14.5 5h3"/>',
   goalw: '<path d="M4.5 17.5a7.5 7.5 0 0 1 15 0"/><path d="M12 17.5l3.2-4.6"/><path d="M4.5 17.5h15"/>',
   cycle: '<path d="M6.5 8v8M17.5 8v8M3.5 10v4M20.5 10v4M6.5 12h11"/>',
+  muscle: '<path d="M4 17.5l5-5 3.5 3 7.5-8"/><path d="M15 7.5h5v5"/>',
   fast: '<circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.5 1.5M10 3h4"/>',
   plan: '<path d="M4 8.5l4 3.5 4-6 4 6 4-3.5-1.5 9.5h-13z"/>',
   data: '<path d="M12 3.5l7 2.8v5.2c0 4.3-3 7.6-7 9-4-1.4-7-4.7-7-9V6.3z"/><path d="M9 12l2 2 4-4"/>',
@@ -4317,7 +4471,7 @@ function profGroups(){
   const p = S.profile, f = fastOf(), c = cycleOf();
   return [
     ['Personalizare', [['appear', 'Aspect', { auto: 'Automat', light: 'Luminos', dark: 'Întunecat' }[S.appearance] || 'Automat'], ['theme', 'Teme de culori', (THEMES[S.theme] || {}).t || '']]],
-    ['Nutriție', [['targets', 'Ținte zilnice', fmt(p.targets.kcal) + ' kcal'], ['goalw', 'Ținta de greutate', p.plan ? (p.plan.hold ? 'Mentenanță, ' : '') + fmt1(p.plan.to) + ' kg' : 'Fă-ți planul'], ['habits', 'Somn și motive', (habitsOf().why || habitsOf().sleep) ? 'Pornite' : 'Oprite'], ['cycle', 'Zile de sală și de pauză', c.on ? 'Activat' : 'Oprit'], ['fast', 'Fasting intermitent', f.hide ? 'Ascuns' : f.plan]]],
+    ['Nutriție', [['targets', 'Ținte zilnice', fmt(p.targets.kcal) + ' kcal'], ['goalw', 'Ținta de greutate', p.plan ? (p.plan.hold ? 'Mentenanță, ' : '') + fmt1(p.plan.to) + ' kg' : 'Fă-ți planul'], ['habits', 'Somn și motive', (habitsOf().why || habitsOf().sleep) ? 'Pornite' : 'Oprite'], ['cycle', 'Zile de sală și de pauză', c.on ? 'Activat' : 'Oprit'], ['muscle', 'Antrenament și forță', habitsOf().train ? liftOf().t : 'Oprit'], ['fast', 'Fasting intermitent', f.hide ? 'Ascuns' : f.plan]]],
     ['Cont', (SELL ? [['plan', 'Abonament', S.isOwner ? 'Proprietar' : 'Gratuit']] : []).concat([['data', 'Datele tale', S.noSample ? '' : aiConsentOn() ? 'AI pornit' : 'AI oprit'], ['backup', 'Cod de backup', '']])],
     ['Despre', [['tips', 'Cum îl folosești cel mai bine', ''], ['about', 'Despre Porția', '']]]
   ];
@@ -4363,6 +4517,10 @@ function renderSettingsInner(){
     habits: () => '<section id="habitsSec"><h3>Somn și motive</h3><p>După fiecare masă te întreb dintr-o atingere de ce ai mâncat: foame, stres, plictiseală sau social. Dimineața notezi cât ai dormit. După două săptămâni îți arăt în Progres tiparele tale, de exemplu dacă mănânci mai mult seara după nopți scurte.</p>' +
       swRow('Întreabă de ce ai mâncat', 'habit-why', habitsOf().why) + swRow('Notează somnul pe Azi', 'habit-sleep', habitsOf().sleep) +
       '<p class="hint">Ce ai notat deja rămâne în jurnal și când le oprești.</p></section>',
+    muscle: () => '<section id="muscleSec"><h3>Antrenament și forță</h3><p>Pe Azi bifezi când te antrenezi și, dacă vrei, notezi cea mai grea serie la un exercițiu de referință. În Progres îți arăt dacă îți păstrezi mușchii: proteinele, antrenamentele și forța, lângă greutate.</p>' +
+      swRow('Notează antrenamentele pe Azi', 'habit-train', habitsOf().train) +
+      '<span class="lbl">Exercițiul de referință</span><div class="row" role="radiogroup" aria-label="Exercițiul de referință">' + LIFTS.map(x => '<button class="chip" role="radio" data-action="lift-ex" data-ex="' + x.id + '" aria-checked="' + (liftOf().id === x.id) + '">' + x.t + '</button>').join('') + '</div>' +
+      '<p class="hint">Alege un exercițiu pe care îl faci des, cu greutăți. Forța se compară doar la același exercițiu, așa că seriile notate la altul rămân în jurnal, dar nu intră în calcul.</p></section>',
     plan: () => PLAN_HTML,
     data: () => '<section id="dataSec">' + dataSection() + '</section>',
     backup: () => BACKUP_HTML,
@@ -4397,7 +4555,7 @@ function renderSettingsInner(){
     '<p class="foot">' + store + '</p>';
 }
 // Each row's icon sits on its own soft colour, the same four colours the meals use
-const PTINT = { appear: 4, theme: 3, targets: 2, goalw: 3, habits: 1, cycle: 1, fast: 4, plan: 1, data: 2, backup: 4, tips: 1, about: 0 };
+const PTINT = { appear: 4, theme: 3, targets: 2, goalw: 3, habits: 1, cycle: 1, muscle: 2, fast: 4, plan: 1, data: 2, backup: 4, tips: 1, about: 0 };
 const SEG_ICON = {
   light: '<circle cx="12" cy="12" r="4"/><path d="M12 2.8v2M12 19.2v2M2.8 12h2M19.2 12h2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M5.5 18.5l1.4-1.4M17.1 6.9l1.4-1.4"/>',
   auto: '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/>',
@@ -4869,7 +5027,11 @@ function bindStatic(){
       case 'share-default': if (S.profile){ S.profile = Object.assign(clone(S.profile), { share: b.getAttribute('aria-checked') !== 'true' }); saveProfile(); renderSettings(); } break;
       case 'why': setWhy(S.view, b.dataset.meal, b.dataset.why); break;
       case 'sleep': setSleep(S.view, Number(b.dataset.h)); break;
-      case 'habit-why': case 'habit-sleep': setHabit(a === 'habit-why' ? 'why' : 'sleep', b.getAttribute('aria-checked') !== 'true'); break;
+      case 'habit-why': case 'habit-sleep': case 'habit-train': setHabit({ 'habit-why': 'why', 'habit-sleep': 'sleep', 'habit-train': 'train' }[a], b.getAttribute('aria-checked') !== 'true'); break;
+      case 'train-toggle': toggleTrained(); break;
+      case 'lift-save': saveLift(); break;
+      case 'lift-del': delLift(); break;
+      case 'lift-ex': setLiftEx(b.dataset.ex); break;
       case 'plan-open': openPlan(); break;
       case 'plan-hold': maybeHold(true, true); break;
       case 'plan-save': savePlan(); break;
@@ -4988,6 +5150,7 @@ function bindStatic(){
     }
     if (ev.target.id === 'foodText' && ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)){ ev.preventDefault(); estimate('text'); }
     if (ev.target.id === 'wIn' && ev.key === 'Enter'){ ev.preventDefault(); saveWeight(); }
+    if ((ev.target.id === 'liftKg' || ev.target.id === 'liftReps') && ev.key === 'Enter'){ ev.preventDefault(); saveLift(); }
     if (ev.target.id === 'bcCode' && ev.key === 'Enter'){ ev.preventDefault(); lookupCode(ev.target.value); }
   });
   document.addEventListener('input', ev => {
