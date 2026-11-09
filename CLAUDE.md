@@ -34,6 +34,7 @@
 
 ## AI
 - Orice număr venit de la AI trece prin verificările din `js/app.js` (`itemIssues`, `per100Issues`). Ce nu trece e marcat „verifică” și nu se salvează fără confirmarea utilizatorului.
+- Micronutrienții (fibre, fier, calciu, vitaminele A, C, B12, folați, potasiu) trec prin `microClean`: o valoare pe care niciun aliment nu o poate avea la gramajul acela se aruncă, nu se salvează. Procentele sunt din aportul de referință EFSA pentru adulți (`microRef`, după sex și vârstă), iar panoul zilei spune din câte alimente vin valorile.
 - Nota și cifrele din raportul săptămânal le calculează aplicația (`weekStats`), nu modelul.
 - Planul de greutate și acul de aliniere din Progres le calculează aplicația (`planRate`, `planState`), nu modelul. Ritmul planului e cel mult 1% din greutate pe săptămână la slăbire și 0,5% la creștere, iar ținta nu coboară sub un indice de masă corporală de 18,5 (`planCheck`).
 - Cu un plan, ținta inteligentă (`adaptInfo` → `planTarget`) dă: cât arzi de fapt + ritmul planului (7.700 kcal pe kg) + o recuperare de cel mult 150 kcal pe zi, doar după două verificări săptămânale la rând în afara marjei. La creștere rămâne între menținere și +0,5% pe săptămână, la slăbire între menținere și −1%. Pasul e de cel mult 250 kcal. Proteinele urmează media greutății, cu aceleași grame pe kilogram.

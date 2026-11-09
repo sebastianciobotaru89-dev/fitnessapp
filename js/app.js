@@ -24,6 +24,44 @@ const WHY = [
   { id: 'bored',  t: 'Plictiseală', of: 'de plictiseală',     pl: 'mesele de plictiseală' },
   { id: 'social', t: 'Social',      of: 'în compania altora', pl: 'mesele în compania altora' }
 ];
+// Micronutrients, for the whole portion: fibre in g, iron, calcium, vitamin C and potassium in mg, vitamin A, B12 and folate in µg.
+// max100 is the most any food has in 100 g (dried herbs, liver, acerola, parmesan, clams), so anything above is refused.
+const MICRO = [
+  { id: 'fiber',     t: 'Fibre',    u: 'g',  max100: 50 },
+  { id: 'iron',      t: 'Fier',     u: 'mg', max100: 30 },
+  { id: 'calcium',   t: 'Calciu',   u: 'mg', max100: 1300 },
+  { id: 'vita',      t: 'Vit. A',   u: 'µg', max100: 30000 },
+  { id: 'vitc',      t: 'Vit. C',   u: 'mg', max100: 2000 },
+  { id: 'b12',       t: 'Vit. B12', u: 'µg', max100: 100 },
+  { id: 'folate',    t: 'Folați',   u: 'µg', max100: 3000 },
+  { id: 'potassium', t: 'Potasiu',  u: 'mg', max100: 4000 }
+];
+// What an adult needs in a day, from EFSA's dietary reference values (population reference intake or adequate intake)
+function microRef(p){
+  const f = !!p && p.sex === 'f', age = (p && p.age) || 30;
+  return { fiber: 25, iron: f && age < 50 ? 16 : 11, calcium: age < 25 ? 1000 : 950, vita: f ? 650 : 750, vitc: f ? 95 : 110, b12: 4, folate: 330, potassium: 3500 };
+}
+function normMicro(m){
+  if (!m || typeof m !== 'object') return null;
+  const out = {};
+  for (const x of MICRO){ const v = num(m[x.id]); if (isFinite(v) && v >= 0 && v < 1e6) out[x.id] = v < 10 ? Math.round(v * 10) / 10 : Math.round(v); }
+  return Object.keys(out).length ? out : null;
+}
+// The checks for numbers that come from the AI: a value no food can have at that weight is dropped, never saved.
+// Without a weight, nothing above three days' worth of the nutrient is kept.
+function microClean(m, grams){
+  const v = normMicro(m); if (!v) return null;
+  const ref = microRef(S.profile);
+  for (const x of MICRO) if (v[x.id] != null && (grams > 0 ? v[x.id] > x.max100 * grams / 100 : v[x.id] > ref[x.id] * 3)) delete v[x.id];
+  return Object.keys(v).length ? v : null;
+}
+const microTimes = (m, f) => { if (!m) return null; const o = {}; for (const k in m) o[k] = m[k] * f; return normMicro(o); };
+// Totals over the entries that have micronutrients; n[k] counts how many had that one
+function sumMicro(list){
+  const t = {}, n = {};
+  for (const e of list) if (e.micro) for (const x of MICRO) if (e.micro[x.id] != null){ t[x.id] = (t[x.id] || 0) + e.micro[x.id]; n[x.id] = (n[x.id] || 0) + 1; }
+  return { t, n };
+}
 const SLEEP_OPTS = [{ h: 5, t: '≤5', a: '5 ore sau mai puțin' }, { h: 6, t: '6', a: '6 ore' }, { h: 7, t: '7', a: '7 ore' }, { h: 8, t: '8', a: '8 ore' }, { h: 9, t: '9+', a: '9 ore sau mai mult' }];
 const SHORT_SLEEP = 6;   // 6 hours or less is a short night: adults are usually advised at least 7
 // The targets each past day had: when targets change, the old ones stay as the targets of the days up to yesterday
@@ -533,7 +571,8 @@ function normEntry(e){
     fat: Math.max(0, r1(num(e.fat) || 0)),
     meal: MEALS.some(m => m.id === e.meal) ? e.meal : 'snack',
     at: Number(e.at) || Date.now(),
-    src: e.src ? String(e.src).slice(0, 12) : 'text'
+    src: e.src ? String(e.src).slice(0, 12) : 'text',
+    micro: normMicro(e.micro) || undefined
   };
 }
 function normDay(d, k){
@@ -1106,7 +1145,8 @@ function buildPrompt(kind, text){
     '- Pentru produse de marcă sau preparate de restaurant folosește valorile publicate doar dacă le cunoști sigur. Dacă nu, folosește un aliment generic asemănător, spune asta în note și pune sigur "mică". Nu inventa valori.'
   ].concat(ITEM_RULES, [
     'Răspunde doar cu JSON în această formă:',
-    '{"items":[{"name":"2 ouă fierte","grams":100,"kcal":143,"protein":12.6,"carbs":0.7,"fat":9.5,"sigur":"mare"}],"confidence":"medie","intrebare":"","note":"O propoziție scurtă despre ce ai presupus."}',
+    '{"items":[{"name":"2 ouă fierte","grams":100,"kcal":143,"protein":12.6,"carbs":0.7,"fat":9.5,"sigur":"mare","micro":{"fiber":0,"iron":1.8,"calcium":56,"vita":160,"vitc":0,"b12":1.1,"folate":44,"potassium":138}}],"confidence":"medie","intrebare":"","note":"O propoziție scurtă despre ce ai presupus."}',
+    'micro, la fiecare aliment, pentru toată porția: fibre (g), fier (mg), calciu (mg), vitamina A (µg echivalenți de retinol), vitamina C (mg), vitamina B12 (µg), folați (µg) și potasiu (mg), din tabele de compoziție a alimentelor (USDA, Ciqual). Pune null la o valoare pe care nu o știi. Nu ghici.',
     'sigur, la fiecare aliment: "mare" dacă e un produs ambalat, o etichetă sau cantitatea e dată clar; "medie" dacă ai estimat porția unui aliment simplu; "mică" dacă e o mâncare amestecată sau gătită (ciorbă, tocăniță, paste cu sos, prăjeli, salată cu dressing), dacă poate avea ulei, unt sau sos ascuns, sau dacă porția nu se vede bine.',
     'intrebare: o singură întrebare scurtă, pe care utilizatorul o poate răspunde din memorie, care ar schimba cel mai mult caloriile (de exemplu "Cât ulei ai folosit la gătit?" sau "Câte linguri de orez au fost?"). Pune "" dacă toate alimentele sunt "mare" sau dacă răspunsul nu ar schimba mult.',
     'confidence este "mare", "medie" sau "mică", pentru toată masa. Dacă textul sau poza nu arată mâncare sau băutură, întoarce "items": [] și explică în note.'
@@ -1146,7 +1186,8 @@ function itemsFrom(arr){
   return (Array.isArray(arr) ? arr : []).map(it => {
     const e = normEntry(Object.assign({}, it, { meal: S.meal }));
     const cf = String(it && it.sigur || '').toLowerCase();
-    return e ? { name: e.name, grams: e.grams, kcal: e.kcal, protein: e.protein, carbs: e.carbs, fat: e.fat, mult: 1, conf: ['mare', 'medie', 'mică'].includes(cf) ? cf : '' } : null;
+    const mi = e ? microClean(it.micro, e.grams) : null;
+    return e ? Object.assign({ name: e.name, grams: e.grams, kcal: e.kcal, protein: e.protein, carbs: e.carbs, fat: e.fat, mult: 1, conf: ['mare', 'medie', 'mică'].includes(cf) ? cf : '' }, mi ? { micro: mi } : {}) : null;
   }).filter(Boolean).slice(0, 12).map(it => { const w = itemIssues(it); if (w.length){ it.warn = w; it.conf = 'mică'; } return it; });
 }
 async function estimate(kind, follow){
@@ -1272,7 +1313,7 @@ function clearPhoto(){
 function scaled(it){
   const m = it.mult || 1;
   const name = (m !== 1 && !it.grams) ? it.name + ' (×' + fmt1(m) + ')' : it.name;
-  return { name, grams: it.grams ? Math.round(it.grams*m) : null, kcal: Math.round(it.kcal*m), protein: r1(it.protein*m), carbs: r1(it.carbs*m), fat: r1(it.fat*m) };
+  return Object.assign({ name, grams: it.grams ? Math.round(it.grams*m) : null, kcal: Math.round(it.kcal*m), protein: r1(it.protein*m), carbs: r1(it.carbs*m), fat: r1(it.fat*m) }, it.micro ? { micro: microTimes(it.micro, m) } : {});
 }
 function commitDraft(){
   const d = S.draft; if (!d || !d.items.length) return;
@@ -2147,7 +2188,7 @@ function setCycle(patch){
 /* ---------- library: recipes, favorites, reports ---------- */
 const sheetHead = (id, title, closeAction) => '<div class="sheet-head"><h2 id="' + id + '" tabindex="-1">' + esc(title) + '</h2><button class="icon-btn" data-action="' + closeAction + '" aria-label="Închide">' + X_ICON + '</button></div>';
 const mxHtml = (p, c, f) => '<span class="mx"><span><i class="dot p"></i>' + fmt1(p) + ' g</span><span><i class="dot c"></i>' + fmt1(c) + ' g</span><span><i class="dot f"></i>' + fmt1(f) + ' g</span></span>';
-function normItem(it){ const e = normEntry(Object.assign({}, it, { meal: 'snack' })); return e ? { name: e.name, grams: e.grams, kcal: e.kcal, protein: e.protein, carbs: e.carbs, fat: e.fat } : null; }
+function normItem(it){ const e = normEntry(Object.assign({}, it, { meal: 'snack' })); return e ? Object.assign({ name: e.name, grams: e.grams, kcal: e.kcal, protein: e.protein, carbs: e.carbs, fat: e.fat }, e.micro ? { micro: e.micro } : {}) : null; }
 function normReport(d){
   d = d || {};
   const arr = a => (Array.isArray(a) ? a : []).map(x => String(x).slice(0, 300)).filter(Boolean).slice(0, 4);
@@ -2578,7 +2619,7 @@ function normProduct(p){
   const sv = num(p.serving), pk = num(p.pack);
   return { code, name: String(p.name || ('Produs ' + code)).trim().slice(0, 80), unit: p.unit === 'ml' ? 'ml' : 'g',
     per100: { kcal: Math.round(kcal), protein: Math.max(0, r1(num(per.protein) || 0)), carbs: Math.max(0, r1(num(per.carbs) || 0)), fat: Math.max(0, r1(num(per.fat) || 0)) },
-    serving: sv > 0 ? Math.round(sv) : null, pack: pk > 0 ? Math.round(pk) : null, at: Number(p.at) || Date.now() };
+    serving: sv > 0 ? Math.round(sv) : null, pack: pk > 0 ? Math.round(pk) : null, at: Number(p.at) || Date.now(), micro: normMicro(p.micro) || undefined };
 }
 function drawScaled(bmp, maxSide, rot){
   const w = bmp.width || bmp.naturalWidth, h = bmp.height || bmp.naturalHeight;
@@ -2717,7 +2758,8 @@ const LABEL_PROMPT = [
   'Imaginea arată eticheta unui produs alimentar, cu tabelul de valori nutriționale.',
   'Citește valorile la 100 g sau la 100 ml. Dacă sunt date doar pe porție, calculează-le la 100.',
   'Răspunde doar cu JSON în această formă:',
-  '{"name":"numele produsului, scurt","unit":"g","per100":{"kcal":250,"kj":1046,"protein":10,"carbs":30,"fat":9},"serving":30,"package":400}',
+  '{"name":"numele produsului, scurt","unit":"g","per100":{"kcal":250,"kj":1046,"protein":10,"carbs":30,"fat":9,"fiber":3},"serving":30,"package":400}',
+  'fiber = fibrele la 100, doar dacă sunt scrise pe etichetă, altfel null.',
   'unit este "g" sau "ml". serving = cantitatea unei porții dacă e scrisă pe etichetă, altfel null. package = cantitatea netă din ambalaj dacă se vede, altfel null. Dacă numele nu se vede, descrie produsul pe scurt.',
   'Dacă o valoare nu se citește clar, pune null în locul ei. Nu ghici cifre.',
   'Dacă imaginea nu arată un tabel cu valori nutriționale, întoarce {"per100":null}.'
@@ -2737,7 +2779,8 @@ async function readLabel(file){
     if (!per){ B.err = 'Nu am găsit tabelul cu valori nutriționale. Fă poza mai de aproape, doar pe tabel.'; return; }
     let kcal = num(per.kcal); if (!(kcal > 0) && num(per.kj) > 0) kcal = num(per.kj) / 4.184;
     B.draft = { name: String((res && res.name) || '').slice(0, 80), unit: res.unit === 'ml' ? 'ml' : 'g', kcal: inVal(Math.round(kcal)), protein: inVal(num(per.protein)), carbs: inVal(num(per.carbs)), fat: inVal(num(per.fat)),
-      serving: num(res.serving) > 0 ? String(Math.round(num(res.serving))) : '', pack: num(res.package) > 0 ? String(Math.round(num(res.package))) : '' };
+      serving: num(res.serving) > 0 ? String(Math.round(num(res.serving))) : '', pack: num(res.package) > 0 ? String(Math.round(num(res.package))) : '',
+      micro: microClean({ fiber: per.fiber }, 100) };
     const iss = per100Issues({ name: B.draft.name, kcal: num(B.draft.kcal), protein: num(B.draft.protein), carbs: num(B.draft.carbs), fat: num(B.draft.fat), kj: num(per.kj) }), bad = iss.hard.concat(iss.soft);
     B.note = bad.length ? 'Am completat valorile de pe etichetă, dar ' + bad.join(' și ') + '. Compară-le cu eticheta înainte să salvezi.' : 'Am completat valorile de pe etichetă. Verifică-le, apoi salvează.';
     B.noteWarn = bad.length > 0;
@@ -2758,7 +2801,7 @@ function saveProduct(){
   if (iss.hard.length){ err.textContent = 'Valorile nu pot fi corecte: ' + iss.hard.join(' și ') + '. Verifică eticheta.'; return; }
   const sig = [d.kcal, d.protein, d.carbs, d.fat].join('|');
   if (iss.soft.length && B.softOk !== sig){ B.softOk = sig; err.textContent = 'Atenție: ' + iss.soft.join(' și ') + '. Dacă așa scrie pe etichetă, apasă din nou „Salvează produsul”.'; return; }
-  const p = normProduct({ code: B.code, name: d.name.trim() || ('Produs ' + B.code), unit: d.unit, per100: { kcal: num(d.kcal), protein: num(d.protein), carbs: num(d.carbs), fat: num(d.fat) }, serving: num(d.serving), pack: num(d.pack) });
+  const p = normProduct({ code: B.code, name: d.name.trim() || ('Produs ' + B.code), unit: d.unit, per100: { kcal: num(d.kcal), protein: num(d.protein), carbs: num(d.carbs), fat: num(d.fat) }, serving: num(d.serving), pack: num(d.pack), micro: d.micro });
   if (!p){ err.textContent = 'Verifică valorile introduse.'; return; }
   const i = S.library.products.findIndex(x => x.code === p.code);
   if (i >= 0) S.library.products[i] = p; else S.library.products.unshift(p);
@@ -2778,7 +2821,7 @@ function saveProduct(){
 function addBarcodeEntry(){
   const v = bcCalc(); if (!v){ toast('Scrie cât ai mâncat.'); return; }
   const k = S.view, meal = S.meal;
-  const e = normEntry({ id: newId(), name: v.p.name + ' · ' + fmt(v.q) + ' ' + v.p.unit, grams: v.q, kcal: v.kcal, protein: v.protein, carbs: v.carbs, fat: v.fat, meal, at: Date.now(), src: 'barcode' });
+  const e = normEntry({ id: newId(), name: v.p.name + ' · ' + fmt(v.q) + ' ' + v.p.unit, grams: v.q, kcal: v.kcal, protein: v.protein, carbs: v.carbs, fat: v.fat, micro: microTimes(v.p.micro, v.q / 100), meal, at: Date.now(), src: 'barcode' });
   mutateDay(k, d => d.entries.push(e));
   S.bc = null; renderBarcode(); $('#bcCode').value = '';
   addedToast(k, atMeal(v.p.name, meal), e.kcal, () => mutateDay(k, d => { d.entries = d.entries.filter(x => x.id !== e.id); }), meal);
@@ -2805,9 +2848,13 @@ function offProduct(p){
   if (!name && !(kcal >= 0)) return null;
   const u = String(p.product_quantity_unit || (String(p.quantity || '').match(/\b(ml|cl|l)\b/i) || [])[1] || '').toLowerCase();
   const sv = num(p.serving_quantity), pk = num(p.product_quantity);
-  return { name: name.slice(0, 80), unit: /^(ml|cl|l)$/.test(u) ? 'ml' : 'g', kcal: kcal >= 0 ? inVal(Math.round(kcal)) : '',
+  // Open Food Facts keeps every nutrient in grams per 100 g: milligrams and micrograms are converted back
+  const g = (key, f) => { const v = num(n[key]); return isFinite(v) && v >= 0 ? v * f : null; };
+  const micro = microClean({ fiber: g('fiber_100g', 1), iron: g('iron_100g', 1e3), calcium: g('calcium_100g', 1e3), vita: g('vitamin-a_100g', 1e6), vitc: g('vitamin-c_100g', 1e3),
+    b12: g('vitamin-b12_100g', 1e6), folate: g('folates_100g', 1e6) != null ? g('folates_100g', 1e6) : g('vitamin-b9_100g', 1e6), potassium: g('potassium_100g', 1e3) }, 100);
+  return Object.assign({ name: name.slice(0, 80), unit: /^(ml|cl|l)$/.test(u) ? 'ml' : 'g', kcal: kcal >= 0 ? inVal(Math.round(kcal)) : '',
     protein: inVal(num(n.proteins_100g)), carbs: inVal(num(n.carbohydrates_100g)), fat: inVal(num(n.fat_100g)),
-    serving: sv > 0 ? String(Math.round(sv)) : '', pack: pk > 0 ? String(Math.round(pk)) : '' };
+    serving: sv > 0 ? String(Math.round(sv)) : '', pack: pk > 0 ? String(Math.round(pk)) : '' }, micro ? { micro } : {});
 }
 async function offFetch(code){
   const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 8000);
@@ -2825,7 +2872,7 @@ async function lookupOnline(B){
   const [sh, found] = await Promise.all([sharedOn() ? sharedFetch(B.code) : null, offOn() ? offFetch(B.code) : null]);
   if (S.bc !== B) return;
   B.looking = false;
-  const d = B.draft, fill = f => { const typed = ['name', 'kcal', 'protein', 'carbs', 'fat', 'serving', 'pack'].some(k => String(d[k]).trim()); if (!typed) d.unit = f.unit; Object.keys(f).forEach(k => { if (k !== 'unit' && !String(d[k]).trim()) d[k] = f[k]; }); };
+  const d = B.draft, fill = f => { const typed = ['name', 'kcal', 'protein', 'carbs', 'fat', 'serving', 'pack'].some(k => String(d[k]).trim()); if (!typed) d.unit = f.unit; Object.keys(f).forEach(k => { if (k === 'micro'){ if (!d.micro) d.micro = f.micro; } else if (k !== 'unit' && !String(d[k] == null ? '' : d[k]).trim()) d[k] = f[k]; }); };
   if (sh && sh.status === 'verified'){
     fill(sharedDraft(sh.p)); B.src = 'shared'; B.noteWarn = false;
     B.note = 'Găsit în baza comună Porția: ' + (sh.n === 1 ? 'o persoană l-a completat' : sh.n + ' persoane l-au completat') + ' de pe etichetă, cu aceleași valori. Verifică totuși cu eticheta ta, apoi salvează.';
@@ -3642,6 +3689,11 @@ function renderRecent(){
 }
 const AI_SRC = new Set(['text', 'photo', 'idea']);
 const CONF = { 'mare': { cls: 'hi', t: 'sigur', u: 0.07 }, 'medie': { cls: 'mid', t: 'estimat', u: 0.18 }, 'mică': { cls: 'lo', t: 'verifică', u: 0.35 } };
+function previewMicro(d){
+  const items = d.items.filter(it => !it.warn).map(scaled), M = sumMicro(items);
+  if (!Object.keys(M.t).length) return '';
+  return '<div class="mi-box"><h3>Nutrienți evidențiați</h3>' + microRings(M) + '<p class="hint">Estimări, din necesarul zilnic al unui adult (EFSA).</p></div>';
+}
 function renderPreview(){
   const el = $('#preview'); const d = S.draft;
   const plus = $('#tabbar .tab-add'); if (plus) plus.classList.toggle('has-draft', !!d);
@@ -3668,9 +3720,20 @@ function renderPreview(){
   el.innerHTML = '<div class="panel-head"><h2 id="pvTitle">Verifică și adaugă</h2>' + '<span class="aichip">Generat de AI</span>' + (cc ? '<span class="conf cf-' + cc.cls + '"><i></i>Siguranță ' + esc(d.confidence) + '</span>' : '') + '</div>' +
     guard + '<ul class="pitems">' + rows + '</ul>' +
     '<div class="ptotal"><span class="mx"><span><i class="dot p"></i>' + fmt1(tot.protein) + ' g</span><span><i class="dot c"></i>' + fmt1(tot.carbs) + ' g</span><span><i class="dot f"></i>' + fmt1(tot.fat) + ' g</span></span><b>' + fmt(tot.kcal) + ' kcal</b></div>' +
-    range + ask +
+    range + ask + previewMicro(d) +
     (d.note ? '<p class="note">' + esc(d.note) + '</p>' : '<div style="height:12px"></div>') +
     '<div class="row"><button class="btn ghost" data-action="discard">Renunță</button><button class="btn primary wide" data-action="commit">Adaugă la ' + mealName(S.meal) + dayNote + '</button></div>';
+}
+// Eight rings: how much of an adult's daily need a meal or a day brings. A dash where nothing had that value.
+const fmtMi = (v, x) => (v < 10 ? fmt1(v) : fmt(v)) + ' ' + x.u;
+function microRings(M){
+  const R = microRef(S.profile), C = 2 * Math.PI * 19;
+  return '<div class="mi-rings">' + MICRO.map(x => {
+    const v = M.t[x.id], has = v != null, pct = has ? Math.round(v / R[x.id] * 100) : null, frac = has ? Math.min(1, v / R[x.id]) : 0;
+    return '<div class="mi' + (has && pct >= 100 ? ' full' : '') + (has ? '' : ' none') + '" role="img" aria-label="' + esc(x.t + ': ' + (has ? fmtMi(v, x) + ' din ' + fmtMi(R[x.id], x) + ', ' + pct + '%' : 'fără date')) + '">' +
+      '<span class="mi-r"><svg viewBox="0 0 46 46" aria-hidden="true"><circle class="mi-t" cx="23" cy="23" r="19"/>' + (frac > 0.004 ? '<circle class="mi-v" cx="23" cy="23" r="19" stroke-dasharray="' + (C * frac).toFixed(1) + ' ' + C.toFixed(1) + '"/>' : '') + '</svg><b>' + (has ? pct + '%' : '–') + '</b></span>' +
+      '<span class="mi-l">' + x.t + '</span></div>';
+  }).join('') + '</div>';
 }
 function renderIdeas(){
   const el = $('#ideas'); const I = S.ideas;
@@ -3738,6 +3801,12 @@ function renderDiary(){
     '<span class="ds-bar' + (T && t.kcal > T.kcal ? ' is-over' : '') + '" aria-hidden="true">' + MEALS.map((m, i) => byMeal[i] ? '<i class="ml-' + m.id + '" style="width:' + (byMeal[i] / cap * 100).toFixed(2) + '%"></i>' : '').join('') +
       (T ? '<b class="ds-t" style="left:' + Math.min(100, T.kcal / cap * 100).toFixed(2) + '%"></b>' : '') + '</span></section>';
   if (!S.loaded){ el.innerHTML = html + '<div class="skel" aria-hidden="true"></div>'; return; }
+  const withMi = day.entries.filter(e => e.micro);
+  if (withMi.length){
+    const all = withMi.length === day.entries.length;
+    html += '<section class="panel mi-day" aria-labelledby="miTitle"><div class="panel-head"><h2 id="miTitle">Micronutrienți</h2><span class="meta">din necesarul zilnic</span></div>' + microRings(sumMicro(withMi)) +
+      '<p class="hint">' + (all ? 'Din toate alimentele zilei.' : 'Din ' + withMi.length + ' din ' + day.entries.length + ' alimente. Celelalte nu au aceste valori, așa că totalul real e mai mare.') + ' Sunt estimări, raportate la aportul de referință pentru adulți (EFSA).</p></section>';
+  }
   for (const m of MEALS){
     const list = day.entries.filter(e => e.meal === m.id).sort((a, b) => a.at - b.at);
     const mk = list.reduce((a, e) => a + e.kcal, 0);
@@ -4703,7 +4772,7 @@ function bindStatic(){
       case 'bc-qty': if (S.bc){ S.bc.qty = b.dataset.q; const q = $('#bcQty'); if (q) q.value = b.dataset.q; $$('[data-action="bc-qty"]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.q === b.dataset.q))); updateBcPrev(); } break;
       case 'bc-add': addBarcodeEntry(); break;
       case 'bc-cancel': if (S.bcCtl) S.bcCtl.abort(); S.bc = null; renderBarcode(); break;
-      case 'bc-edit': { const p = bcProduct(); if (p){ S.bc = { state: 'new', editing: true, code: p.code, draft: { name: p.name, unit: p.unit, kcal: inVal(p.per100.kcal), protein: inVal(p.per100.protein), carbs: inVal(p.per100.carbs), fat: inVal(p.per100.fat), serving: p.serving ? String(p.serving) : '', pack: p.pack ? String(p.pack) : '' } }; renderBarcode(); } break; }
+      case 'bc-edit': { const p = bcProduct(); if (p){ S.bc = { state: 'new', editing: true, code: p.code, draft: { name: p.name, unit: p.unit, kcal: inVal(p.per100.kcal), protein: inVal(p.per100.protein), carbs: inVal(p.per100.carbs), fat: inVal(p.per100.fat), serving: p.serving ? String(p.serving) : '', pack: p.pack ? String(p.pack) : '', micro: p.micro || null } }; renderBarcode(); } break; }
       case 'bc-unit': if (S.bc && S.bc.draft){ S.bc.draft.unit = b.dataset.u; renderBarcode(); } break;
       case 'bc-save': saveProduct(); break;
       case 'prod-del': delProduct(b.dataset.code); break;
