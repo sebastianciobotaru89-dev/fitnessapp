@@ -1,0 +1,7 @@
+# Porția on Supabase: the shared product database. Deployed by .github/workflows/server.yml.
+project_id = "portia"
+
+[functions.products]
+# The app calls the function without any key: nothing secret ships in the app.
+# The function itself reaches the database with the service role key the platform gives it.
+verify_jwt = false

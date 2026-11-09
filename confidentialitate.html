@@ -34,10 +34,10 @@ a{color:var(--acc)}
 <main>
   <header>
     <img src="icons/icon-192.png" alt="">
-    <div><h1>Confidențialitate</h1><p class="date">Porția, aplicația de calorii și macronutrienți · actualizat pe 2 noiembrie 2026</p></div>
+    <div><h1>Confidențialitate</h1><p class="date">Porția, aplicația de calorii și macronutrienți · actualizat pe 9 noiembrie 2026</p></div>
   </header>
 
-  <p class="lead">Pe scurt: jurnalul tău stă pe telefonul tău. Porția nu are conturi, nu trimite datele tale pe un server, nu are reclame și nu te urmărește.</p>
+  <p class="lead">Pe scurt: jurnalul tău stă pe telefonul tău. Porția nu are conturi, nu trimite jurnalul tău pe un server, nu are reclame și nu te urmărește.</p>
 
   <section>
     <h2>Ce păstrează aplicația</h2>
@@ -56,7 +56,8 @@ a{color:var(--acc)}
   <section>
     <h2>Ce iese de pe telefon</h2>
     <ul>
-      <li><b>Codurile de bare.</b> Când cauți un produs care nu e în lista ta, aplicația trimite numărul codului de bare la <a href="https://world.openfoodfacts.org">Open Food Facts</a>, o bază de date deschisă despre alimente, și primește valorile nutriționale. Nu trimite nimic altceva despre tine. Se aplică <a href="https://world.openfoodfacts.org/privacy">politica lor de confidențialitate</a>.</li>
+      <li><b>Codurile de bare.</b> Când cauți un produs care nu e în lista ta, aplicația trimite numărul codului de bare la <a href="https://world.openfoodfacts.org">Open Food Facts</a>, o bază de date deschisă despre alimente, și la baza comună de produse Porția, și primește valorile nutriționale. Nu trimite nimic altceva despre tine. Pentru Open Food Facts se aplică <a href="https://world.openfoodfacts.org/privacy">politica lor de confidențialitate</a>.</li>
+      <li><b>Produsele pe care alegi să le trimiți.</b> Când salvezi un produs de pe etichetă, poți bifa „Trimite-l în baza comună Porția”, ca alții să-l găsească direct. Doar atunci pleacă pe serverul Porția codul de bare, numele produsului, valorile nutriționale, porția și pachetul, plus un număr aleator generat de aplicație pe acest dispozitiv. Nu pleacă nimic din jurnalul tău. Serverul nu păstrează nici numărul acesta, nici adresa ta IP: păstrează doar amprente criptate ireversibil (cu o cheie secretă) ale dispozitivului și ale rețelei, ca un produs să fie confirmat doar de oameni diferiți. Ca să limiteze abuzurile, serverul ține și o amprentă a adresei IP care se schimbă la fiecare oră și dispare după cel mult o oră. Un produs confirmat îl văd toți utilizatorii Porția, fără nicio legătură cu tine. Serverul e găzduit de <a href="https://supabase.com/privacy">Supabase</a>, în Uniunea Europeană.</li>
       <li><b>Nimic altceva.</b> Nu folosim statistici de utilizare, rapoarte de erori, reclame sau servicii de urmărire.</li>
     </ul>
   </section>
@@ -69,6 +70,7 @@ a{color:var(--acc)}
   <section>
     <h2>Cum ștergi totul</h2>
     <p>Din Profil → Datele tale → Șterge contul și toate datele. Ștergerea e imediată și definitivă. Același efect îl are dezinstalarea aplicației.</p>
+    <p>Produsele trimise în baza comună le retragi din Profil → Datele tale → Retrage produsele trimise. Ștergerea contului le retrage și pe ele. Dacă dezinstalezi aplicația înainte, numărul aleator al dispozitivului se pierde și nu mai putem afla ce produse ai trimis tu: valorile rămân în baza comună, fără nicio legătură cu tine.</p>
   </section>
 
   <section>
@@ -90,7 +92,7 @@ a{color:var(--acc)}
 
   <section class="en" lang="en">
     <h2>In English</h2>
-    <p>Porția keeps your food journal, water, weight, targets and settings only on your device. There are no accounts, no servers, no ads, no analytics and no tracking. The only data that leaves the device is a barcode number, sent to Open Food Facts when you look up a product. The camera is used only when you choose to photograph a barcode, and the photo is read on the device. If you add Porția's widgets to the home screen or lock screen, the app gives them the day's calories and macros; they stay on the device, and lock screen widgets are visible without unlocking. You can delete everything from Profile → Your data, or by uninstalling the app. Porția is for people aged 16 and over.</p>
+    <p>Porția keeps your food journal, water, weight, targets, sleep, reasons for eating and settings only on your device. There are no accounts, no ads, no analytics and no tracking, and your journal never leaves the device. When you look up a product, its barcode number is sent to Open Food Facts and to Porția's shared product database. If you choose to share a product you saved from its label, its barcode, name, label values, serving and pack size go to that database with a random number made on your device; the server keeps only one-way keyed hashes of the device and of your network (so one person cannot confirm a product alone), plus an hourly-changing hash of your IP address kept for at most an hour to limit abuse. The server is hosted by Supabase in the European Union. You can withdraw shared products from Profile → Your data. The camera is used only when you choose to photograph a barcode, and the photo is read on the device. If you add Porția's widgets to the home screen or lock screen, the app gives them the day's calories and macros; they stay on the device, and lock screen widgets are visible without unlocking. You can delete everything from Profile → Your data, or by uninstalling the app. Porția is for people aged 16 and over.</p>
   </section>
 </main>
 </body>

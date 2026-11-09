@@ -550,6 +550,7 @@ function normProfile(p){
     fast: normFast(p.fast),
     plan: normPlan(p.plan),
     habits: normHabits(p.habits),
+    share: p.share === true,
     targets: { kcal: Math.round(kcal), protein: Math.round(num(t.protein) || 0), carbs: Math.round(num(t.carbs) || 0), fat: Math.round(num(t.fat) || 0), water: Math.round(num(t.water) || 2500) }
   };
 }
@@ -923,6 +924,7 @@ function afterLoad(){
   if (S.profileKnown && !hasConsent()){ if (!anySheetOpen()) openConsent(); }
   else if (S.profileKnown && !S.profile && !anySheetOpen()) openSetup(true);
   maybeAutoAdapt();
+  flushShares();
 }
 
 /* ---------- consent: health data, AI, age ---------- */
@@ -982,6 +984,9 @@ function dataSection(){
   return '<h3>Datele tale</h3><p>Porția păstrează mesele, apa, greutatea, țintele, fastingul și setările, ' + where + '.' + (S.noSample ? (NATIVE ? ' Nu le trimite nicăieri. Singura legătură la internet e căutarea unui cod de bare în Open Food Facts, care primește doar codul.' : '') : ' Când folosești AI, textul sau poza mesei merg la Claude (Anthropic) doar ca să fie estimate, fără numele sau e-mailul tău.') + '</p>' +
     (S.noSample ? '' : swRow('Estimări cu AI (Claude)', 'consent-ai', ai)) +
     (c ? '<p class="hint" style="margin-bottom:12px">Ai dat acordul pentru datele de sănătate pe ' + esc(new Date(c.health).toLocaleDateString('ro-RO', { day: 'numeric', month: 'long', year: 'numeric' })) + '. Ca să-l retragi, șterge contul, pentru că fără aceste date aplicația nu poate funcționa. Codul de backup de mai jos îți dă o copie a tuturor datelor.</p>' : '') +
+    (PRODUCTS_API ? '<h3 class="ds-sub">Baza comună de produse</h3><p>Când salvezi un produs de pe etichetă, poți bifa să-l trimiți în baza comună Porția: codul, numele și valorile, plus un număr aleator al acestui dispozitiv, nu numele sau contul tău. Serverul păstrează doar o amprentă criptată a dispozitivului și a rețelei, ca nimeni să nu poată confirma singur un produs.</p>' +
+      swRow('Bifează trimiterea pentru produsele noi', 'share-default', !!(S.profile && S.profile.share)) +
+      (lsGet('portia-shared') ? '<div class="row" style="margin:4px 0 14px"><button class="btn ghost sm" data-action="share-withdraw">Retrage produsele trimise</button></div>' : '') : '') +
     '<div id="delBox"><button class="btn danger-ghost" data-action="del-account">Șterge contul și toate datele</button></div>';
 }
 function delConfirmHtml(){
@@ -995,6 +1000,7 @@ async function deleteAccount(){
   const v = (inp ? inp.value : '').trim().toUpperCase().replace(/Ș|Ş/g, 'S');
   if (v !== 'STERGE'){ if (err) err.textContent = 'Scrie ȘTERGE ca să confirmi.'; if (inp) inp.focus(); return; }
   if (btn){ btn.disabled = true; btn.textContent = 'Se șterge…'; }
+  if (lsGet('portia-shared')) await sharedCall('DELETE', '', { install: installId() });   // best effort: the products sent from here leave too
   try {
     if (S.mode === 'cloud'){
       S.restoring = true;
@@ -2570,7 +2576,7 @@ function lookupCode(raw){
   if (p) S.bc = { state: 'found', code, qty: String(p.serving || 100) };
   else {
     S.bc = { state: 'new', code, warn: !validCode(code), draft: { name: '', unit: 'g', kcal: '', protein: '', carbs: '', fat: '', serving: '', pack: '' } };
-    if (offOn()){ S.bc.looking = true; offLookup(S.bc); }
+    if (offOn() || sharedOn()){ S.bc.looking = true; lookupOnline(S.bc); }
   }
   renderBarcode();
 }
@@ -2613,8 +2619,8 @@ function renderBarcode(){
   const accept = (S.imgLimits && S.imgLimits.mediaTypes && S.imgLimits.mediaTypes.join(',')) || 'image/jpeg,image/png,image/webp';
   const field = (id, label, key, unit, cls, mode) => '<div class="' + (cls || '') + '"><label class="lbl" for="' + id + '">' + label + '</label>' + (unit ? '<div class="unit">' : '') + '<input type="text" id="' + id + '"' + (mode ? ' inputmode="' + mode + '"' : '') + ' value="' + esc(d[key]) + '">' + (unit ? '<em>' + unit + '</em></div>' : '') + '</div>';
   el.innerHTML = '<div class="bc-card"><div class="bc-top"><div><b>' + (B.editing ? 'Editează produsul' : 'Produs nou') + '</b><span class="meta">Cod ' + esc(B.code) + (B.warn ? '. Verifică cifrele, codul pare incomplet.' : '') + '</span></div></div>' +
-    (B.looking ? '<div class="status" style="margin-top:0"><span class="spin" aria-hidden="true"></span><p>Caut produsul în Open Food Facts…<small>O bază de date deschisă, cu produse din toată lumea.</small></p></div>' : '') +
-    (B.editing || B.off ? '' : '<p class="hint">Nu e încă în lista ta. ' + (canAI ? 'Fotografiază tabelul cu valori nutriționale de pe ambalaj sau completează manual.' : 'Completează valorile de pe etichetă.') + ' Îl salvez, ca data viitoare să-l găsești instant.</p>') +
+    (B.looking ? '<div class="status" style="margin-top:0"><span class="spin" aria-hidden="true"></span><p>' + (sharedOn() ? (offOn() ? 'Caut produsul în baza comună Porția și în Open Food Facts…' : 'Caut produsul în baza comună Porția…') : 'Caut produsul în Open Food Facts…<small>O bază de date deschisă, cu produse din toată lumea.</small>') + '</p></div>' : '') +
+    (B.editing || B.off || B.src ? '' : '<p class="hint">Nu e încă în lista ta. ' + (canAI ? 'Fotografiază tabelul cu valori nutriționale de pe ambalaj sau completează manual.' : 'Completează valorile de pe etichetă.') + ' Îl salvez, ca data viitoare să-l găsești instant.</p>') +
     (canAI ? '<label class="photo-pick" for="bcLabelInput"><input type="file" id="bcLabelInput" accept="' + accept + '"><span class="ph">' + CAM_ICON + '</span><span><b>Fotografiază eticheta</b><span>tabelul „Valori nutriționale”</span></span></label>' : '') +
     (B.reading ? '<div class="status" style="margin-top:0"><span class="spin" aria-hidden="true"></span><p>Claude citește eticheta…<small>Durează de obicei 10–30 de secunde.</small></p></div>' : '') +
     (B.note ? '<p class="' + (B.noteWarn ? 'warnbox' : 'hint') + '">' + esc(B.note) + '</p>' : '') +
@@ -2629,6 +2635,7 @@ function renderBarcode(){
       field('bpServ', 'O porție', 'serving', d.unit, 'half', 'decimal') +
       field('bpPack', 'Tot pachetul', 'pack', d.unit, 'half', 'decimal') +
     '</div>' +
+    (shareable(B) ? '<label class="cbox bp-share"><input type="checkbox" id="bpShare"' + (shareDefault(B) ? ' checked' : '') + '><span><b>' + (B.src === 'pending' ? 'Confirmă-l în baza comună Porția' : 'Trimite-l în baza comună Porția') + '</b><small>Doar codul, numele și valorile de pe etichetă, ca alții să-l găsească direct. Nimic despre tine.</small></span></label>' : '') +
     '<p class="ferr" id="bpErr"></p>' +
     '<div class="row"><button class="btn ghost" data-action="bc-cancel">Renunță</button><button class="btn primary wide" data-action="bc-save">Salvează produsul</button></div></div>';
 }
@@ -2683,9 +2690,16 @@ function saveProduct(){
   if (i >= 0) S.library.products[i] = p; else S.library.products.unshift(p);
   S.library.products = S.library.products.slice(0, PROD_MAX);
   libChanged();
+  const share = shareable(B) && !!($('#bpShare') && $('#bpShare').checked);
+  if (shareable(B) && S.profile && !!S.profile.share !== share){ S.profile = Object.assign(clone(S.profile), { share }); saveProfile(); }
   S.bc = { state: 'found', code: p.code, qty: String(p.serving || 100) };
   renderBarcode();
-  toast('Produs salvat: ' + p.name);
+  const msg = 'Produs salvat: ' + p.name;
+  toast(msg, null, null, share ? { sub: 'Se trimite în baza comună…' } : null);
+  if (share) shareProduct(p).then(r => {
+    if ($('#toast').hidden || $('#toastMsg').textContent !== msg) return;
+    toast(msg, null, null, { sub: !r ? 'Nu am putut trimite acum. Reîncerc mai târziu.' : r.rejected ? 'Serverul nu l-a primit. Verifică numele și valorile.' : r.status === 'verified' ? 'Confirmat: acum îl găsesc direct toți' : 'Trimis. După încă o confirmare îl găsesc toți.' });
+  });
 }
 function addBarcodeEntry(){
   const v = bcCalc(); if (!v){ toast('Scrie cât ai mâncat.'); return; }
@@ -2721,29 +2735,100 @@ function offProduct(p){
     protein: inVal(num(n.proteins_100g)), carbs: inVal(num(n.carbohydrates_100g)), fat: inVal(num(n.fat_100g)),
     serving: sv > 0 ? String(Math.round(sv)) : '', pack: pk > 0 ? String(Math.round(pk)) : '' };
 }
-async function offLookup(B){
+async function offFetch(code){
   const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 8000);
-  let found = null;
   try {
-    const r = await fetch('https://world.openfoodfacts.org/api/v2/product/' + B.code + '?fields=' + OFF_FIELDS, { signal: ctl.signal });
-    if (r.ok){ const j = await r.json(); if (j && j.status === 1 && j.product) found = offProduct(j.product); }
+    const r = await fetch('https://world.openfoodfacts.org/api/v2/product/' + code + '?fields=' + OFF_FIELDS, { signal: ctl.signal });
+    if (r.ok){ const j = await r.json(); if (j && j.status === 1 && j.product) return offProduct(j.product); }
   } catch (e) {
     if (!(e && e.name === 'AbortError')) Off.blocked = true; // no network here; a timeout only skips this one
   } finally { clearTimeout(timer); }
+  return null;
+}
+// Both places at once. A confirmed product from the shared database comes first, then Open Food Facts,
+// then a shared product nobody has confirmed yet, which is shown with a warning to check every value.
+async function lookupOnline(B){
+  const [sh, found] = await Promise.all([sharedOn() ? sharedFetch(B.code) : null, offOn() ? offFetch(B.code) : null]);
   if (S.bc !== B) return;
   B.looking = false;
-  if (found){
-    const d = B.draft, typed = ['name', 'kcal', 'protein', 'carbs', 'fat', 'serving', 'pack'].some(k => String(d[k]).trim());
-    if (!typed) d.unit = found.unit;
-    Object.keys(found).forEach(k => { if (k !== 'unit' && !String(d[k]).trim()) d[k] = found[k]; });
+  const d = B.draft, fill = f => { const typed = ['name', 'kcal', 'protein', 'carbs', 'fat', 'serving', 'pack'].some(k => String(d[k]).trim()); if (!typed) d.unit = f.unit; Object.keys(f).forEach(k => { if (k !== 'unit' && !String(d[k]).trim()) d[k] = f[k]; }); };
+  if (sh && sh.status === 'verified'){
+    fill(sharedDraft(sh.p)); B.src = 'shared'; B.noteWarn = false;
+    B.note = 'Găsit în baza comună Porția: ' + (sh.n === 1 ? 'o persoană l-a completat' : sh.n + ' persoane l-au completat') + ' de pe etichetă, cu aceleași valori. Verifică totuși cu eticheta ta, apoi salvează.';
+  } else if (found){
+    fill(found);
     B.off = true;
     const iss = per100Issues({ name: d.name, kcal: num(d.kcal), protein: num(d.protein), carbs: num(d.carbs), fat: num(d.fat) }), bad = iss.hard.concat(iss.soft);
     B.note = !found.kcal ? 'Am găsit numele în Open Food Facts, dar fără valori nutriționale. Completează-le de pe etichetă.'
       : bad.length ? 'Am găsit produsul în Open Food Facts, dar ' + bad.join(' și ') + '. Datele de acolo sunt adăugate de voluntari, așa că verifică-le cu eticheta.'
       : 'Am găsit produsul în Open Food Facts. Datele sunt adăugate de voluntari, așa că verifică-le cu eticheta, apoi salvează.';
     B.noteWarn = bad.length > 0;
+  } else if (sh){
+    fill(sharedDraft(sh.p)); B.src = 'pending'; B.noteWarn = true;
+    B.note = 'Altcineva l-a completat de pe etichetă, dar nimeni nu l-a confirmat încă. Compară fiecare valoare cu eticheta ta înainte să salvezi.';
   }
   renderBarcode();
+}
+
+/* ---------- the shared Porția product database (the server is in supabase/) ---------- */
+// Barcodes people filled in from labels and chose to share; confirmed once people on two different networks agree.
+// Off while PRODUCTS_API is empty, that is until the server exists. A lookup sends only the barcode.
+// Sharing is a choice made when saving a product: the code, the name, the label values and a random install id. Nothing about the person.
+// Values from Open Food Facts are never sent: they stay under their own licence (ODbL).
+const PRODUCTS_API = '';
+const Shared = { blocked: false };
+const sharedOn = () => !!PRODUCTS_API && !Shared.blocked && typeof fetch === 'function' && navigator.onLine !== false;
+const shareable = B => sharedOn() && !!B && !B.off;
+const shareDefault = B => B.share != null ? B.share : !!(S.profile && S.profile.share);
+const sharedDraft = p => ({ name: p.name, unit: p.unit, kcal: inVal(p.per100.kcal), protein: inVal(p.per100.protein), carbs: inVal(p.per100.carbs), fat: inVal(p.per100.fat), serving: p.serving ? String(p.serving) : '', pack: p.pack ? String(p.pack) : '' });
+function installId(){
+  let id = lsGet('portia-install');
+  if (typeof id !== 'string' || !/^[A-Za-z0-9-]{16,64}$/.test(id)){
+    id = crypto.randomUUID ? crypto.randomUUID() : Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
+    lsSet('portia-install', id);
+  }
+  return id;
+}
+async function sharedCall(method, query, body){
+  if (!PRODUCTS_API) return null;
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 7000);
+  try {
+    const r = await fetch(PRODUCTS_API + (query || ''), { method, signal: ctl.signal, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
+    return { ok: r.ok, status: r.status, j: await r.json().catch(() => null) };
+  } catch (e) {
+    if (!(e && e.name === 'AbortError')) Shared.blocked = true;   // no network here; a timeout only skips this one
+    return null;
+  } finally { clearTimeout(timer); }
+}
+async function sharedFetch(code){
+  const r = await sharedCall('GET', '?code=' + encodeURIComponent(code)), j = r && r.ok && r.j;
+  if (!j || (j.status !== 'verified' && j.status !== 'pending') || !j.product) return null;
+  // the app's own checks again: the server's word is not enough
+  const p = normProduct(Object.assign({}, j.product, { code }));
+  if (!p || per100Issues({ name: p.name, kcal: p.per100.kcal, protein: p.per100.protein, carbs: p.per100.carbs, fat: p.per100.fat }).hard.length) return null;
+  return { status: j.status, n: Math.max(1, Math.round(Number(j.confirmations) || 1)), p };
+}
+const SHARE_Q = 'portia-share-q';
+// One product to the server; if the server can't be reached it waits in a small queue for the next start or the next time the phone is online
+async function shareProduct(p, queued){
+  const body = queued || { code: p.code, name: p.name, unit: p.unit, per100: p.per100, serving: p.serving, pack: p.pack, install: installId() };
+  const r = await sharedCall('POST', '', body);
+  if (r && r.ok && r.j){ lsSet('portia-shared', true); return r.j; }
+  if (r && r.status >= 400 && r.status < 500 && r.status !== 429) return { rejected: true };
+  const q = (lsGet(SHARE_Q) || []).filter(x => x && x.code !== body.code); q.push(body); lsSet(SHARE_Q, q.slice(-30));
+  return null;
+}
+async function flushShares(){
+  const q = lsGet(SHARE_Q); if (!sharedOn() || !Array.isArray(q) || !q.length) return;
+  lsSet(SHARE_Q, []);
+  for (const b of q){ if (!sharedOn()) { const rest = lsGet(SHARE_Q) || []; lsSet(SHARE_Q, rest.concat(b).slice(-30)); continue; } await shareProduct(null, b); }
+}
+async function withdrawShares(){
+  const b = $('[data-action="share-withdraw"]'); if (b){ b.disabled = true; b.textContent = 'Se retrag…'; }
+  const r = await sharedCall('DELETE', '', { install: installId() });
+  if (r && r.ok){ lsSet('portia-shared', false); lsSet(SHARE_Q, []); toast('Am retras produsele trimise de pe acest dispozitiv.'); }
+  else toast('Nu am putut ajunge la server. Încearcă din nou mai târziu.');
+  if (S.screen === 'profil') renderSettings();
 }
 
 /* ---------- product lists: import and export ---------- */
@@ -3948,7 +4033,7 @@ function setupPlan(d, T){
 function saveSetup(){
   const d = S.setup.d, T = computeTargets(d);
   S.profile = { sex: d.sex, age: d.age, height: d.height, weight: d.weight, activity: d.activity, goal: d.goal, custom: false, updatedAt: Date.now(), skin: S.profile ? (S.profile.skin || null) : (lsGet('portia-skin') || null), cycle: S.profile ? (S.profile.cycle || null) : null,
-    adapt: S.profile ? (S.profile.adapt || null) : null, fast: S.profile ? (S.profile.fast || null) : null, plan: setupPlan(d, T), habits: S.profile ? (S.profile.habits || null) : null, consent: (S.profile && S.profile.consent) || normConsent(lsGet('portia-consent')),
+    adapt: S.profile ? (S.profile.adapt || null) : null, fast: S.profile ? (S.profile.fast || null) : null, plan: setupPlan(d, T), habits: S.profile ? (S.profile.habits || null) : null, share: !!(S.profile && S.profile.share), consent: (S.profile && S.profile.consent) || normConsent(lsGet('portia-consent')),
     targets: { kcal: T.kcal, protein: T.protein, carbs: T.carbs, fat: T.fat, water: T.water } };
   saveProfile();
   closeSheet('#setup');
@@ -4526,6 +4611,8 @@ function bindStatic(){
       case 's-back': S.setup.step = nextStep(-1); renderSetup(); break;
       case 's-save': saveSetup(); break;
       case 'toast-why': toastWhy(b); break;
+      case 'share-withdraw': withdrawShares(); break;
+      case 'share-default': if (S.profile){ S.profile = Object.assign(clone(S.profile), { share: b.getAttribute('aria-checked') !== 'true' }); saveProfile(); renderSettings(); } break;
       case 'why': setWhy(S.view, b.dataset.meal, b.dataset.why); break;
       case 'sleep': setSleep(S.view, Number(b.dataset.h)); break;
       case 'habit-why': case 'habit-sleep': setHabit(a === 'habit-why' ? 'why' : 'sleep', b.getAttribute('aria-checked') !== 'true'); break;
@@ -4669,10 +4756,12 @@ function bindStatic(){
     const t = ev.target;
     if (t.id === 'bcInput') onBarcodePhoto(t.files && t.files[0]);
     if (t.id === 'bcLabelInput') readLabel(t.files && t.files[0]);
+    if (t.id === 'bpShare' && S.bc) S.bc.share = t.checked;
     if (t.id === 'impFile'){ readImportFile(t.files && t.files[0]); t.value = ''; }
     if (t.dataset && t.dataset.consent && S.cdraft){ S.cdraft[t.dataset.consent] = t.checked; const b = $('[data-action="consent-ok"]'); if (b) b.disabled = !(S.cdraft.health && S.cdraft.age); }
   });
   $('#toastBtn').addEventListener('click', () => { const fn = toastFn; toastFn = null; $('#toast').hidden = true; if (fn) fn(); });
+  window.addEventListener('online', () => { Shared.blocked = false; flushShares(); });
   $$('.sheet').forEach(s => s.addEventListener('click', ev => { if (ev.target === s && s.id !== 'setup' && CLOSERS[s.id]) CLOSERS[s.id](); }));
   document.addEventListener('visibilitychange', () => { if (!document.hidden) renderDayParts(); });
   const recolorSnow = () => { if (Snow.cvs && !Snow.cvs.hidden){ snowColor(); drawSnow(); } };

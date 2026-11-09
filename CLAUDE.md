@@ -25,6 +25,13 @@
 - Iconița și ecranul de pornire se desenează din logo cu `python3 tools/make-native-assets.py` (în `assets/`).
 - Politica de confidențialitate e `confidentialitate.html`, publicată pe Pages. Când aplicația începe să trimită date noi undeva, pagina se actualizează în același commit.
 
+## Serverul (Supabase): baza comună de produse
+- Codul e în `supabase/`; workflow-ul `.github/workflows/server.yml` îl testează pe Postgres și cu Deno la fiecare schimbare și îl publică doar când există secretele `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, `SUPABASE_DB_PASSWORD`, `PORTIA_PEPPER`.
+- Tabelele au row level security fără politici: cheile publice nu văd nimic. Doar funcția `products` ajunge la ele, prin funcțiile SQL `portia_*`, care se pot apela doar cu rolul `service_role`. Orice tabel nou urmează aceeași regulă.
+- Aplicația nu are nicio cheie Supabase: cheamă funcția (`verify_jwt = false`) la adresa din `PRODUCTS_API`. Cât timp `PRODUCTS_API` e gol, nu contactează serverul.
+- Pe server nu ajung adresa IP, numărul dispozitivului sau ceva din jurnal: doar amprente făcute cu `PORTIA_PEPPER`. Valorile din Open Food Facts nu se trimit niciodată (licența ODbL).
+- Trimiterea unui produs e o alegere la salvare (căsuța „Trimite-l în baza comună”), nebifată la început. Orice date noi trimise la server intră în `confidentialitate.html` în același commit.
+
 ## AI
 - Orice număr venit de la AI trece prin verificările din `js/app.js` (`itemIssues`, `per100Issues`). Ce nu trece e marcat „verifică” și nu se salvează fără confirmarea utilizatorului.
 - Nota și cifrele din raportul săptămânal le calculează aplicația (`weekStats`), nu modelul.

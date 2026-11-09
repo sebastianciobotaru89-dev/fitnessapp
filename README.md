@@ -100,6 +100,25 @@ cod;nume;kcal;proteine;glucide;grasimi;unitate;portie;pachet
 
 Primele trei coloane sunt obligatorii. Separatorul poate fi `;`, virgulă sau tab, iar o listă salvată din Excel ca CSV merge direct. Un cod care există deja se actualizează. Biblioteca ține până la 600 de produse.
 
+## Baza comună de produse (serverul)
+
+Codurile de bare completate de pe etichetă pot fi trimise, la alegerea fiecăruia, într-o bază comună. Un produs devine „confirmat” când oameni de pe cel puțin două rețele diferite au trimis valori care se potrivesc (calorii la ±5%, macronutrienți la ±10%), iar valorile sunt mediana lor. Căutarea unui cod întreabă întâi baza comună și Open Food Facts; un produs confirmat are prioritate, unul neconfirmat apare cu avertisment.
+
+- `supabase/migrations/` – tabelele și funcțiile SQL. Tabelele nu pot fi citite cu cheile publice (row level security fără politici); doar funcția serverului ajunge la ele.
+- `supabase/functions/products/` – API-ul (`GET ?code=`, `POST`, `DELETE`), fără dependențe. Verifică din nou fiecare valoare, limitează cererile și păstrează doar amprente (hash cu cheie secretă) ale dispozitivului și rețelei.
+- `supabase/tests/` și `handler_test.ts` – testele, rulate de workflow-ul „Server – teste și publicare” pe un Postgres real și cu Deno, la fiecare schimbare.
+- Valorile venite din Open Food Facts nu se trimit niciodată în baza comună (licența lor, ODbL, cere ca datele derivate să rămână deschise).
+
+Cum îl pornești, o singură dată:
+
+1. Pe [supabase.com](https://supabase.com) creează un proiect în regiunea **Frankfurt (eu-central-1)**: politica de confidențialitate spune că datele stau în Uniunea Europeană. Notează parola bazei de date.
+2. Creează un token din supabase.com/dashboard/account/tokens.
+3. În GitHub → Settings → Secrets and variables → Actions adaugă `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF` (id-ul proiectului, partea `xxxx` din `xxxx.supabase.co`), `SUPABASE_DB_PASSWORD` și `PORTIA_PEPPER` (un șir aleator de cel puțin 32 de caractere, de exemplu din `openssl rand -hex 32`).
+4. Rulează workflow-ul „Server – teste și publicare” din Actions. Publică baza, secretul și funcția, apoi verifică răspunsul.
+5. În `js/app.js` se completează `PRODUCTS_API` cu `https://xxxx.supabase.co/functions/v1/products`. Adresa nu e secretă; până atunci aplicația nu contactează serverul.
+
+Niciuna dintre aceste chei nu se pune în cod, în chat sau în commit-uri.
+
 ## Securitate
 
 - **Nicio cheie API în acest repository.** Aplicația rulează în browser, deci tot ce e în `index.html`, `css/` și `js/` poate fi citit de oricine. Cheile (de exemplu cea pentru OpenAI) stau doar pe server, în secretele funcției care vorbește cu AI-ul.

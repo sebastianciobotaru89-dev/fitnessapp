@@ -1577,3 +1577,7 @@ button.lib-main:active{background:color-mix(in srgb,var(--ink) 5%,transparent)}
 .wy-row[data-r] .wy-b i{background:var(--rc)}
 .wy-sleep{margin-top:12px}
 .wy-note{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+
+/* Shared product database: the opt-in on the product form, its block in Datele tale */
+.bp-share{margin-top:14px}
+.ds-sub{margin:20px 0 6px;font-size:15.5px}
