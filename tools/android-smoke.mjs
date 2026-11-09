@@ -204,8 +204,14 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   await tap(page, '#logger [data-tab="manual"]');
   await page.ev(`document.querySelector('#logger [data-tab="manual"]').click(); true`);
   await tap(page, '#mName');
-  await sleep(1500);
-  ok('tastatura ascunde bara de taburi', await page.ev(`document.documentElement.classList.contains('kb')`));
+  // the first keyboard on a cold emulator can take a few seconds to come up
+  let kb = false;
+  for (let i = 0; i < 10 && !kb; i++){ await sleep(500); kb = await page.ev(`document.documentElement.classList.contains('kb')`); }
+  if (!kb){
+    let ime = ''; try { ime = sh('adb shell dumpsys input_method').split('\n').filter(l => /mInputShown|mIsInputViewShown|isInputViewShown/.test(l)).join(' ').trim(); } catch {}
+    info('fără tastatură: focus pe ' + await page.ev(`document.activeElement && (document.activeElement.id || document.activeElement.tagName)`) + '; ' + ime.slice(0, 160));
+  }
+  ok('tastatura ascunde bara de taburi', kb);
   shot('6-adauga-tastatura');
   await page.ev(`document.activeElement && document.activeElement.blur(); true`); await sleep(900);
   ok('fără tastatură, bara de taburi revine', !await page.ev(`document.documentElement.classList.contains('kb')`));
