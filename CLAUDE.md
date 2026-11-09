@@ -29,3 +29,5 @@
 - Orice număr venit de la AI trece prin verificările din `js/app.js` (`itemIssues`, `per100Issues`). Ce nu trece e marcat „verifică” și nu se salvează fără confirmarea utilizatorului.
 - Nota și cifrele din raportul săptămânal le calculează aplicația (`weekStats`), nu modelul.
 - Planul de greutate și acul de aliniere din Progres le calculează aplicația (`planRate`, `planState`), nu modelul. Ritmul planului e cel mult 1% din greutate pe săptămână la slăbire și 0,5% la creștere, iar ținta nu coboară sub un indice de masă corporală de 18,5 (`planCheck`).
+- Tiparele din „De ce mănânci” (Progres) le calculează aplicația (`whyStats`), nu modelul: apar după 14 zile cu motive notate, fiecare doar peste un număr minim de mese sau zile și cu numărul lor la vedere. Sunt observații, nu diagnostic.
+- Motivul mesei și somnul sunt date despre sănătate: când se adaugă o categorie nouă de astfel de date, `CONSENT_V` crește și textul acordului o numește.

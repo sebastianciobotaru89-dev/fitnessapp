@@ -32,7 +32,7 @@ function seed(){
     { id: 'b', name: 'Pâine integrală', grams: 40, kcal: 98, protein: 4, carbs: 17, fat: 1.3, meal: 'breakfast', at: at - 4.9e6, src: 'manual' },
     { id: 'c', name: 'Piept de pui la grătar', grams: 200, kcal: 330, protein: 62, carbs: 0, fat: 7, meal: 'lunch', at: at - 1e6, src: 'manual' },
     { id: 'd', name: 'Orez basmati', grams: 150, kcal: 195, protein: 4, carbs: 42, fat: 0.5, meal: 'lunch', at: at - 0.9e6, src: 'manual' }] };
-  const consent = { v: 1, health: at, ai: 0, age: true };
+  const consent = { v: 2, health: at, ai: 0, age: true };
   const profile = { sex: 'm', age: 34, height: 181, weight: 84.5, activity: 'mod', goal: 'recomp', targets: { kcal: 2520, protein: 186, carbs: 290, fat: 70, water: 3000 }, consent };
   return { data: { profile, days, library: { recipes: [], favorites: [], reports: [], products: [] } }, consent };
 }

@@ -75,6 +75,7 @@
       <div class="meals-today" id="mealsToday" aria-label="Mesele zilei" hidden></div>
       </div>
       <div class="col col-b">
+      <section class="panel" id="sleep" aria-labelledby="slTitle" hidden></section>
       <section class="panel" id="water" aria-label="Apă"></section>
       <section class="panel" id="fast" aria-labelledby="fastTitle" hidden></section>
       </div>
@@ -161,6 +162,7 @@
     <section class="screen" id="scr-progres" data-screen="progres" hidden aria-labelledby="hProg">
       <div class="scr-head"><div><h1 id="hProg">Progres</h1><p>Planul, ultimele 7 zile și greutatea</p></div></div>
       <section class="panel" id="plan" aria-labelledby="plTitle" hidden></section>
+      <section class="panel" id="why" aria-labelledby="whyTitle" hidden></section>
       <section class="panel" id="history" aria-label="Ultimele 7 zile"></section>
       <section class="panel" id="weight" aria-labelledby="wTitle">
         <div class="panel-head"><h2 id="wTitle">Greutate</h2><span class="meta tleg" id="wLeg" hidden>planul</span></div>
@@ -223,7 +225,7 @@
   <div class="sheet-card" id="plusCard"></div>
 </div>
 
-<div class="toast" id="toast" hidden role="status" aria-live="polite"><span class="t-ic" id="toastIc" hidden></span><span class="t-txt"><span id="toastMsg"></span><small id="toastSub" hidden></small></span><button id="toastBtn" hidden></button></div>
+<div class="toast" id="toast" hidden role="status" aria-live="polite"><span class="t-ic" id="toastIc" hidden></span><span class="t-txt"><span id="toastMsg"></span><small id="toastSub" hidden></small></span><button id="toastBtn" hidden></button><div class="t-why" id="toastWhy" hidden></div></div>
 
 <script src="js/app.js"></script>
 <script>

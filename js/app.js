@@ -17,6 +17,16 @@ const GOALS = [
   { id:'bulk',   adj:0.10,  prot:2.0, t:'Masă musculară', d:'Câștig masă cu un surplus mic (+10%)' }
 ];
 const FAST_PLANS = [{ id: '14:10', h: 14 }, { id: '16:8', h: 16 }, { id: '18:6', h: 18 }, { id: '20:4', h: 20 }];
+// Why a meal was eaten, one tap per meal; and how long you slept, kept on the morning after
+const WHY = [
+  { id: 'hunger', t: 'Foame',       of: 'din foame',          pl: 'mesele din foame' },
+  { id: 'stress', t: 'Stres',       of: 'de stres',           pl: 'mesele de stres' },
+  { id: 'bored',  t: 'Plictiseală', of: 'de plictiseală',     pl: 'mesele de plictiseală' },
+  { id: 'social', t: 'Social',      of: 'în compania altora', pl: 'mesele în compania altora' }
+];
+const SLEEP_OPTS = [{ h: 5, t: '≤5', a: '5 ore sau mai puțin' }, { h: 6, t: '6', a: '6 ore' }, { h: 7, t: '7', a: '7 ore' }, { h: 8, t: '8', a: '8 ore' }, { h: 9, t: '9+', a: '9 ore sau mai mult' }];
+const SHORT_SLEEP = 6;   // 6 hours or less is a short night: adults are usually advised at least 7
+function normHabits(h){ return { why: !(h && h.why === false), sleep: !(h && h.sleep === false) }; }
 function normConsent(c){ return (c && typeof c === 'object' && Number(c.v)) ? { v: Number(c.v), health: Number(c.health) || 0, ai: Number(c.ai) || 0, age: !!c.age } : null; }
 function normAdapt(a){ return (a && typeof a === 'object') ? { auto: !!a.auto, last: Number(a.last) || 0 } : null; }
 function normFast(f){
@@ -511,9 +521,11 @@ function normDay(d, k){
   const out = { date: k, entries, water };
   if (w >= 20 && w <= 400) out.weight = r1(w);
   if (d && (d.type === 'train' || d.type === 'rest')) out.type = d.type;
+  if (d && d.why && typeof d.why === 'object'){ const why = {}; for (const m of MEALS) if (WHY.some(x => x.id === d.why[m.id])) why[m.id] = d.why[m.id]; if (Object.keys(why).length) out.why = why; }
+  const sl = num(d && d.sleep); if (sl >= 3 && sl <= 14) out.sleep = r1(sl);
   return out;
 }
-const dayEmpty = d => !d.entries.length && !d.water && !d.weight && !d.type;
+const dayEmpty = d => !d.entries.length && !d.water && !d.weight && !d.type && !d.sleep && !d.why;
 function normDays(obj){
   const out = {};
   if (obj && typeof obj === 'object') for (const k of Object.keys(obj)) if (/^\d{4}-\d{2}-\d{2}$/.test(k)) {
@@ -537,6 +549,7 @@ function normProfile(p){
     consent: normConsent(p.consent),
     fast: normFast(p.fast),
     plan: normPlan(p.plan),
+    habits: normHabits(p.habits),
     targets: { kcal: Math.round(kcal), protein: Math.round(num(t.protein) || 0), carbs: Math.round(num(t.carbs) || 0), fat: Math.round(num(t.fat) || 0), water: Math.round(num(t.water) || 2500) }
   };
 }
@@ -913,7 +926,7 @@ function afterLoad(){
 }
 
 /* ---------- consent: health data, AI, age ---------- */
-const CONSENT_V = 1;
+const CONSENT_V = 2;   // 2: sleep and why you eat joined the journal
 const consentValid = c => !!(c && c.v >= CONSENT_V && c.health && c.age);
 function consentOf(){ const p = S.profile && S.profile.consent, l = normConsent(lsGet('portia-consent')); return consentValid(p) ? p : consentValid(l) ? l : null; }
 function hasConsent(){ return !!consentOf(); }
@@ -931,19 +944,23 @@ function saveConsent(c){
   syncConsent(); renderAll();
 }
 function openConsent(){
-  S.cdraft = { health: false, ai: false, age: false };
+  // after an update the AI choice already made stays as it was; everything else is asked again
+  const old = (S.profile && S.profile.consent) || normConsent(lsGet('portia-consent'));
+  S.cdraft = { health: false, ai: !!(old && old.health && old.v < CONSENT_V && old.ai), age: false };
   renderConsent(); showSheet('#consentSheet');
   const h = $('#cTitle'); if (h) h.focus({ preventScroll: true });
 }
 function renderConsent(){
   const d = S.cdraft || {};
+  const old = (S.profile && S.profile.consent) || normConsent(lsGet('portia-consent')), upd = !!(old && old.health && old.v < CONSENT_V);
   const box = (k, req, title, sub) => '<label class="cbox"><input type="checkbox" data-consent="' + k + '"' + (d[k] ? ' checked' : '') + '><span><b>' + title + (req ? '' : ' <em>opțional</em>') + '</b><small>' + sub + '</small></span></label>';
   $('#consentCard').innerHTML =
     '<div class="sbody"><div class="welcome"><span class="wl-logo" aria-hidden="true">' + logoSvg(S.theme, 64) + '</span>' +
-      '<h2 id="cTitle" tabindex="-1">Bun venit în Porția</h2><p>Îți calculez ținta de calorii și macronutrienți, iar mesele le notezi în câteva secunde.</p></div>' +
+      (upd ? '<h2 id="cTitle" tabindex="-1">Am actualizat acordul</h2><p>Porția notează acum și somnul și motivul pentru care mănânci, ca să-ți arate tiparele tale. Bifează din nou ca să continui.</p></div>'
+        : '<h2 id="cTitle" tabindex="-1">Bun venit în Porția</h2><p>Îți calculez ținta de calorii și macronutrienți, iar mesele le notezi în câteva secunde.</p></div>') +
     '<h3 class="cs-t">Înainte să începi</h3>' +
-    '<p>Porția păstrează date despre sănătatea ta, așa că îți cerem acordul explicit. Nimic nu e bifat dinainte.</p>' +
-    box('health', true, 'Datele despre alimentație și greutate', 'Sunt de acord ca Porția să-mi păstreze mesele, apa, greutatea, țintele și fastingul, ca să-mi calculeze progresul. Le văd doar eu și le pot șterge oricând.') +
+    '<p>' + (upd ? 'Porția păstrează date despre sănătatea ta, așa că îți cerem din nou acordul explicit. Alegerea pentru AI rămâne cum ai făcut-o.' : 'Porția păstrează date despre sănătatea ta, așa că îți cerem acordul explicit. Nimic nu e bifat dinainte.') + '</p>' +
+    box('health', true, 'Datele despre alimentație, greutate și somn', 'Sunt de acord ca Porția să-mi păstreze mesele, apa, greutatea, țintele, fastingul, somnul și motivul pentru care mănânc, ca să-mi calculeze progresul și tiparele. Le văd doar eu și le pot șterge oricând.') +
     (S.noSample ? '' : box('ai', false, 'Estimări cu AI', 'Sunt de acord ca textul și pozele meselor, plus totalurile zilelor pentru idei și raport, să fie trimise la Claude, un AI al companiei Anthropic, ca să estimeze caloriile. Fără numele sau e-mailul meu. Fără acest acord notez valorile manual.')) +
     box('age', true, 'Am cel puțin 16 ani', 'Porția nu e pentru copii.') +
     '<div class="medwarn"><b>Porția nu e un dispozitiv medical.</b> Nu înlocuiește sfatul unui medic sau nutriționist, iar estimările sunt aproximative. Dacă ai o afecțiune, ești însărcinată sau ai avut tulburări de alimentație, vorbește întâi cu medicul.</div>' +
@@ -1239,15 +1256,37 @@ function commitDraft(){
   else if (d.src === 'photo') clearPhoto();
   else if (d.src === 'idea'){ S.ideas = null; renderIdeas(); }
   const kc = entries.reduce((a, e) => a + e.kcal, 0);
-  addedToast(k, entries.length === 1 ? atMeal(entries[0].name, meal) : atMeal(entries.length + ' alimente', meal), kc, () => mutateDay(k, day => { day.entries = day.entries.filter(e => !ids.has(e.id)); }));
+  addedToast(k, entries.length === 1 ? atMeal(entries[0].name, meal) : atMeal(entries.length + ' alimente', meal), kc, () => mutateDay(k, day => { day.entries = day.entries.filter(e => !ids.has(e.id)); }), meal);
 }
 // After food goes in: what went where, and what's left of the day, with the day's ring filling up
 const atMeal = (what, meal) => what + ' la ' + mealName(meal).toLowerCase();
-function addedToast(k, title, kcal, undo){
+function addedToast(k, title, kcal, undo, meal){
   const T = S.profile ? targetsFor(k) : null, after = dayTotals(S.days[k]).kcal, before = Math.max(0, after - kcal);
   let sub = fmt(kcal) + ' kcal';
   if (T && T.kcal){ const rem = T.kcal - after; sub += rem >= 0 ? (k === todayKey() ? ', îți mai rămân ' : ', mai rămân ') + fmt(rem) : ', cu ' + fmt(-rem) + ' peste țintă'; }
-  toast(title, 'Anulează', undo, { sub, ring: T && T.kcal ? [before / T.kcal, after / T.kcal] : null });
+  // the first time a meal gets food, the toast also asks why, in one tap
+  const ask = meal && S.profile && habitsOf().why && !(getDay(k).why || {})[meal] ? { k, meal } : null;
+  toast(title, 'Anulează', undo, { sub, ring: T && T.kcal ? [before / T.kcal, after / T.kcal] : null, why: ask });
+}
+const habitsOf = () => normHabits(S.profile && S.profile.habits);
+const whyOf = id => WHY.find(x => x.id === id);
+// Tapping the reason already chosen clears it
+function setWhy(k, meal, id){
+  const cur = (getDay(k).why || {})[meal], next = id === cur ? null : id;
+  mutateDay(k, d => { const w = Object.assign({}, d.why || {}); if (next) w[meal] = next; else delete w[meal]; if (Object.keys(w).length) d.why = w; else delete d.why; });
+  buzz('tick'); return next;
+}
+function setSleep(k, h){
+  const next = getDay(k).sleep === h ? null : h;
+  mutateDay(k, d => { if (next) d.sleep = next; else delete d.sleep; });
+  buzz('tick');
+}
+function toastWhy(b){
+  const k = b.dataset.k, meal = b.dataset.meal, id = setWhy(k, meal, b.dataset.why);
+  const el = $('#toast'), wy = $('#toastWhy'); if (wy){ wy.hidden = true; wy.innerHTML = ''; } el.classList.remove('asks');
+  $('#toastMsg').textContent = id ? 'Notat: ' + whyOf(id).t.toLowerCase() + ', la ' + mealName(meal).toLowerCase() : 'Motivul a fost șters';
+  const sub = $('#toastSub'); if (sub){ sub.textContent = 'Tiparele tale apar în Progres'; sub.hidden = false; }
+  clearTimeout(toastT); toastT = setTimeout(() => { el.hidden = true; toastFn = null; }, 2600);
 }
 function addManual(){
   const name = $('#mName').value.trim();
@@ -1265,7 +1304,7 @@ function addManual(){
   mutateDay(k, day => day.entries.push(e));
   ['#mName','#mGrams','#mKcal','#mP','#mC','#mF'].forEach(s => $(s).value = '');
   renderManualFit();
-  addedToast(k, atMeal(e.name, e.meal), e.kcal, () => mutateDay(k, day => { day.entries = day.entries.filter(x => x.id !== e.id); }));
+  addedToast(k, atMeal(e.name, e.meal), e.kcal, () => mutateDay(k, day => { day.entries = day.entries.filter(x => x.id !== e.id); }), e.meal);
 }
 function recentFoods(){
   const all = [];
@@ -1280,7 +1319,7 @@ function addRecent(i){
   const k = S.view;
   const e = Object.assign(clone(src), { id: newId(), meal: S.meal, at: Date.now(), src: 'repeat' });
   mutateDay(k, day => day.entries.push(e));
-  addedToast(k, atMeal(e.name, e.meal), e.kcal, () => mutateDay(k, day => { day.entries = day.entries.filter(x => x.id !== e.id); }));
+  addedToast(k, atMeal(e.name, e.meal), e.kcal, () => mutateDay(k, day => { day.entries = day.entries.filter(x => x.id !== e.id); }), e.meal);
 }
 function repeatMeal(){
   const k = S.view, meal = S.meal;
@@ -1290,7 +1329,7 @@ function repeatMeal(){
   const copies = src.map((e, i) => Object.assign(clone(e), { id: newId(), at: now + i, src: 'repeat' }));
   const ids = new Set(copies.map(e => e.id));
   mutateDay(k, day => day.entries.push(...copies));
-  addedToast(k, mealName(meal) + ' ca ieri', copies.reduce((a, e) => a + e.kcal, 0), () => mutateDay(k, day => { day.entries = day.entries.filter(e => !ids.has(e.id)); }));
+  addedToast(k, mealName(meal) + ' ca ieri', copies.reduce((a, e) => a + e.kcal, 0), () => mutateDay(k, day => { day.entries = day.entries.filter(e => !ids.has(e.id)); }), meal);
 }
 function delEntry(id){
   const k = S.view; const day = getDay(k);
@@ -1654,6 +1693,142 @@ function savePlan(){
   if (S.screen !== 'progres') go('progres'); else setTimeout(alignSweep, 60);
 }
 
+/* ---------- why you eat: personal patterns from the reason taps, sleep and the journal ---------- */
+// Only what the journal shows, only above minimum counts, always with the counts in view. Computed by the app, never by the AI.
+const WHY_READY = 14, WHY_WIN = 42, WHY_MIN = 4;
+// Romanian counts take „de” from 20 on: 19 zile, 20 de zile
+const cnt = (n, w) => n + (n % 100 >= 20 || (n >= 100 && n % 100 === 0) ? ' de ' : ' ') + w;
+const SLOT_AT = { breakfast: 'la micul dejun', lunch: 'la prânz', snack: 'la gustare', dinner: 'la cină' };
+const WHY_ICON = {
+  hunger: '<path d="M7 3.5v6.5a2 2 0 0 0 4 0V3.5M9 10v10.5M16.5 3.5c-1.8 1-2.6 3-2.6 6v3h2.6v8"/>',
+  stress: '<path d="M13.5 3 6.5 13H12l-1 8 7-10.5h-5.6z"/>',
+  bored: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  social: '<circle cx="9" cy="8.5" r="3"/><path d="M3.5 19.5c.7-3 2.8-4.7 5.5-4.7s4.8 1.7 5.5 4.7"/><circle cx="16.8" cy="9.3" r="2.4"/><path d="M15.8 14.6c2.3 0 4.1 1.4 4.7 4"/>',
+  sleep: '<path d="M19 14.6A7.6 7.6 0 0 1 9.4 5a7.6 7.6 0 1 0 9.6 9.6z"/>'
+};
+const whyIcon = k => '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + WHY_ICON[k] + '</svg>';
+function setHabit(key, on){
+  if (!S.profile) return;
+  S.profile = Object.assign(clone(S.profile), { habits: Object.assign({}, habitsOf(), { [key]: on }) });
+  saveProfile(); renderAll(); if (S.screen === 'profil') renderSettings();
+}
+function whyStats(){
+  const today = todayKey(), meals = [], days = [];
+  let tagged = 0, slept = 0;
+  for (let i = WHY_WIN - 1; i >= 0; i--){
+    const k = addDays(today, -i), d = S.days[k]; if (!d) continue;
+    const why = d.why || {}; let any = false;
+    for (const m of MEALS){
+      const list = d.entries.filter(e => e.meal === m.id); if (!list.length) continue;
+      const w = why[m.id] || null; if (w) any = true;
+      meals.push({ k, meal: m.id, kcal: list.reduce((a, e) => a + e.kcal, 0), why: w, sleep: d.sleep || null });
+    }
+    if (any) tagged++;
+    if (d.sleep) slept++;
+    if (i === 0) continue;   // today is not over yet
+    const t = dayTotals(d), T = targetsFor(k);
+    if (!T || !t.n || t.kcal < Math.max(800, T.kcal * 0.5)) continue;   // only days logged in full
+    days.push({ k, over: t.kcal > T.kcal * 1.1, dinner: d.entries.filter(e => e.meal === 'dinner').reduce((a, e) => a + e.kcal, 0), sleep: d.sleep || null, whys: Object.values(why) });
+  }
+  const tm = meals.filter(x => x.why), count = {};
+  WHY.forEach(r => { count[r.id] = tm.filter(x => x.why === r.id).length; });
+  const out = { tagged, slept, n: tm.length, count, ready: tagged >= WHY_READY, list: [] };
+  if (!out.ready) return out;
+  const avg = a => a.reduce((s, v) => s + v, 0) / a.length, pc = v => Math.round(v * 100) + '%';
+  const slot = {}; MEALS.forEach(m => { const v = meals.filter(x => x.meal === m.id).map(x => x.kcal); slot[m.id] = v.length ? avg(v) : 0; });
+  // 1. portions: each meal against the usual size of that meal, so a snack is never compared with a lunch
+  // where there are at least 3 hunger meals at the same meal, the comparison is with those directly
+  const sized = r => tm.filter(x => x.why === r && slot[x.meal] > 0);
+  const H = sized('hunger'), hasH = H.length >= WHY_MIN, base = hasH ? avg(H.map(x => x.kcal / slot[x.meal])) : 1;
+  const hSlot = {}; MEALS.forEach(m => { const v = H.filter(x => x.meal === m.id).map(x => x.kcal); if (v.length >= 3) hSlot[m.id] = avg(v); });
+  const times = v => v >= 1.95 ? 'de ' + fmt1(Math.round(v * 2) / 2) + ' ori mai mare' : 'cu ' + Math.round((v - 1) * 100) + '% mai mare';
+  for (const r of WHY){
+    if (r.id === 'hunger') continue;
+    const R = sized(r.id); if (R.length < WHY_MIN) continue;
+    const direct = R.every(x => hSlot[x.meal]), have = avg(R.map(x => x.kcal));
+    const would = direct ? avg(R.map(x => hSlot[x.meal])) : avg(R.map(x => slot[x.meal])) * base;
+    const ratio = have / would; if (!(ratio >= 1.2)) continue;
+    out.list.push({ score: ratio - 1, icon: r.id, n: cnt(R.length, 'mese') + ' ' + r.of, sig: 'm' + R.map(x => x.k + x.meal).join(),
+      text: 'Când mănânci <b>' + r.of + '</b>, porția e <b>' + times(ratio) + '</b> decât ' + (hasH ? 'când ți-e foame' : 'de obicei') + ', la aceeași masă.',
+      bars: [{ t: cap(r.pl), v: have, s: fmt(have) + ' kcal', c: r.id }, { t: hasH ? 'Din foame, la aceleași mese' : 'De obicei, la aceleași mese', v: would, s: (direct ? '' : 'cam ') + fmt(would) + ' kcal' }] });
+  }
+  // 2. days with that kind of meal end over the target more often
+  for (const r of WHY){
+    if (r.id === 'hunger') continue;
+    const A = days.filter(d => d.whys.includes(r.id)), B = days.filter(d => !d.whys.includes(r.id));
+    if (A.length < WHY_MIN || B.length < WHY_MIN) continue;
+    const a = A.filter(d => d.over).length, b = B.filter(d => d.over).length, pa = a / A.length, pb = b / B.length;
+    if (pa - pb < 0.25) continue;
+    out.list.push({ score: pa - pb, icon: r.id, n: cnt(A.length + B.length, 'zile notate complet'), pct: true, sig: 'd' + A.map(d => d.k).join(),
+      text: 'În zilele cu o masă <b>' + r.of + '</b> ai trecut de țintă în <b>' + a + ' din ' + A.length + '</b>. În celelalte zile, în ' + b + ' din ' + B.length + '.',
+      bars: [{ t: 'Zile cu o masă ' + r.of, v: pa, s: pc(pa), c: r.id }, { t: 'Celelalte zile', v: pb, s: pc(pb) }] });
+  }
+  // 3. short nights: dinner, and the day against the target
+  const S6 = days.filter(d => d.sleep && d.sleep <= SHORT_SLEEP), S7 = days.filter(d => d.sleep && d.sleep > SHORT_SLEEP);
+  const nights = cnt(S6.length, 'zile') + ' după nopți scurte și ' + S7.length + ' după nopți mai lungi';
+  // dinner only where a dinner was logged: a dinner left out of the journal is not a dinner of 0 kcal
+  const C6 = S6.filter(d => d.dinner > 0), C7 = S7.filter(d => d.dinner > 0);
+  if (C6.length >= WHY_MIN && C7.length >= WHY_MIN){
+    const d6 = avg(C6.map(d => d.dinner)), d7 = avg(C7.map(d => d.dinner));
+    if (d6 >= d7 * 1.15 && d6 - d7 >= 100) out.list.push({ score: d6 / d7 - 1, icon: 'sleep', n: cnt(C6.length, 'cine') + ' după nopți scurte și ' + C7.length + ' după nopți mai lungi', sig: 'c' + C6.map(d => d.k).join(),
+      text: 'După nopți de <b>6 ore sau mai puțin</b>, cina are în medie <b>' + fmt(d6) + ' kcal</b>, față de ' + fmt(d7) + ' după nopți mai lungi.',
+      bars: [{ t: 'Cina după nopți scurte', v: d6, s: fmt(d6) + ' kcal', c: 'sleep' }, { t: 'Cina după nopți de 7 ore sau mai mult', v: d7, s: fmt(d7) + ' kcal' }] });
+  }
+  if (S6.length >= WHY_MIN && S7.length >= WHY_MIN){
+    const o6 = S6.filter(d => d.over).length, o7 = S7.filter(d => d.over).length, p6 = o6 / S6.length, p7 = o7 / S7.length;
+    if (p6 - p7 >= 0.25) out.list.push({ score: p6 - p7, icon: 'sleep', n: nights, pct: true, sig: 'd' + S6.map(d => d.k).join(),
+      text: 'După nopți scurte treci de țintă în <b>' + o6 + ' din ' + S6.length + '</b> zile, față de ' + o7 + ' din ' + S7.length + ' după nopți mai lungi.',
+      bars: [{ t: 'După nopți scurte', v: p6, s: pc(p6), c: 'sleep' }, { t: 'După nopți mai lungi', v: p7, s: pc(p7) }] });
+  }
+  // 4. short nights and eating for reasons other than hunger
+  const M6 = tm.filter(x => x.sleep && x.sleep <= SHORT_SLEEP), M7 = tm.filter(x => x.sleep && x.sleep > SHORT_SLEEP);
+  if (M6.length >= 6 && M7.length >= 6){
+    const q6 = M6.filter(x => x.why !== 'hunger').length / M6.length, q7 = M7.filter(x => x.why !== 'hunger').length / M7.length;
+    if (q6 - q7 >= 0.2) out.list.push({ score: q6 - q7, icon: 'sleep', n: cnt(M6.length + M7.length, 'mese'), pct: true, sig: 'q',
+      text: 'După nopți scurte, <b>' + pc(q6) + ' din mese</b> nu sunt din foame, față de ' + pc(q7) + ' după nopți mai lungi.',
+      bars: [{ t: 'După nopți scurte', v: q6, s: pc(q6), c: 'sleep' }, { t: 'După nopți mai lungi', v: q7, s: pc(q7) }] });
+  }
+  // 5. when a reason shows up in the day
+  for (const r of WHY){
+    if (r.id === 'hunger') continue;
+    const R = tm.filter(x => x.why === r.id); if (R.length < 5) continue;
+    const top = MEALS.map(m => ({ m, n: R.filter(x => x.meal === m.id).length })).sort((a, b) => b.n - a.n)[0];
+    if (top.n / R.length < 0.6) continue;
+    out.list.push({ score: (top.n / R.length - 0.5) * 0.8, icon: r.id, n: cnt(R.length, 'mese') + ' ' + r.of, sig: 'w' + r.id,
+      text: cap(r.pl) + ' cad mai ales <b>' + SLOT_AT[top.m.id] + '</b>: ' + top.n + ' din ' + R.length + '.' });
+  }
+  // strongest first; two findings drawn from exactly the same days say the same thing, so only the stronger stays
+  out.list.sort((a, b) => b.score - a.score);
+  const seen = new Set(); out.list = out.list.filter(x => !seen.has(x.sig) && seen.add(x.sig));
+  return out;
+}
+function renderWhy(){
+  const el = $('#why'); if (!el) return;
+  const on = !!S.profile && habitsOf().why; el.hidden = !on; if (!on){ el.innerHTML = ''; return; }
+  const W = whyStats();
+  const head = '<div class="panel-head"><h2 id="whyTitle">De ce mănânci</h2><span class="meta">ultimele 6 săptămâni</span></div>';
+  // how the tagged meals split between the four reasons
+  const dist = W.n ? '<div class="wy-dist"><div class="wy-stack" role="img" aria-label="' + esc(W.n + ' mese cu motiv: ' + WHY.map(r => r.t.toLowerCase() + ' ' + Math.round(W.count[r.id] / W.n * 100) + '%').join(', ')) + '">' +
+      WHY.map(r => W.count[r.id] ? '<i data-r="' + r.id + '" style="flex:' + W.count[r.id] + '"></i>' : '').join('') + '</div>' +
+      '<ul class="wy-leg" aria-hidden="true">' + WHY.map(r => '<li data-r="' + r.id + '"><i></i>' + r.t + ' <b>' + Math.round(W.count[r.id] / W.n * 100) + '%</b></li>').join('') + '</ul>' +
+      '<p class="hint">' + (W.n === 1 ? 'O masă' : cnt(W.n, 'mese')) + ' cu motiv notat.</p></div>' : '';
+  const sleepHint = W.slept < 7 ? '<p class="hint wy-sleep">Notează și somnul dimineața, pe Azi: așa văd dacă nopțile scurte schimbă ce mănânci.</p>' : '';
+  if (!W.ready){
+    el.innerHTML = head + '<p class="wy-lead">După fiecare masă alegi dintr-o atingere de ce ai mâncat: foame, stres, plictiseală sau social. După ' + WHY_READY + ' zile îți arăt aici tiparele tale.</p>' +
+      '<div class="wy-prog"><div class="pl-bar" role="img" aria-label="' + W.tagged + ' din ' + WHY_READY + ' zile"><i class="pl-fill" style="width:' + (Math.min(1, W.tagged / WHY_READY) * 100).toFixed(1) + '%"></i></div>' +
+      '<p><b>' + W.tagged + ' din ' + WHY_READY + ' zile</b> cu motive notate.</p></div>' + dist + sleepHint;
+    return;
+  }
+  const bars = x => x.bars ? '<div class="wy-bars">' + x.bars.map(b => {
+    const max = x.pct ? 1 : Math.max(...x.bars.map(y => y.v)) || 1;
+    return '<div class="wy-row"' + (b.c ? ' data-r="' + b.c + '"' : '') + '><span class="wy-l">' + esc(b.t) + '</span><b>' + b.s + '</b><span class="wy-b"><i style="width:' + Math.max(2, b.v / max * 100).toFixed(1) + '%"></i></span></div>';
+  }).join('') + '</div>' : '';
+  const cards = W.list.slice(0, 4).map(x => '<article class="wy-card" data-r="' + x.icon + '"><span class="wy-ic">' + whyIcon(x.icon) + '</span><div class="wy-body"><p>' + x.text + '</p>' + bars(x) + '<small>Din ' + x.n + '.</small></div></article>').join('');
+  el.innerHTML = head + dist + (cards ? '<h3 class="wy-h">Tiparele tale</h3><div class="wy-cards">' + cards + '</div>'
+      : '<p class="wy-lead">Încă nu văd un tipar clar: mănânci cam la fel, indiferent de motiv' + (W.slept >= 7 ? ' și de somn' : '') + '. Verific din nou pe măsură ce se adună zilele.</p>') +
+    sleepHint + '<p class="hint wy-note">Sunt observații din jurnalul tău, nu un diagnostic: arată ce apare împreună, nu neapărat de ce. Le calculează aplicația, nu AI-ul.</p>';
+}
+
 /* ---------- intermittent fasting ---------- */
 function fastOf(){ return (S.profile && S.profile.fast) || { plan: '16:8', start: null, log: [], hide: false }; }
 function fastHours(f){ return (FAST_PLANS.find(x => x.id === f.plan) || FAST_PLANS[1]).h; }
@@ -2006,7 +2181,7 @@ function addFavorite(id){
   const entries = f.items.map((it, i) => Object.assign(clone(it), { id: newId(), meal, at: now + i, src: 'fav' }));
   const ids = new Set(entries.map(e => e.id));
   mutateDay(k, d => d.entries.push(...entries));
-  addedToast(k, atMeal(f.name, meal), sumItems(f.items).kcal, () => mutateDay(k, d => { d.entries = d.entries.filter(e => !ids.has(e.id)); }));
+  addedToast(k, atMeal(f.name, meal), sumItems(f.items).kcal, () => mutateDay(k, d => { d.entries = d.entries.filter(e => !ids.has(e.id)); }), meal);
 }
 function openFavSave(meal){
   const items = getDay(S.view).entries.filter(e => e.meal === meal).sort((a, b) => a.at - b.at).map(normItem).filter(Boolean);
@@ -2186,7 +2361,7 @@ function addRecipeLog(){
   const e = normEntry({ id: newId(), name: v.name, grams: v.grams, kcal: v.kcal, protein: v.protein, carbs: v.carbs, fat: v.fat, meal, at: Date.now(), src: 'recipe' });
   closeMini(); closeSheet('#libSheet');
   mutateDay(k, d => d.entries.push(e));
-  addedToast(k, atMeal(v.r.name, meal), e.kcal, () => mutateDay(k, d => { d.entries = d.entries.filter(x => x.id !== e.id); }));
+  addedToast(k, atMeal(v.r.name, meal), e.kcal, () => mutateDay(k, d => { d.entries = d.entries.filter(x => x.id !== e.id); }), meal);
 }
 
 /* weekly report */
@@ -2518,7 +2693,7 @@ function addBarcodeEntry(){
   const e = normEntry({ id: newId(), name: v.p.name + ' · ' + fmt(v.q) + ' ' + v.p.unit, grams: v.q, kcal: v.kcal, protein: v.protein, carbs: v.carbs, fat: v.fat, meal, at: Date.now(), src: 'barcode' });
   mutateDay(k, d => d.entries.push(e));
   S.bc = null; renderBarcode(); $('#bcCode').value = '';
-  addedToast(k, atMeal(v.p.name, meal), e.kcal, () => mutateDay(k, d => { d.entries = d.entries.filter(x => x.id !== e.id); }));
+  addedToast(k, atMeal(v.p.name, meal), e.kcal, () => mutateDay(k, d => { d.entries = d.entries.filter(x => x.id !== e.id); }), meal);
 }
 function delProduct(code){
   const i = S.library.products.findIndex(p => p.code === code); if (i < 0) return;
@@ -2960,17 +3135,22 @@ function toast(msg, label, fn, opt){
       else requestAnimationFrame(() => requestAnimationFrame(() => { v.style.strokeDashoffset = (C * (1 - z)).toFixed(2); }));
     }
   }
+  const wy = $('#toastWhy'), ask = opt && opt.why;
+  if (wy){
+    wy.hidden = !ask; el.classList.toggle('asks', !!ask);
+    wy.innerHTML = ask ? '<span>De ce ai mâncat?</span>' + WHY.map(r => '<button data-action="toast-why" data-k="' + ask.k + '" data-meal="' + ask.meal + '" data-why="' + r.id + '">' + r.t + '</button>').join('') : '';
+  }
   toastFn = fn || null;
   b.hidden = !fn; b.textContent = label || '';
   if (!el.hidden && !reduceMotion()){ el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
   el.hidden = false;
   clearTimeout(toastT);
-  toastT = setTimeout(() => { el.hidden = true; toastFn = null; }, fn ? 6000 : 3500);
+  toastT = setTimeout(() => { el.hidden = true; toastFn = null; }, ask ? 9000 : fn ? 6000 : 3500);
 }
 
 /* ---------- render ---------- */
-function renderAll(){ renderSync(); renderHeader(); renderHero(); renderMeals(); renderTabs(); renderRecent(); renderPreview(); renderIdeas(); renderDiary(); renderWater(); renderFast(); renderPlan(); renderWeight(); renderHistory(); widgetSync(); }
-function renderDayParts(){ renderHeader(); renderHero(); renderRecent(); renderManualFit(); renderDiary(); renderWater(); renderFast(); renderPlan(); renderWeight(); renderHistory(); renderPreview(); widgetSync(); }
+function renderAll(){ renderSync(); renderHeader(); renderHero(); renderMeals(); renderTabs(); renderRecent(); renderPreview(); renderIdeas(); renderDiary(); renderSleep(); renderWater(); renderFast(); renderPlan(); renderWhy(); renderWeight(); renderHistory(); widgetSync(); }
+function renderDayParts(){ renderHeader(); renderHero(); renderRecent(); renderManualFit(); renderDiary(); renderSleep(); renderWater(); renderFast(); renderPlan(); renderWhy(); renderWeight(); renderHistory(); renderPreview(); widgetSync(); }
 // ---------- home screen and lock screen widgets ----------
 // The store app hands its widgets today's figures, tomorrow's targets and the theme's colours.
 // They stay on the phone: iOS keeps them in the app's own App Group, Android in the app's preferences.
@@ -3412,11 +3592,25 @@ function renderDiary(){
       '<ul class="entries">' + list.map(e =>
         '<li class="entry"><button class="e-main" data-action="edit" data-id="' + esc(e.id) + '" aria-label="Editează ' + esc(e.name) + '"><span class="nm">' + esc(e.name) + (AI_SRC.has(e.src) ? ' <span class="aitag" title="Estimat de AI">AI</span>' : '') + '</span><span class="mx">' + (e.grams ? '<span class="g">' + fmt(e.grams) + ' g</span>' : '') + '<span><i class="dot p"></i>' + fmt1(e.protein) + '</span><span><i class="dot c"></i>' + fmt1(e.carbs) + '</span><span><i class="dot f"></i>' + fmt1(e.fat) + '</span></span></button>' +
         '<span class="kc">' + fmt(e.kcal) + '</span><button class="del" data-action="del" data-id="' + esc(e.id) + '" aria-label="Șterge ' + esc(e.name) + '">' + X_ICON + '</button></li>').join('') + '</ul>' +
+      (habitsOf().why && S.profile ? whyRow(m, (day.why || {})[m.id]) : '') +
       '<button class="mc-add" data-action="add-to" data-meal="' + m.id + '"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Mai adaugă</button></section>';
   }
   if (t.n) html += '<p class="hint diary-hint">Atinge un aliment ca să-l corectezi. Glisează-l spre stânga ca să-l ștergi.</p>';
   el.innerHTML = html;
   renderMealsToday(day);
+}
+const whyRow = (m, cur) => '<div class="mc-why" role="radiogroup" aria-label="De ce ai mâncat la ' + m.t.toLowerCase() + '?"><span class="mc-why-t">De ce ai mâncat?</span>' +
+  WHY.map(r => '<button role="radio" aria-checked="' + (cur === r.id) + '" data-action="why" data-meal="' + m.id + '" data-why="' + r.id + '">' + r.t + '</button>').join('') + '</div>';
+const MOON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14.6A7.6 7.6 0 0 1 9.4 5a7.6 7.6 0 1 0 9.6 9.6z"/><path d="M16.5 3.5v3M15 5h3"/></svg>';
+// Sleep: one tap in the morning; it belongs to the day that follows the night
+function renderSleep(){
+  const el = $('#sleep'); if (!el) return;
+  const on = !!S.profile && habitsOf().sleep; el.hidden = !on; if (!on){ el.innerHTML = ''; return; }
+  const h = getDay(S.view).sleep || null, o = SLEEP_OPTS.find(x => x.h === h);
+  el.innerHTML = '<div class="ww-top sl-top"><span class="ww-ic sl-ic">' + MOON + '</span>' +
+      '<div class="ww-txt"><h2 id="slTitle">Somn</h2><span>' + (S.view === todayKey() ? 'Cât ai dormit azi-noapte?' : 'Cât ai dormit în noaptea dinainte?') + '</span></div>' +
+      '<div class="ww-num"><b>' + (h ? (o ? o.t : fmt1(h)) + '<small> h</small>' : '–') + '</b>' + (h ? '<span>' + (h <= SHORT_SLEEP ? 'noapte scurtă' : 'odihnit') + '</span>' : '') + '</div></div>' +
+    '<div class="sl-opts" role="radiogroup" aria-label="Ore de somn">' + SLEEP_OPTS.map(x => '<button role="radio" aria-checked="' + (h === x.h) + '" aria-label="' + x.a + '" data-action="sleep" data-h="' + x.h + '">' + x.t + '<small>ore</small></button>').join('') + '</div>';
 }
 function renderMealsToday(day){
   const el = $('#mealsToday'); if (!el) return;
@@ -3754,7 +3948,7 @@ function setupPlan(d, T){
 function saveSetup(){
   const d = S.setup.d, T = computeTargets(d);
   S.profile = { sex: d.sex, age: d.age, height: d.height, weight: d.weight, activity: d.activity, goal: d.goal, custom: false, updatedAt: Date.now(), skin: S.profile ? (S.profile.skin || null) : (lsGet('portia-skin') || null), cycle: S.profile ? (S.profile.cycle || null) : null,
-    adapt: S.profile ? (S.profile.adapt || null) : null, fast: S.profile ? (S.profile.fast || null) : null, plan: setupPlan(d, T), consent: (S.profile && S.profile.consent) || normConsent(lsGet('portia-consent')),
+    adapt: S.profile ? (S.profile.adapt || null) : null, fast: S.profile ? (S.profile.fast || null) : null, plan: setupPlan(d, T), habits: S.profile ? (S.profile.habits || null) : null, consent: (S.profile && S.profile.consent) || normConsent(lsGet('portia-consent')),
     targets: { kcal: T.kcal, protein: T.protein, carbs: T.carbs, fat: T.fat, water: T.water } };
   saveProfile();
   closeSheet('#setup');
@@ -3768,6 +3962,7 @@ const PICON = {
   appear: '<path d="M12 3.5a8.5 8.5 0 1 0 0 17z" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="8.5"/>',
   theme: '<path d="M12 3.5a8.5 8.5 0 0 0 0 17c1.3 0 1.8-.9 1.8-1.8 0-1.4-1.2-1.8-1.2-3 0-1 .8-1.7 1.8-1.7h2.3c2.3 0 3.8-1.6 3.8-3.8 0-3.7-3.8-6.7-8.5-6.7z"/><circle cx="8" cy="11" r="1.2" fill="currentColor" stroke="none"/><circle cx="11" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.2" fill="currentColor" stroke="none"/>',
   targets: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>',
+  habits: '<path d="M18.5 14.4A7.2 7.2 0 0 1 9.6 5.5a7.2 7.2 0 1 0 8.9 8.9z"/><path d="M16 3.5v3M14.5 5h3"/>',
   goalw: '<path d="M4.5 17.5a7.5 7.5 0 0 1 15 0"/><path d="M12 17.5l3.2-4.6"/><path d="M4.5 17.5h15"/>',
   cycle: '<path d="M6.5 8v8M17.5 8v8M3.5 10v4M20.5 10v4M6.5 12h11"/>',
   fast: '<circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.5 1.5M10 3h4"/>',
@@ -3783,7 +3978,7 @@ function profGroups(){
   const p = S.profile, f = fastOf(), c = cycleOf();
   return [
     ['Personalizare', [['appear', 'Aspect', { auto: 'Automat', light: 'Luminos', dark: 'Întunecat' }[S.appearance] || 'Automat'], ['theme', 'Teme de culori', (THEMES[S.theme] || {}).t || '']]],
-    ['Nutriție', [['targets', 'Ținte zilnice', fmt(p.targets.kcal) + ' kcal'], ['goalw', 'Ținta de greutate', p.plan ? fmt1(p.plan.to) + ' kg' : 'Fă-ți planul'], ['cycle', 'Zile de sală și de pauză', c.on ? 'Activat' : 'Oprit'], ['fast', 'Fasting intermitent', f.hide ? 'Ascuns' : f.plan]]],
+    ['Nutriție', [['targets', 'Ținte zilnice', fmt(p.targets.kcal) + ' kcal'], ['goalw', 'Ținta de greutate', p.plan ? fmt1(p.plan.to) + ' kg' : 'Fă-ți planul'], ['habits', 'Somn și motive', (habitsOf().why || habitsOf().sleep) ? 'Pornite' : 'Oprite'], ['cycle', 'Zile de sală și de pauză', c.on ? 'Activat' : 'Oprit'], ['fast', 'Fasting intermitent', f.hide ? 'Ascuns' : f.plan]]],
     ['Cont', (SELL ? [['plan', 'Abonament', S.isOwner ? 'Proprietar' : 'Gratuit']] : []).concat([['data', 'Datele tale', S.noSample ? '' : aiConsentOn() ? 'AI pornit' : 'AI oprit'], ['backup', 'Cod de backup', '']])],
     ['Despre', [['tips', 'Cum îl folosești cel mai bine', ''], ['about', 'Despre Porția', '']]]
   ];
@@ -3826,6 +4021,9 @@ function renderSettingsInner(){
     targets: () => '<section>' + TARGETS_HTML() + '</section>',
     cycle: () => '<section id="cycleSec">' + cycleSection() + '</section>',
     fast: () => '<section id="fastSec">' + fastSection() + '</section>',
+    habits: () => '<section id="habitsSec"><h3>Somn și motive</h3><p>După fiecare masă te întreb dintr-o atingere de ce ai mâncat: foame, stres, plictiseală sau social. Dimineața notezi cât ai dormit. După două săptămâni îți arăt în Progres tiparele tale, de exemplu dacă mănânci mai mult seara după nopți scurte.</p>' +
+      swRow('Întreabă de ce ai mâncat', 'habit-why', habitsOf().why) + swRow('Notează somnul pe Azi', 'habit-sleep', habitsOf().sleep) +
+      '<p class="hint">Ce ai notat deja rămâne în jurnal și când le oprești.</p></section>',
     plan: () => PLAN_HTML,
     data: () => '<section id="dataSec">' + dataSection() + '</section>',
     backup: () => BACKUP_HTML,
@@ -3860,7 +4058,7 @@ function renderSettingsInner(){
     '<p class="foot">' + store + '</p>';
 }
 // Each row's icon sits on its own soft colour, the same four colours the meals use
-const PTINT = { appear: 4, theme: 3, targets: 2, goalw: 3, cycle: 1, fast: 4, plan: 1, data: 2, backup: 4, tips: 1, about: 0 };
+const PTINT = { appear: 4, theme: 3, targets: 2, goalw: 3, habits: 1, cycle: 1, fast: 4, plan: 1, data: 2, backup: 4, tips: 1, about: 0 };
 const SEG_ICON = {
   light: '<circle cx="12" cy="12" r="4"/><path d="M12 2.8v2M12 19.2v2M2.8 12h2M19.2 12h2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M5.5 18.5l1.4-1.4M17.1 6.9l1.4-1.4"/>',
   auto: '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/>',
@@ -4327,6 +4525,10 @@ function bindStatic(){
       case 's-next': if (stepValid()){ S.setup.step = nextStep(1); renderSetup(); } break;
       case 's-back': S.setup.step = nextStep(-1); renderSetup(); break;
       case 's-save': saveSetup(); break;
+      case 'toast-why': toastWhy(b); break;
+      case 'why': setWhy(S.view, b.dataset.meal, b.dataset.why); break;
+      case 'sleep': setSleep(S.view, Number(b.dataset.h)); break;
+      case 'habit-why': case 'habit-sleep': setHabit(a === 'habit-why' ? 'why' : 'sleep', b.getAttribute('aria-checked') !== 'true'); break;
       case 'plan-open': openPlan(); break;
       case 'plan-save': savePlan(); break;
       case 'plan-step': if (S.mini && S.mini.kind === 'plan'){ const v = r1((isFinite(S.mini.to) ? S.mini.to : S.mini.from) + Number(b.dataset.d)); S.mini.to = v; $('#plTo').value = fmt1(v); updatePlanPrev(); } break;

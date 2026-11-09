@@ -23,7 +23,7 @@ def journal():
         days[k(d)] = {'date': k(d), 'water': 2500 + (d % 3) * 250, 'weight': round(84.1 + d * 0.075 + (0.25 if d % 4 == 0 else 0), 1),
           'entries': [{'id': f'p{d}', 'name': 'Ziua de ieri', 'kcal': kc, 'protein': 170 + d % 5 * 4, 'carbs': 270, 'fat': 74, 'meal': 'lunch', 'at': at(13, 0, d), 'src': 'manual'}]}
     E = lambda i, n, g, kc, p, c, f, meal, h, m: {'id': i, 'name': n, 'grams': g, 'kcal': kc, 'protein': p, 'carbs': c, 'fat': f, 'meal': meal, 'at': at(h, m), 'src': 'manual'}
-    days[k(0)] = {'date': k(0), 'water': 2000, 'weight': 84.1, 'entries': [
+    days[k(0)] = {'date': k(0), 'water': 2000, 'weight': 84.1, 'sleep': 7, 'why': {'breakfast': 'hunger', 'lunch': 'hunger', 'snack': 'bored'}, 'entries': [
         E('a', 'Iaurt grecesc 2%', 250, 183, 23, 10, 5, 'breakfast', 8, 10),
         E('b', 'Ovăz', 50, 190, 6.5, 30, 3.5, 'breakfast', 8, 11),
         E('c', 'Afine', 80, 46, 0.6, 11, 0.3, 'breakfast', 8, 12),
@@ -32,7 +32,7 @@ def journal():
         E('f', 'Salată cu ulei de măsline', 150, 128, 1.8, 6, 11, 'lunch', 13, 22),
         E('g', 'Măr', 180, 94, 0.5, 25, 0.3, 'snack', 16, 40),
         E('h', 'Brânză cottage', 200, 196, 25, 7, 8, 'snack', 16, 41)]}
-    consent = {'v': 1, 'health': at(8, 0, 30), 'ai': 0, 'age': True}
+    consent = {'v': 2, 'health': at(8, 0, 30), 'ai': 0, 'age': True}
     prof = {'sex': 'm', 'age': 34, 'height': 181, 'weight': 86.4, 'activity': 'mod', 'goal': 'recomp',
             'targets': {'kcal': 2520, 'protein': 186, 'carbs': 290, 'fat': 70, 'water': 3000}, 'consent': consent, 'fast': {'plan': '16:8', 'hide': True},
             'plan': {'start': k(30), 'from': 86.4, 'to': 82, 'rate': -0.29}}

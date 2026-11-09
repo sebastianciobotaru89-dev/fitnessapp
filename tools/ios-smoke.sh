@@ -55,7 +55,7 @@ prof = {"sex": "m", "age": 34, "height": 181, "weight": 84.5, "activity": "mod",
 print(json.dumps({"profile": prof, "days": days, "library": {"recipes": [], "favorites": [], "reports": [], "products": []}}, ensure_ascii=False))
 PY
 )
-CONSENT='{"v":1,"health":1,"ai":0,"age":true}'
+CONSENT='{"v":2,"health":1,"ai":0,"age":true}'
 
 run(){
   local name="$1" udid="$2"
