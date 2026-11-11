@@ -74,6 +74,18 @@ const LIFTS = [
 ];
 // Estimated one-rep max (Epley): one yardstick for sets of 1 to 20 reps of the same lift
 const e1rm = (kg, reps) => reps <= 1 ? kg : kg * (1 + reps / 30);
+// Weight-loss medication (GLP-1 and the like). The app only notes what the doctor prescribed and what was taken:
+// it never suggests a dose, a change of dose or when to stop.
+const MEDS = [
+  { id: 'sema',  t: 'Semaglutidă',       ex: 'Ozempic, Wegovy',  weekly: true },
+  { id: 'tirz',  t: 'Tirzepatidă',       ex: 'Mounjaro',         weekly: true },
+  { id: 'lira',  t: 'Liraglutidă',       ex: 'Saxenda, Victoza', weekly: false },
+  { id: 'osema', t: 'Semaglutidă orală', ex: 'Rybelsus',         weekly: false },
+  { id: 'other', t: 'Alt medicament',    ex: '',                 weekly: false }
+];
+const APPETITE = [{ v: 1, t: 'Mic' }, { v: 2, t: 'Normal' }, { v: 3, t: 'Mare' }];
+const NAUSEA = [{ v: 0, t: 'Deloc' }, { v: 1, t: 'Ușoară' }, { v: 2, t: 'Moderată' }, { v: 3, t: 'Puternică' }];
+const MED_AFTER = 84;   // the 12 weeks after stopping, when the weight is watched more closely
 // The targets each past day had: when targets change, the old ones stay as the targets of the days up to yesterday
 function normTHist(h){
   if (!Array.isArray(h)) return [];
@@ -93,6 +105,11 @@ function keepTargetHistory(prev, next){
   return next;
 }
 function normHabits(h){ return { why: !(h && h.why === false), sleep: !(h && h.sleep === false), train: !(h && h.train === false) }; }
+function normMed(m){
+  if (!m || typeof m !== 'object' || !MEDS.some(x => x.id === m.drug)) return null;
+  const day = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) ? String(s) : null, wd = m.wd == null ? null : Number(m.wd);
+  return { drug: m.drug, wd: wd >= 0 && wd <= 6 ? wd : null, start: day(m.start), stop: day(m.stop) };
+}
 function normMuscle(m){ return { lift: m && LIFTS.some(x => x.id === m.lift) ? m.lift : LIFTS[0].id }; }
 function normConsent(c){ return (c && typeof c === 'object' && Number(c.v)) ? { v: Number(c.v), health: Number(c.health) || 0, ai: Number(c.ai) || 0, age: !!c.age } : null; }
 function normAdapt(a){
@@ -601,9 +618,13 @@ function normDay(d, k){
     const kg = num(L.kg), reps = Math.round(num(L.reps));
     if (kg > 0 && kg <= 500 && reps >= 1 && reps <= 20){ out.lift = { ex: L.ex, kg: r1(kg), reps }; out.trained = true; }
   }
+  // weight-loss medication: the dose taken that day, as noted, plus appetite (1 to 3) and nausea (0 to 3)
+  const ds = num(d && d.dose); if (ds > 0 && ds <= 60) out.dose = Math.round(ds * 100) / 100;
+  if (d && [1, 2, 3].includes(d.appetite)) out.appetite = d.appetite;
+  if (d && [0, 1, 2, 3].includes(d.nausea)) out.nausea = d.nausea;
   return out;
 }
-const dayEmpty = d => !d.entries.length && !d.water && !d.weight && !d.type && !d.sleep && !d.why && !d.trained && !d.lift;
+const dayEmpty = d => !d.entries.length && !d.water && !d.weight && !d.type && !d.sleep && !d.why && !d.trained && !d.lift && d.dose == null && d.appetite == null && d.nausea == null;
 function normDays(obj){
   const out = {};
   if (obj && typeof obj === 'object') for (const k of Object.keys(obj)) if (/^\d{4}-\d{2}-\d{2}$/.test(k)) {
@@ -629,6 +650,7 @@ function normProfile(p){
     plan: normPlan(p.plan),
     habits: normHabits(p.habits),
     muscle: normMuscle(p.muscle),
+    med: normMed(p.med),
     tHist: normTHist(p.tHist),
     share: p.share === true,
     targets: { kcal: Math.round(kcal), protein: Math.round(num(t.protein) || 0), carbs: Math.round(num(t.carbs) || 0), fat: Math.round(num(t.fat) || 0), water: Math.round(num(t.water) || 2500) }
@@ -1009,7 +1031,9 @@ function afterLoad(){
 }
 
 /* ---------- consent: health data, AI, age ---------- */
-const CONSENT_V = 3;   // 2: sleep and why you eat joined the journal; 3: training and the reference lift
+const CONSENT_V = 4;   // 2: sleep and why you eat joined the journal; 3: training and the reference lift; 4: weight-loss medication
+// What joined the journal since a given consent version, for "Am actualizat acordul"
+const CONSENT_NEW = [[2, 'somnul și motivul pentru care mănânci'], [3, 'antrenamentele, cu cea mai grea serie la un exercițiu'], [4, 'medicația pentru greutate, dacă alegi s-o urmărești: doza, apetitul și greața']];
 const consentValid = c => !!(c && c.v >= CONSENT_V && c.health && c.age);
 function consentOf(){ const p = S.profile && S.profile.consent, l = normConsent(lsGet('portia-consent')); return consentValid(p) ? p : consentValid(l) ? l : null; }
 function hasConsent(){ return !!consentOf(); }
@@ -1039,11 +1063,11 @@ function renderConsent(){
   const box = (k, req, title, sub) => '<label class="cbox"><input type="checkbox" data-consent="' + k + '"' + (d[k] ? ' checked' : '') + '><span><b>' + title + (req ? '' : ' <em>opțional</em>') + '</b><small>' + sub + '</small></span></label>';
   $('#consentCard').innerHTML =
     '<div class="sbody"><div class="welcome"><span class="wl-logo" aria-hidden="true">' + logoSvg(S.theme, 64) + '</span>' +
-      (upd ? '<h2 id="cTitle" tabindex="-1">Am actualizat acordul</h2><p>Porția notează acum ' + (old.v < 2 ? 'somnul, motivul pentru care mănânci și antrenamentele, ca să-ți arate tiparele tale și dacă îți păstrezi mușchii' : 'și antrenamentele, cu cea mai grea serie la un exercițiu, ca să-ți arate dacă îți păstrezi mușchii') + '. Bifează din nou ca să continui.</p></div>'
+      (upd ? '<h2 id="cTitle" tabindex="-1">Am actualizat acordul</h2><p>Porția notează acum și ' + CONSENT_NEW.filter(x => old.v < x[0]).map(x => x[1]).join('; ') + '. Bifează din nou ca să continui.</p></div>'
         : '<h2 id="cTitle" tabindex="-1">Bun venit în Porția</h2><p>Îți calculez ținta de calorii și macronutrienți, iar mesele le notezi în câteva secunde.</p></div>') +
     '<h3 class="cs-t">Înainte să începi</h3>' +
     '<p>' + (upd ? 'Porția păstrează date despre sănătatea ta, așa că îți cerem din nou acordul explicit. Alegerea pentru AI rămâne cum ai făcut-o.' : 'Porția păstrează date despre sănătatea ta, așa că îți cerem acordul explicit. Nimic nu e bifat dinainte.') + '</p>' +
-    box('health', true, 'Datele despre alimentație, greutate, somn și antrenament', 'Sunt de acord ca Porția să-mi păstreze mesele, apa, greutatea, țintele, fastingul, somnul, motivul pentru care mănânc și antrenamentele, cu seriile notate, ca să-mi calculeze progresul și tiparele. Le văd doar eu și le pot șterge oricând.') +
+    box('health', true, 'Datele despre alimentație, greutate, somn, antrenament și medicație', 'Sunt de acord ca Porția să-mi păstreze mesele, apa, greutatea, țintele, fastingul, somnul, motivul pentru care mănânc, antrenamentele cu seriile notate și, dacă o notez, medicația pentru greutate (doza, apetitul și greața), ca să-mi calculeze progresul și tiparele. Le văd doar eu și le pot șterge oricând.') +
     (S.noSample ? '' : box('ai', false, 'Estimări cu AI', 'Sunt de acord ca textul și pozele meselor, plus totalurile zilelor pentru idei și raport, să fie trimise la Claude, un AI al companiei Anthropic, ca să estimeze caloriile. Fără numele sau e-mailul meu. Fără acest acord notez valorile manual.')) +
     box('age', true, 'Am cel puțin 16 ani', 'Porția nu e pentru copii.') +
     '<div class="medwarn"><b>Porția nu e un dispozitiv medical.</b> Nu înlocuiește sfatul unui medic sau nutriționist, iar estimările sunt aproximative. Dacă ai o afecțiune, ești însărcinată sau ai avut tulburări de alimentație, vorbește întâi cu medicul.</div>' +
@@ -2047,6 +2071,174 @@ function renderMuscle(){
   el.innerHTML = head + tiles + '<div class="pl-lines">' + lines.map(l => '<p>' + l + '</p>').join('') + '</div>' +
     notes.map(n => '<div class="banner' + (n[0] === 'warn' ? ' warn' : n[0] === 'good' ? ' good' : '') + '"><p>' + n[1] + '</p></div>').join('') +
     '<p class="hint mu-foot">Forța estimată vine din cea mai grea serie (formula Epley) și se compară doar la același exercițiu. Toate cifrele le calculează aplicația din jurnal.</p>';
+}
+
+/* ---------- weight-loss medication: dose, appetite and nausea as noted, then the 12 weeks after stopping ---------- */
+// Only what the person notes. The app never suggests a dose, a change of dose or when to stop: that stays with the doctor.
+// The numbers on the cards and in the report for the doctor are computed by the app from the journal, never by the AI.
+const WD_LONG = { 1: 'luni', 2: 'marți', 3: 'miercuri', 4: 'joi', 5: 'vineri', 6: 'sâmbătă', 0: 'duminică' };
+const fmtMg = v => nf2.format(v);
+const medOf = () => (S.profile && S.profile.med) || null;
+const medInfo = m => MEDS.find(x => x.id === (m && m.drug)) || MEDS[MEDS.length - 1];
+// on: taking it; after: within the 12 weeks after stopping; done: later than that
+function medPhase(k){
+  const m = medOf(); if (!m) return null;
+  if (!m.stop || k < m.stop) return 'on';
+  return daysBetween(m.stop, k) < MED_AFTER ? 'after' : 'done';
+}
+function setMed(patch){
+  if (!S.profile) return;
+  const base = medOf() || { drug: 'sema', wd: parseKey(todayKey()).getDay(), start: todayKey(), stop: null };
+  S.profile = Object.assign(clone(S.profile), { med: patch === null ? null : normMed(Object.assign({}, base, patch)) });
+  saveProfile(); renderAll(); if (S.screen === 'profil') renderSettings();
+}
+function toggleMed(on){
+  const old = clone(S.profile);
+  setMed(on ? {} : null);
+  if (!on) toast('Medicația nu mai apare pe Azi și în Progres. Ce ai notat rămâne în jurnal.', 'Anulează', () => { S.profile = old; saveProfile(); renderAll(); if (S.screen === 'profil') renderSettings(); });
+}
+function stopMed(){
+  const m = medOf(); if (!m || m.stop) return;
+  const old = clone(S.profile);
+  setMed({ stop: todayKey() });
+  toast('Am notat oprirea. Urmăresc mai atent următoarele 12 săptămâni.', 'Anulează', () => { S.profile = old; saveProfile(); renderAll(); if (S.screen === 'profil') renderSettings(); });
+}
+function resumeMed(){ if (!medOf()) return; setMed({ stop: null }); toast('Am notat că ai reluat tratamentul.'); }
+// The dose noted before day k: the placeholder, so the same dose is noted in one tap
+function lastDose(k){ for (let i = 1; i <= 120; i++){ const d = S.days[addDays(k, -i)]; if (d && d.dose != null) return d.dose; } return null; }
+function saveDose(){
+  const inp = $('#medDose'); if (!inp) return;
+  const v = num(inp.value || inp.placeholder);
+  if (!(v > 0 && v <= 60)){ toast('Scrie doza în mg, cum ți-a prescris-o medicul, de exemplu 0,5.'); inp.focus(); return; }
+  const k = S.view, prev = getDay(k).dose, dose = Math.round(v * 100) / 100;
+  mutateDay(k, d => { d.dose = dose; });
+  buzz('tick');
+  toast('Notat: ' + fmtMg(dose) + ' mg', 'Anulează', () => mutateDay(k, d => { if (prev != null) d.dose = prev; else delete d.dose; }));
+}
+function delDose(){
+  const k = S.view, prev = getDay(k).dose; if (prev == null) return;
+  mutateDay(k, d => { delete d.dose; });
+  toast('Doza a fost ștearsă.', 'Anulează', () => mutateDay(k, d => { d.dose = prev; }));
+}
+// Appetite and nausea: tapping the choice already made clears it
+function setDayVal(key, v){
+  const k = S.view, next = getDay(k)[key] === v ? null : v;
+  mutateDay(k, d => { if (next == null) delete d[key]; else d[key] = next; });
+  buzz('tick');
+}
+// The average of the weigh-ins between two days, both included
+function weightAvg(from, to){
+  let s = 0, n = 0;
+  for (let k = from; k <= to; k = addDays(k, 1)){ const d = S.days[k]; if (d && d.weight){ s += d.weight; n++; } }
+  return n ? s / n : null;
+}
+const nDoses = (n, weekly) => n === 1 ? (weekly ? 'o injecție notată' : 'o doză notată') : cnt(n, weekly ? 'injecții notate' : 'doze notate');
+function medStats(){
+  const m = medOf(); if (!m) return null;
+  const today = todayKey(), keys = Object.keys(S.days).sort();
+  const start = [m.start, keys.find(k => S.days[k].dose != null)].filter(Boolean).sort()[0] || today;
+  // weight: the weeks around the start, the week before stopping, the last week
+  const firstW = keys.find(k => k >= start && S.days[k].weight);
+  const startW = weightAvg(addDays(start, -7), addDays(start, 6)) || (firstW ? S.days[firstW].weight : null);
+  const stopW = m.stop ? (weightAvg(addDays(m.stop, -7), m.stop) || weightAvg(addDays(m.stop, -21), m.stop)) : null;
+  // doses: each change of the noted dose, from the day it started
+  const doses = keys.filter(k => k >= addDays(start, -7) && S.days[k].dose != null).map(k => ({ k, v: S.days[k].dose }));
+  const steps = doses.filter((x, i) => !i || x.v !== doses[i - 1].v);
+  // the last four weeks: appetite, nausea, training and the days logged in full
+  const ap = { 1: 0, 2: 0, 3: 0 }, nz = { 0: 0, 1: 0, 2: 0, 3: 0 };
+  let hard7 = 0, logged = 0, kcal = 0, prot = 0, hit = 0, trained = 0;
+  for (let i = 0; i < 28; i++){
+    const k = addDays(today, -i), d = S.days[k]; if (!d) continue;
+    if (d.appetite) ap[d.appetite]++;
+    if (d.nausea != null){ nz[d.nausea]++; if (i < 7 && d.nausea >= 2) hard7++; }
+    if (d.trained) trained++;
+    if (i === 0) continue;
+    const t = dayTotals(d), T = targetsFor(k); if (!T || !t.n || t.kcal < Math.max(800, T.kcal * 0.5)) continue;
+    logged++; kcal += t.kcal; prot += t.protein; if (t.protein >= T.protein * PROT_OK) hit++;
+  }
+  return { m, info: medInfo(m), start, weeks: Math.max(0, Math.round(daysBetween(start, m.stop || today) / 7)), startW, stopW, nowW: recentAvgWeight(),
+    doses, steps, last: doses.length ? doses[doses.length - 1] : null, ap, apN: ap[1] + ap[2] + ap[3], nz, nzN: nz[0] + nz[1] + nz[2] + nz[3], hard7,
+    logged, kcal: logged ? kcal / logged : 0, prot: logged ? prot / logged : 0, hit, trained, slope: weightSlope(21), sinceStop: m.stop ? daysBetween(m.stop, today) : null };
+}
+const kgSigned = v => (v > 0.04 ? '+' : v < -0.04 ? '−' : '') + fmt1(Math.abs(v)) + ' kg';
+function renderMedP(){
+  const el = $('#medp'); if (!el) return;
+  const M = S.profile ? medStats() : null; el.hidden = !M; if (!M){ el.innerHTML = ''; return; }
+  const ph = medPhase(todayKey()), lines = [], notes = [];
+  const report = '<button class="btn soft sm" data-action="med-report">Raport pentru medic</button>';
+  let head, tiles, foot;
+  if (ph === 'on'){
+    const dW = M.startW && M.nowW ? M.nowW - M.startW : null, MS = muscleStats();
+    head = '<div class="panel-head"><h2 id="mpTitle">Pe medicație</h2><span class="meta">' + esc(M.info.t.toLowerCase()) + '</span></div>';
+    tiles = '<dl class="hstats">' +
+      '<div><dt>De când notezi</dt><dd>' + (M.weeks ? M.weeks + '<small> săpt.</small>' : '<small>prima săptămână</small>') + '</dd></div>' +
+      '<div><dt>Greutatea</dt><dd>' + (dW != null ? (dW > 0.04 ? '+' : dW < -0.04 ? '−' : '') + fmt1(Math.abs(dW)) + '<small> kg, ' + (dW < 0 ? '−' : '+') + fmt1(Math.abs(dW / M.startW * 100)) + '%</small>' : '–') + '</dd></div>' +
+      '<div><dt>Doza notată</dt><dd>' + (M.last ? fmtMg(M.last.v) + '<small> mg</small>' : '–') + '</dd></div>' +
+      '<div><dt>Zile cu greață</dt><dd>' + (M.nzN ? (M.nzN - M.nz[0]) + '<small> din ' + M.nzN + '</small>' : '–') + '</dd></div></dl>';
+    if (M.steps.length) lines.unshift('<b>Dozele notate:</b> ' + M.steps.slice(-4).map(x => fmtMg(x.v) + ' mg din ' + shortDate(x.k)).join(', ') + '; ' + nDoses(M.doses.length, M.info.weekly) + ' în total.');
+    if (M.startW && M.nowW) lines.push('<b>Greutatea:</b> ' + fmt1(M.startW) + ' kg la început, ' + fmt1(M.nowW) + ' kg acum (media ultimei săptămâni)' + (M.slope != null ? '; în ultimele 3 săptămâni, ' + (M.slope < 0 ? '−' : '+') + fmtRate(M.slope) + ' kg pe săptămână' : '') + '.');
+    if (MS.days) lines.push('<b>Mușchii:</b> proteinele atinse în ' + MS.ok + ' din ' + cnt(MS.days, 'zile') + ', ' + (MS.ever ? fmt1(MS.perWeek) + ' antrenamente pe săptămână' : 'niciun antrenament notat') + '. Pe medicație, o parte din kilogramele pierdute pot fi mușchi: proteinele și antrenamentul de forță te ajută să-i păstrezi.');
+    if (M.slope != null && M.nowW && -M.slope > M.nowW * PLAN_MAX_LOSS) notes.push(['warn', 'Slăbești ' + fmtRate(M.slope) + ' kg pe săptămână, peste 1% din greutate. Pe medicație se întâmplă des, dar crește riscul să pierzi și mușchi: mănâncă proteinele întregi, antrenează-te de forță și spune-i medicului ritmul.']);
+    if (MS.days >= 7 && MS.ok < MS.days * 0.5) notes.push(['tip', 'Cu apetit mic, proteinele rămân ușor sub țintă: ' + (MS.ok ? 'le-ai atins în ' + MS.ok + ' din ' + MS.days + ' zile' : 'nu le-ai atins în niciuna din cele ' + cnt(MS.days, 'zile')) + '. Începe fiecare masă cu partea de proteine.']);
+    if (M.hard7 >= 3) notes.push(['warn', 'Ai avut greață moderată sau puternică în ' + M.hard7 + ' din ultimele 7 zile. Vorbește cu medicul dacă nu trece.']);
+    foot = '<div class="row md-foot">' + report + '<button class="btn ghost sm" data-action="med-stop">Am oprit tratamentul</button></div>' +
+      '<p class="hint">Porția nu recomandă doze și nu înlocuiește medicul. Raportul are doar ce ai notat tu și rămâne pe telefon până îl trimiți.</p>';
+  } else {
+    const wk = Math.floor(M.sinceStop / 7) + 1, dS = M.stopW && M.nowW ? M.nowW - M.stopW : null, P = S.profile.plan;
+    const holdOn = !!(P && P.hold && M.stopW && Math.abs(P.from - M.stopW) <= PLAN_HOLD_TOL);
+    head = '<div class="panel-head"><h2 id="mpTitle">După medicație</h2><span class="meta">' + (ph === 'after' ? 'săptămâna ' + wk + ' din 12' : 'cele 12 săptămâni s-au încheiat') + '</span></div>';
+    tiles = '<dl class="hstats"><div><dt>La oprire</dt><dd>' + (M.stopW ? fmt1(M.stopW) + '<small> kg</small>' : '–') + '</dd></div>' +
+      '<div><dt>Acum</dt><dd>' + (M.nowW ? fmt1(M.nowW) + '<small> kg' + (dS != null ? ', ' + kgSigned(dS) : '') + '</small>' : '–') + '</dd></div></dl>';
+    lines.unshift('Ai oprit pe ' + esc(planDate(M.m.stop)) + (M.weeks ? ', după ' + nWeeks(M.weeks) + ' de tratament' : '') + '. După oprire, apetitul revine de obicei, iar o parte din kilograme pot reveni.' + (ph === 'after' ? ' În aceste 12 săptămâni urmăresc mai atent greutatea.' : ''));
+    if (dS != null){
+      if (dS > 1) notes.push(['warn', 'Ai pus la loc ' + fmt1(dS) + ' kg de la oprire. Acum e cel mai ușor de oprit: proteine la fiecare masă, legume și fibre, antrenament de forță și somn. ' +
+        (holdOn ? 'Ținta inteligentă coboară puțin caloriile când ieși din zona de mentenanță.' : 'Pornește mentenanța, ca ținta de calorii să te țină în zonă.') + ' Dacă urcă în continuare, vorbește cu medicul.']);
+      else notes.push(['good', dS <= 0 ? 'Greutatea se ține de la oprire (' + kgSigned(dS) + ').' : 'Greutatea se ține: ' + kgSigned(dS) + ' de la oprire, în marja obișnuită.']);
+    }
+    foot = '<div class="row md-foot">' + (!holdOn && M.stopW && ph === 'after' ? '<button class="btn primary sm" data-action="med-hold">Pornește mentenanța la ' + fmt1(M.stopW) + ' kg</button>' : '') + report +
+      '<button class="btn ghost sm" data-action="med-resume">Am reluat tratamentul</button></div>';
+  }
+  if (M.apN) lines.push('<b>Apetitul, 4 săptămâni:</b> mic ' + M.ap[1] + ', normal ' + M.ap[2] + ', mare ' + M.ap[3] + (M.apN === 1 ? ' (o zi notată).' : ', din ' + cnt(M.apN, 'zile notate') + '.'));
+  el.innerHTML = head + tiles + '<div class="pl-lines">' + lines.map(l => '<p>' + l + '</p>').join('') + '</div>' +
+    notes.map(n => '<div class="banner' + (n[0] === 'warn' ? ' warn' : n[0] === 'good' ? ' good' : '') + '"><p>' + n[1] + '</p></div>').join('') + foot;
+}
+// After stopping: maintenance around the weight at stopping, so the smart target holds it there
+function medHold(){
+  const M = medStats(); if (!M || !M.stopW || !S.profile) return;
+  const old = clone(S.profile), at = r1(M.stopW), plan = normPlan({ start: todayKey(), from: at, to: at, rate: 0, hold: true });
+  if (!plan) return;
+  S.profile = Object.assign(clone(S.profile), { plan });
+  saveProfile(); renderAll();
+  toast('Mentenanța a pornit: zona ta e ' + fmt1(at - PLAN_HOLD_TOL) + '–' + fmt1(at + PLAN_HOLD_TOL) + ' kg.', 'Anulează', () => { S.profile = old; saveProfile(); renderAll(); });
+}
+// A plain-text summary for the doctor, built on the phone from the journal and shared only when the person chooses
+async function medReport(){
+  const M = medStats(); if (!M) return;
+  const p = S.profile, MS = muscleStats(), today = todayKey(), L = [];
+  const full = k => parseKey(k).toLocaleDateString('ro-RO', { day: 'numeric', month: 'long', year: 'numeric' });
+  const sg = v => (v < 0 ? '−' : '+');
+  L.push('PORȚIA: RAPORT PENTRU MEDIC', 'Generat pe ' + full(today) + '. Datele sunt notate de pacient în aplicație și nu sunt măsurători medicale.', '');
+  L.push('TRATAMENT', M.info.t + (M.info.ex ? ' (' + M.info.ex + ')' : '') + (M.info.weekly ? ', injecție săptămânală' + (M.m.wd != null ? ', ' + WD_LONG[M.m.wd] : '') : ''),
+    'Început (în aplicație): ' + full(M.start) + '. ' + (M.m.stop ? 'Oprit: ' + full(M.m.stop) + '.' : 'În desfășurare.'), '');
+  L.push('DOZE NOTATE');
+  if (M.steps.length) M.steps.forEach(x => L.push('- din ' + full(x.k) + ': ' + fmtMg(x.v) + ' mg')); else L.push('- nicio doză notată');
+  L.push('În total: ' + nDoses(M.doses.length, M.info.weekly) + '.', '', 'GREUTATE (media cântăririlor)');
+  if (M.startW) L.push('- la început: ' + fmt1(M.startW) + ' kg');
+  if (M.stopW) L.push('- la oprire: ' + fmt1(M.stopW) + ' kg');
+  if (M.nowW) L.push('- acum (ultimele 7 zile): ' + fmt1(M.nowW) + ' kg');
+  if (M.startW && M.nowW){ const d = M.nowW - M.startW; L.push('- schimbare de la început: ' + sg(d) + fmt1(Math.abs(d)) + ' kg (' + sg(d) + fmt1(Math.abs(d / M.startW * 100)) + '%)'); }
+  if (M.slope != null) L.push('- ritmul în ultimele 3 săptămâni: ' + sg(M.slope) + fmtRate(M.slope) + ' kg pe săptămână');
+  if (p.height && M.nowW) L.push('- indicele de masă corporală acum: ' + fmt1(M.nowW / Math.pow(p.height / 100, 2)));
+  L.push('', 'ULTIMELE 4 SĂPTĂMÂNI');
+  L.push('- zile cu mesele notate complet: ' + M.logged + (M.logged ? '; în medie ' + fmt(M.kcal) + ' kcal și ' + fmt(M.prot) + ' g proteine pe zi' + (M.nowW ? ' (' + fmt1(M.prot / M.nowW) + ' g pe kg)' : '') : ''));
+  if (M.logged) L.push('- ținta de proteine (' + fmt(p.targets.protein) + ' g) atinsă în ' + M.hit + ' din ' + cnt(M.logged, 'zile'));
+  L.push('- antrenamente notate: ' + M.trained);
+  if (MS.now) L.push('- forța estimată la ' + MS.ex.t.toLowerCase() + ': ' + fmt(MS.now.v) + ' kg' + (MS.change != null ? ' (' + sg(MS.change) + Math.abs(Math.round(MS.change * 100)) + '% față de cele 3 săptămâni de dinainte)' : ''));
+  L.push('- apetit, zile notate: mic ' + M.ap[1] + ', normal ' + M.ap[2] + ', mare ' + M.ap[3]);
+  L.push('- greață, zile notate: deloc ' + M.nz[0] + ', ușoară ' + M.nz[1] + ', moderată ' + M.nz[2] + ', puternică ' + M.nz[3]);
+  L.push('', 'Porția nu e un dispozitiv medical și nu recomandă doze. Caloriile și proteinele sunt estimări din jurnalul alimentar.');
+  const ok = await saveTextFile('portia-raport-medic-' + today + '.txt', L.join('\n'));
+  toast(ok ? (NATIVE ? 'Raportul e gata de trimis.' : 'Raportul s-a descărcat.') : 'Nu am putut crea raportul.');
 }
 
 /* ---------- why you eat: personal patterns from the reason taps, sleep and the journal ---------- */
@@ -3591,8 +3783,8 @@ function toast(msg, label, fn, opt){
 }
 
 /* ---------- render ---------- */
-function renderAll(){ renderSync(); renderHeader(); renderHero(); renderMeals(); renderTabs(); renderRecent(); renderPreview(); renderIdeas(); renderDiary(); renderSleep(); renderTrain(); renderWater(); renderFast(); renderPlan(); renderMuscle(); renderWhy(); renderWeight(); renderHistory(); widgetSync(); }
-function renderDayParts(){ renderHeader(); renderHero(); renderRecent(); renderManualFit(); renderDiary(); renderSleep(); renderTrain(); renderWater(); renderFast(); renderPlan(); renderMuscle(); renderWhy(); renderWeight(); renderHistory(); renderPreview(); widgetSync(); }
+function renderAll(){ renderSync(); renderHeader(); renderHero(); renderMeals(); renderTabs(); renderRecent(); renderPreview(); renderIdeas(); renderDiary(); renderSleep(); renderTrain(); renderMed(); renderWater(); renderFast(); renderPlan(); renderMedP(); renderMuscle(); renderWhy(); renderWeight(); renderHistory(); widgetSync(); }
+function renderDayParts(){ renderHeader(); renderHero(); renderRecent(); renderManualFit(); renderDiary(); renderSleep(); renderTrain(); renderMed(); renderWater(); renderFast(); renderPlan(); renderMedP(); renderMuscle(); renderWhy(); renderWeight(); renderHistory(); renderPreview(); widgetSync(); }
 // ---------- home screen and lock screen widgets ----------
 // The store app hands its widgets today's figures, tomorrow's targets and the theme's colours.
 // They stay on the phone: iOS keeps them in the app's own App Group, Android in the app's preferences.
@@ -4104,6 +4296,43 @@ function renderTrain(){
   }
   el.innerHTML = html;
 }
+const PILL = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.4 20.1a4.5 4.5 0 0 1-6.4-6.4l9.7-9.7a4.5 4.5 0 0 1 6.4 6.4z"/><path d="M8.9 8.9l6.2 6.2"/></svg>';
+const segBtns = (action, list, cur, label) => '<div class="md-seg" role="radiogroup" aria-label="' + label + '">' +
+  list.map(x => '<button role="radio" data-action="' + action + '" data-v="' + x.v + '" aria-checked="' + (cur === x.v) + '">' + x.t + '</button>').join('') + '</div>';
+// On medication: the dose (as noted), appetite and nausea. After stopping: appetite only, for 12 weeks
+function renderMed(){
+  const el = $('#med'); if (!el) return;
+  const k = S.view, ph = S.profile ? medPhase(k) : null, on = ph === 'on' || ph === 'after';
+  el.hidden = !on; if (!on){ el.innerHTML = ''; return; }
+  const m = medOf(), I = medInfo(m), d = getDay(k), today = k === todayKey(), T = targetsFor(k);
+  if (ph === 'after'){
+    const wk = Math.floor(daysBetween(m.stop, k) / 7) + 1;
+    el.innerHTML = '<div class="ww-top"><span class="ww-ic md-ic">' + PILL + '</span><div class="ww-txt"><h2 id="mdTitle">După medicație</h2><span>' + (today ? 'Cum e apetitul azi?' : 'Cum a fost apetitul în ziua asta?') + '</span></div>' +
+        '<div class="ww-num"><b>' + Math.min(wk, 12) + '<small> din 12</small></b><span>săptămâni</span></div></div>' +
+      '<p class="md-lbl">Apetit</p>' + segBtns('appetite', APPETITE, d.appetite, 'Apetit') +
+      (d.appetite === 3 ? '<p class="hint md-tip">După oprire, apetitul revine de obicei. Mesele cu proteine și cu fibre (legume, leguminoase, cereale integrale) țin de foame mai mult.' + (T ? ' Ținta ta de azi: ' + fmt(T.kcal) + ' kcal.' : '') + '</p>' : '');
+    return;
+  }
+  const dow = parseKey(k).getDay(), gap = m.wd != null ? (m.wd - dow + 7) % 7 : null;
+  const when = I.weekly && m.wd != null
+    ? (gap === 0 ? (today ? 'Azi e ziua injecției.' : 'Ziua injecției.') : 'Injecția: ' + WD_LONG[m.wd] + (today ? (gap === 1 ? ', mâine.' : ', peste ' + gap + ' zile.') : '.'))
+    : (today ? 'Ai luat doza de azi?' : 'Doza din ziua asta.');
+  const last = lastDose(k), has = d.dose != null;
+  let tip = '';
+  if (d.appetite === 1 || d.nausea >= 2){
+    const left = T ? Math.max(0, Math.round(T.protein - dayTotals(d).protein)) : 0;
+    tip = '<p class="hint md-tip">' + (d.appetite === 1 ? 'Zi cu apetit mic: alege porții mici, bogate în proteine, de exemplu iaurt grecesc, brânză de vaci, ouă, pește sau o supă cu carne.' + (left ? ' Mai ai ' + fmt(left) + ' g de proteine până la țintă.' : '') + (d.nausea >= 2 ? ' ' : '') : '') +
+      (d.nausea >= 2 ? 'Cu greață, mănâncă încet și oprește-te înainte să te simți plin; mâncărurile grase și prăjite o îngreunează de obicei.' + (d.nausea === 3 ? ' Dacă e puternică sau nu trece, vorbește cu medicul.' : '') : '') + '</p>';
+  }
+  el.innerHTML = '<div class="ww-top"><span class="ww-ic md-ic">' + PILL + '</span><div class="ww-txt"><h2 id="mdTitle">Medicație</h2><span>' + esc(I.t) + '. ' + when + '</span></div>' +
+      '<div class="ww-num"><b>' + (has ? fmtMg(d.dose) + '<small> mg</small>' : '–') + '</b><span>' + (has ? 'notată' : 'doza') + '</span></div></div>' +
+    '<div class="tr-row"><div class="unit"><label class="sr" for="medDose">Doza în miligrame</label><input type="text" id="medDose" inputmode="decimal" placeholder="' + (last != null ? fmtMg(last) : '0') + '" value="' + (has ? fmtMg(d.dose) : '') + '"><em>mg</em></div>' +
+      '<button class="btn soft" data-action="dose-save">' + (has ? 'Schimbă' : I.weekly ? 'Am făcut injecția' : 'Am luat doza') + '</button></div>' +
+    '<p class="hint md-hint">' + (has ? 'Notat: ' + fmtMg(d.dose) + ' mg. <button class="lnk" data-action="dose-del">Șterge</button>'
+      : last != null ? 'Ultima doză notată: ' + fmtMg(last) + ' mg. Lasă câmpul gol ca s-o notezi la fel.' : 'Doza ți-o stabilește medicul. Aici doar o notezi.') + '</p>' +
+    '<p class="md-lbl">Apetit</p>' + segBtns('appetite', APPETITE, d.appetite, 'Apetit') +
+    '<p class="md-lbl">Greață</p>' + segBtns('nausea', NAUSEA, d.nausea, 'Greață') + tip;
+}
 function renderMealsToday(day){
   const el = $('#mealsToday'); if (!el) return;
   el.hidden = !S.profile;
@@ -4439,7 +4668,7 @@ function setupPlan(d, T){
 }
 function saveSetup(){
   const d = S.setup.d, T = computeTargets(d);
-  S.profile = keepTargetHistory(S.profile, { sex: d.sex, age: d.age, height: d.height, weight: d.weight, activity: d.activity, goal: d.goal, custom: false, updatedAt: Date.now(), skin: S.profile ? (S.profile.skin || null) : (lsGet('portia-skin') || null), cycle: S.profile ? (S.profile.cycle || null) : null, muscle: S.profile ? (S.profile.muscle || null) : null,
+  S.profile = keepTargetHistory(S.profile, { sex: d.sex, age: d.age, height: d.height, weight: d.weight, activity: d.activity, goal: d.goal, custom: false, updatedAt: Date.now(), skin: S.profile ? (S.profile.skin || null) : (lsGet('portia-skin') || null), cycle: S.profile ? (S.profile.cycle || null) : null, muscle: S.profile ? (S.profile.muscle || null) : null, med: S.profile ? (S.profile.med || null) : null,
     adapt: S.profile ? (S.profile.adapt || null) : null, fast: S.profile ? (S.profile.fast || null) : null, plan: setupPlan(d, T), habits: S.profile ? (S.profile.habits || null) : null, share: !!(S.profile && S.profile.share), consent: (S.profile && S.profile.consent) || normConsent(lsGet('portia-consent')),
     targets: { kcal: T.kcal, protein: T.protein, carbs: T.carbs, fat: T.fat, water: T.water } });
   saveProfile();
@@ -4458,6 +4687,7 @@ const PICON = {
   goalw: '<path d="M4.5 17.5a7.5 7.5 0 0 1 15 0"/><path d="M12 17.5l3.2-4.6"/><path d="M4.5 17.5h15"/>',
   cycle: '<path d="M6.5 8v8M17.5 8v8M3.5 10v4M20.5 10v4M6.5 12h11"/>',
   muscle: '<path d="M4 17.5l5-5 3.5 3 7.5-8"/><path d="M15 7.5h5v5"/>',
+  med: '<path d="M10.4 20.1a4.5 4.5 0 0 1-6.4-6.4l9.7-9.7a4.5 4.5 0 0 1 6.4 6.4z"/><path d="M8.9 8.9l6.2 6.2"/>',
   fast: '<circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.5 1.5M10 3h4"/>',
   plan: '<path d="M4 8.5l4 3.5 4-6 4 6 4-3.5-1.5 9.5h-13z"/>',
   data: '<path d="M12 3.5l7 2.8v5.2c0 4.3-3 7.6-7 9-4-1.4-7-4.7-7-9V6.3z"/><path d="M9 12l2 2 4-4"/>',
@@ -4471,7 +4701,7 @@ function profGroups(){
   const p = S.profile, f = fastOf(), c = cycleOf();
   return [
     ['Personalizare', [['appear', 'Aspect', { auto: 'Automat', light: 'Luminos', dark: 'Întunecat' }[S.appearance] || 'Automat'], ['theme', 'Teme de culori', (THEMES[S.theme] || {}).t || '']]],
-    ['Nutriție', [['targets', 'Ținte zilnice', fmt(p.targets.kcal) + ' kcal'], ['goalw', 'Ținta de greutate', p.plan ? (p.plan.hold ? 'Mentenanță, ' : '') + fmt1(p.plan.to) + ' kg' : 'Fă-ți planul'], ['habits', 'Somn și motive', (habitsOf().why || habitsOf().sleep) ? 'Pornite' : 'Oprite'], ['cycle', 'Zile de sală și de pauză', c.on ? 'Activat' : 'Oprit'], ['muscle', 'Antrenament și forță', habitsOf().train ? liftOf().t : 'Oprit'], ['fast', 'Fasting intermitent', f.hide ? 'Ascuns' : f.plan]]],
+    ['Nutriție', [['targets', 'Ținte zilnice', fmt(p.targets.kcal) + ' kcal'], ['goalw', 'Ținta de greutate', p.plan ? (p.plan.hold ? 'Mentenanță, ' : '') + fmt1(p.plan.to) + ' kg' : 'Fă-ți planul'], ['habits', 'Somn și motive', (habitsOf().why || habitsOf().sleep) ? 'Pornite' : 'Oprite'], ['cycle', 'Zile de sală și de pauză', c.on ? 'Activat' : 'Oprit'], ['muscle', 'Antrenament și forță', habitsOf().train ? liftOf().t : 'Oprit'],  ['med', 'Medicație pentru greutate', medOf() ? (medOf().stop ? 'Oprită' : medInfo(medOf()).t) : 'Nu'], ['fast', 'Fasting intermitent', f.hide ? 'Ascuns' : f.plan]]],
     ['Cont', (SELL ? [['plan', 'Abonament', S.isOwner ? 'Proprietar' : 'Gratuit']] : []).concat([['data', 'Datele tale', S.noSample ? '' : aiConsentOn() ? 'AI pornit' : 'AI oprit'], ['backup', 'Cod de backup', '']])],
     ['Despre', [['tips', 'Cum îl folosești cel mai bine', ''], ['about', 'Despre Porția', '']]]
   ];
@@ -4521,6 +4751,15 @@ function renderSettingsInner(){
       swRow('Notează antrenamentele pe Azi', 'habit-train', habitsOf().train) +
       '<span class="lbl">Exercițiul de referință</span><div class="row" role="radiogroup" aria-label="Exercițiul de referință">' + LIFTS.map(x => '<button class="chip" role="radio" data-action="lift-ex" data-ex="' + x.id + '" aria-checked="' + (liftOf().id === x.id) + '">' + x.t + '</button>').join('') + '</div>' +
       '<p class="hint">Alege un exercițiu pe care îl faci des, cu greutăți. Forța se compară doar la același exercițiu, așa că seriile notate la altul rămân în jurnal, dar nu intră în calcul.</p></section>',
+    med: () => { const m = medOf(), I = medInfo(m);
+      return '<section id="medSec"><h3>Medicație pentru greutate</h3><p>Dacă iei un medicament pentru greutate, de exemplu semaglutidă sau tirzepatidă, notezi pe Azi doza, apetitul și greața. În Progres vezi legătura cu greutatea și cu mușchii, iar după ce oprești tratamentul urmăresc mai atent primele 12 săptămâni.</p>' +
+        swRow('Iau un medicament pentru greutate', 'med-on', !!m) +
+        (m ? '<span class="lbl">Medicamentul</span><div class="row" role="radiogroup" aria-label="Medicamentul">' + MEDS.map(x => '<button class="chip" role="radio" data-action="med-drug" data-drug="' + x.id + '" aria-checked="' + (m.drug === x.id) + '">' + x.t + '</button>').join('') + '</div>' +
+          (I.ex ? '<p class="hint">' + esc(I.ex) + (I.weekly ? ', o injecție pe săptămână.' : ', o doză pe zi.') + '</p>' : '') +
+          (I.weekly ? '<span class="lbl">Ziua injecției</span><div class="wdays" role="radiogroup" aria-label="Ziua injecției">' + WD_ORDER.map(d => '<button role="radio" data-action="med-wd" data-wd="' + d + '" aria-checked="' + (m.wd === d) + '">' + WD_NAME[d] + '</button>').join('') + '</div>' : '') +
+          '<p class="md-state">' + (m.stop ? 'Ai oprit tratamentul pe ' + esc(planDate(m.stop)) + '.' : 'Tratament în desfășurare' + (m.start ? ', notat din ' + esc(planDate(m.start)) : '') + '.') + '</p>' +
+          '<div class="row">' + (m.stop ? '<button class="btn ghost sm" data-action="med-resume">Am reluat tratamentul</button>' : '<button class="btn ghost sm" data-action="med-stop">Am oprit tratamentul</button>') + '</div>' : '') +
+        '<div class="medwarn"><b>Porția nu recomandă doze.</b> Doza și orice schimbare le stabilește medicul. Aici notezi doar ce ți-a prescris, ca să vezi legătura cu greutatea, apetitul și mușchii.</div></section>'; },
     plan: () => PLAN_HTML,
     data: () => '<section id="dataSec">' + dataSection() + '</section>',
     backup: () => BACKUP_HTML,
@@ -4555,7 +4794,7 @@ function renderSettingsInner(){
     '<p class="foot">' + store + '</p>';
 }
 // Each row's icon sits on its own soft colour, the same four colours the meals use
-const PTINT = { appear: 4, theme: 3, targets: 2, goalw: 3, habits: 1, cycle: 1, muscle: 2, fast: 4, plan: 1, data: 2, backup: 4, tips: 1, about: 0 };
+const PTINT = { appear: 4, theme: 3, targets: 2, goalw: 3, habits: 1, cycle: 1, muscle: 2, med: 4, fast: 4, plan: 1, data: 2, backup: 4, tips: 1, about: 0 };
 const SEG_ICON = {
   light: '<circle cx="12" cy="12" r="4"/><path d="M12 2.8v2M12 19.2v2M2.8 12h2M19.2 12h2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M5.5 18.5l1.4-1.4M17.1 6.9l1.4-1.4"/>',
   auto: '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/>',
@@ -5032,6 +5271,16 @@ function bindStatic(){
       case 'lift-save': saveLift(); break;
       case 'lift-del': delLift(); break;
       case 'lift-ex': setLiftEx(b.dataset.ex); break;
+      case 'dose-save': saveDose(); break;
+      case 'dose-del': delDose(); break;
+      case 'appetite': case 'nausea': setDayVal(a, Number(b.dataset.v)); break;
+      case 'med-on': toggleMed(b.getAttribute('aria-checked') !== 'true'); break;
+      case 'med-drug': setMed({ drug: b.dataset.drug }); break;
+      case 'med-wd': setMed({ wd: Number(b.dataset.wd) }); break;
+      case 'med-stop': stopMed(); break;
+      case 'med-resume': resumeMed(); break;
+      case 'med-report': medReport(); break;
+      case 'med-hold': medHold(); break;
       case 'plan-open': openPlan(); break;
       case 'plan-hold': maybeHold(true, true); break;
       case 'plan-save': savePlan(); break;
@@ -5151,6 +5400,7 @@ function bindStatic(){
     if (ev.target.id === 'foodText' && ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)){ ev.preventDefault(); estimate('text'); }
     if (ev.target.id === 'wIn' && ev.key === 'Enter'){ ev.preventDefault(); saveWeight(); }
     if ((ev.target.id === 'liftKg' || ev.target.id === 'liftReps') && ev.key === 'Enter'){ ev.preventDefault(); saveLift(); }
+    if (ev.target.id === 'medDose' && ev.key === 'Enter'){ ev.preventDefault(); saveDose(); }
     if (ev.target.id === 'bcCode' && ev.key === 'Enter'){ ev.preventDefault(); lookupCode(ev.target.value); }
   });
   document.addEventListener('input', ev => {
