@@ -3,9 +3,12 @@
 // photographs the real screen and fails on JavaScript errors or broken native features.
 // Usage: node tools/android-smoke.mjs path/to/app-debug.apk
 import { execSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 
 const APK = process.argv[2];
+// The consent version the app asks for today, read from the app itself: with an older one the seeded journal
+// would open on "Am actualizat acordul" and every tap after it would land on that sheet
+const CONSENT_V = Number((readFileSync(new URL('../js/app.js', import.meta.url), 'utf8').match(/const CONSENT_V = (\d+)/) || [])[1]) || 1;
 const PKG = 'com.portia.app';
 const OUT = 'smoke';
 mkdirSync(OUT, { recursive: true });
@@ -32,7 +35,7 @@ function seed(){
     { id: 'b', name: 'Pâine integrală', grams: 40, kcal: 98, protein: 4, carbs: 17, fat: 1.3, meal: 'breakfast', at: at - 4.9e6, src: 'manual' },
     { id: 'c', name: 'Piept de pui la grătar', grams: 200, kcal: 330, protein: 62, carbs: 0, fat: 7, meal: 'lunch', at: at - 1e6, src: 'manual' },
     { id: 'd', name: 'Orez basmati', grams: 150, kcal: 195, protein: 4, carbs: 42, fat: 0.5, meal: 'lunch', at: at - 0.9e6, src: 'manual' }] };
-  const consent = { v: 2, health: at, ai: 0, age: true };
+  const consent = { v: CONSENT_V, health: at, ai: 0, age: true };
   const profile = { sex: 'm', age: 34, height: 181, weight: 84.5, activity: 'mod', goal: 'recomp', targets: { kcal: 2520, protein: 186, carbs: 290, fat: 70, water: 3000 }, consent };
   return { data: { profile, days, library: { recipes: [], favorites: [], reports: [], products: [] } }, consent };
 }

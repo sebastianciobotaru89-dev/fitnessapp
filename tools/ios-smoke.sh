@@ -37,8 +37,11 @@ def pick(w, prefs):
 print(rt, pick("iPhone", ["Pro Max", "Plus", "Pro"]), pick("iPad", ["13-inch", "Pro", "Air"]))')
 note "Simulator: $RUNTIME"
 
-SEED=$(python3 - <<'PY'
-import json, datetime, time
+# the consent version the app asks for today, read from the app itself, so the seeded journal opens on Azi
+CONSENT_V=$(sed -n 's/^const CONSENT_V = \([0-9]*\).*/\1/p' "$(dirname "$0")/../js/app.js")
+CONSENT_V=${CONSENT_V:-1}
+SEED=$(CONSENT_V="$CONSENT_V" python3 - <<'PY'
+import json, datetime, time, os
 t = datetime.date.today(); now = int(time.time() * 1000)
 days = {}
 for i in range(1, 7):
@@ -50,12 +53,12 @@ days[k] = {"date": k, "water": 1250, "entries": [
   {"id": "b", "name": "Pâine integrală", "grams": 40, "kcal": 98, "protein": 4, "carbs": 17, "fat": 1.3, "meal": "breakfast", "at": now - 4900000, "src": "manual"},
   {"id": "c", "name": "Piept de pui la grătar", "grams": 200, "kcal": 330, "protein": 62, "carbs": 0, "fat": 7, "meal": "lunch", "at": now - 1000000, "src": "manual"},
   {"id": "d", "name": "Orez basmati", "grams": 150, "kcal": 195, "protein": 4, "carbs": 42, "fat": 0.5, "meal": "lunch", "at": now - 900000, "src": "manual"}]}
-consent = {"v": 1, "health": now, "ai": 0, "age": True}
+consent = {"v": int(os.environ["CONSENT_V"]), "health": now, "ai": 0, "age": True}
 prof = {"sex": "m", "age": 34, "height": 181, "weight": 84.5, "activity": "mod", "goal": "recomp", "targets": {"kcal": 2520, "protein": 186, "carbs": 290, "fat": 70, "water": 3000}, "consent": consent}
 print(json.dumps({"profile": prof, "days": days, "library": {"recipes": [], "favorites": [], "reports": [], "products": []}}, ensure_ascii=False))
 PY
 )
-CONSENT='{"v":2,"health":1,"ai":0,"age":true}'
+CONSENT="{\"v\":$CONSENT_V,\"health\":1,\"ai\":0,\"age\":true}"
 
 run(){
   local name="$1" udid="$2"
