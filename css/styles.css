@@ -1570,6 +1570,15 @@ button.lib-main:active{background:color-mix(in srgb,var(--ink) 5%,transparent)}
 #medSec .medwarn{margin-top:14px}
 #medSec .row{flex-wrap:wrap}
 #medSec .hint{margin-top:10px}
+/* Porția Pro, the first step: the weekly report for the coach */
+.co-ic{color:var(--kcal);background:color-mix(in srgb,var(--kcal) 14%,var(--surface))}
+.co-what{margin:0 0 12px;font-size:14px;color:var(--muted);text-wrap:pretty}
+#coach .row{flex-wrap:wrap;gap:8px}
+.co-pre{margin:0 0 14px;padding:14px;border-radius:16px;background:var(--sunk);font:13.5px/1.55 var(--f-body);color:var(--ink);white-space:pre-wrap;word-break:break-word;max-height:52vh;overflow:auto}
+#coachSec .lbl{display:block;margin-top:14px}
+#coachSec .lbl em{font-style:normal;font-weight:500;color:var(--muted)}
+#coachSec .hint{margin:4px 0 8px}
+.co-btns{margin-top:14px;flex-wrap:wrap;gap:8px}
 .wdays button[aria-checked="true"]{background:var(--kcal);color:var(--on-kcal)}
 .lnk{border:0;background:none;padding:0;font:inherit;font-weight:700;color:var(--ink);text-decoration:underline;text-underline-offset:2px;cursor:pointer}
 .pl-foot{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);display:grid;gap:10px;justify-items:start}
