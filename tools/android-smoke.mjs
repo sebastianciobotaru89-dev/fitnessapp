@@ -177,9 +177,23 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   };
 
   await page.ev(`window.__ev = []; ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'click'].forEach(t => document.addEventListener(t, e => { if (__ev.length < 80) __ev.push(t.replace('pointer', '') + ':' + (e.pointerType || '')); }, true)); true`);
-  const hr = await page.ev(`(() => { const b = document.querySelector('#hero').getBoundingClientRect(); return { l: b.left, r: b.right, y: b.top + b.height * 0.45 }; })()`);
-  swipe(toScreen(hr.l + 60, hr.y), toScreen(hr.r - 20, hr.y + 4)); await sleep(1000);
-  info('evenimente la glisare: ' + await page.ev(`__ev.filter((x, i, a) => a.indexOf(x) === i).join(' ') + ' (' + __ev.length + ')'`));
+  // A slow emulator can still be drawing the journal it just loaded; then the browser takes the swipe as a scroll and
+  // cancels it. The swipe waits for two drawn frames, and if the day did not change it is tried once more and reported;
+  // a second miss still fails the check.
+  const frames = () => page.ev(`new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))`);
+  const swipeRight = async () => {
+    await frames(); await sleep(800);
+    await page.ev(`window.__ev = []; true`);
+    const hr = await page.ev(`(() => { const b = document.querySelector('#hero').getBoundingClientRect(); return { l: b.left, r: b.right, y: b.top + b.height * 0.45 }; })()`);
+    swipe(toScreen(hr.l + 60, hr.y), toScreen(hr.r - 20, hr.y + 4)); await sleep(1000);
+    return page.ev(`__ev.filter((x, i, a) => a.indexOf(x) === i).join(' ') + ' (' + __ev.length + ')'`);
+  };
+  let swiped = await swipeRight();
+  if (!/^Ieri/.test(await page.ev(`document.querySelector('#hAzi').textContent`))){
+    info('glisarea nu a schimbat ziua (' + swiped + '); se mai încearcă o dată');
+    swiped = await swipeRight();
+  }
+  info('evenimente la glisare: ' + swiped);
   ok('glisarea spre dreapta deschide ziua de ieri', /^Ieri/.test(await page.ev(`document.querySelector('#hAzi').textContent`)), await page.ev(`document.querySelector('#hAzi').textContent`));
   shot('3-ieri');
   const vw = await page.ev(`({ w: innerWidth, sw: document.documentElement.scrollWidth, scale: visualViewport ? visualViewport.scale : 1 })`);
