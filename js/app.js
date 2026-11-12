@@ -767,12 +767,30 @@ function persistLocal(){
   if (S.mode !== 'local') return;
   if (!lsSet('mt-local', { profile: S.profile, days: S.days, library: S.library })){ S.mode = 'memory'; renderSync(); }
 }
+/* ---------- one computation per render pass ---------- */
+// Several cards ask for the same journal statistics in one render (the plan, the smart target, the patterns). Within one
+// synchronous pass they are computed once. The cache empties when the task ends, on every render and on every save,
+// so a change is never read from it.
+const passMemo = new Map();
+const clearPass = () => passMemo.clear();
+function perPass(name, fn){
+  return (...a) => {
+    const k = name + '|' + a.join('|');
+    if (passMemo.has(k)) return passMemo.get(k);
+    if (!passMemo.size) queueMicrotask(clearPass);
+    const v = fn(...a); passMemo.set(k, v); return v;
+  };
+}
+const adaptInfo = perPass('adapt', adaptInfoRaw), planState = perPass('plan', planStateRaw), muscleStats = perPass('muscle', muscleStatsRaw);
+const medStats = perPass('med', medStatsRaw), whyStats = perPass('why', whyStatsRaw);
 function saveProfile(){
+  clearPass();
   if (S.mode === 'cloud') queueWrite('profile', () => S.profileRef, () => S.profile);
   else persistLocal();
   cacheNow();
 }
 function saveDay(k){
+  clearPass();
   if (S.mode === 'cloud') queueWrite('day:' + k, () => S.daysCol.doc(k), () => S.days[k] || null);
   else persistLocal();
   cacheNow();
@@ -1509,7 +1527,7 @@ function recalcFromWeight(w){
 /* ---------- smart target: real expenditure from what was eaten and how weight moved ---------- */
 const ADAPT_WIN = 28, ADAPT_MIN_SPAN = 14, ADAPT_MIN_LOGGED = 10, ADAPT_MIN_WEIGHTS = 4, ADAPT_STEP = 250;
 function recentAvgWeight(){ const pts = weightSeries(todayKey(), 7); return pts.length ? pts.reduce((a, x) => a + x.w, 0) / pts.length : null; }
-function adaptInfo(){
+function adaptInfoRaw(){
   const p = S.profile; if (!p || !p.targets) return null;
   const today = todayKey(), logged = [], weights = [];
   for (let i = ADAPT_WIN; i >= 0; i--){
@@ -1704,7 +1722,7 @@ function currentWeight(){
   if (keys.length) return { w: S.days[keys[keys.length - 1]].weight, src: 'last' };
   return S.profile && S.profile.weight ? { w: S.profile.weight, src: 'profile' } : null;
 }
-function planState(asOf){
+function planStateRaw(asOf){
   const p = S.profile, pl = p && p.plan; if (!pl) return null;
   const today = asOf || todayKey(); if (pl.start > today && asOf) return null;
   const start = pl.start > today ? today : pl.start, age = daysBetween(start, today);
@@ -2043,7 +2061,7 @@ function bestLift(ex, i0, i1){
   }
   return best ? Object.assign(best, { n }) : null;
 }
-function muscleStats(){
+function muscleStatsRaw(){
   const p = S.profile, today = todayKey(), ex = liftOf();
   // protein: the finished days of the last two weeks that were logged in full
   let days = 0, ok = 0, sum = 0;
@@ -2161,7 +2179,7 @@ function weightAvg(from, to){
   return n ? s / n : null;
 }
 const nDoses = (n, weekly) => n === 1 ? (weekly ? 'o injecție notată' : 'o doză notată') : cnt(n, weekly ? 'injecții notate' : 'doze notate');
-function medStats(){
+function medStatsRaw(){
   const m = medOf(); if (!m) return null;
   const today = todayKey(), keys = Object.keys(S.days).sort();
   const start = [m.start, keys.find(k => S.days[k].dose != null)].filter(Boolean).sort()[0] || today;
@@ -2504,7 +2522,7 @@ function setHabit(key, on){
   S.profile = Object.assign(clone(S.profile), { habits: Object.assign({}, habitsOf(), { [key]: on }) });
   saveProfile(); renderAll(); if (S.screen === 'profil') renderSettings();
 }
-function whyStats(){
+function whyStatsRaw(){
   const today = todayKey(), meals = [], days = [];
   let tagged = 0, slept = 0, stressed = 0;
   for (let i = WHY_WIN - 1; i >= 0; i--){
@@ -4066,8 +4084,15 @@ function toast(msg, label, fn, opt){
 }
 
 /* ---------- render ---------- */
-function renderAll(){ renderSync(); renderHeader(); renderHero(); renderMeals(); renderTabs(); renderRecent(); renderPreview(); renderIdeas(); renderDiary(); renderInsight(); renderCoach(); renderSleep(); renderStress(); renderTrain(); renderMed(); renderWater(); renderFast(); renderPlan(); renderMedP(); renderMuscle(); renderWhy(); renderWeight(); renderHistory(); widgetSync(); }
-function renderDayParts(){ renderHeader(); renderHero(); renderRecent(); renderManualFit(); renderDiary(); renderInsight(); renderCoach(); renderSleep(); renderStress(); renderTrain(); renderMed(); renderWater(); renderFast(); renderPlan(); renderMedP(); renderMuscle(); renderWhy(); renderWeight(); renderHistory(); renderPreview(); widgetSync(); }
+// Progres is drawn only while it is the screen in view; otherwise it is marked and drawn when it is opened, so a tap on Azi
+// does not redraw six cards nobody sees
+function renderProgres(force){
+  if (!force && S.screen !== 'progres'){ S.progDirty = true; return; }
+  S.progDirty = false;
+  renderPlan(); renderMedP(); renderMuscle(); renderWhy(); renderWeight(); renderHistory();
+}
+function renderAll(){ clearPass(); renderSync(); renderHeader(); renderHero(); renderMeals(); renderTabs(); renderRecent(); renderPreview(); renderIdeas(); renderDiary(); renderInsight(); renderCoach(); renderSleep(); renderStress(); renderTrain(); renderMed(); renderWater(); renderFast(); renderProgres(); widgetSync(); }
+function renderDayParts(){ clearPass(); renderHeader(); renderHero(); renderRecent(); renderManualFit(); renderDiary(); renderInsight(); renderCoach(); renderSleep(); renderStress(); renderTrain(); renderMed(); renderWater(); renderFast(); renderProgres(); renderPreview(); widgetSync(); }
 // ---------- home screen and lock screen widgets ----------
 // The store app hands its widgets today's figures, tomorrow's targets and the theme's colours.
 // They stay on the phone: iOS keeps them in the app's own App Group, Android in the app's preferences.
@@ -4165,6 +4190,7 @@ function go(name){
   document.documentElement.setAttribute('data-screen', name);
   moveTabInd(!prev);
   if (name === 'profil'){ if (S.profile) renderSettings(); else renderProfileEmpty(); }
+  if (name === 'progres' && S.progDirty) renderProgres(true);
   if (name === 'progres' && (S.histPick || S.wPick)){ S.histPick = null; S.wPick = null; histPaint(); wPaint(); }
   if (name === 'progres') alignSweep();
   const q = name === 'azi' && CHEER.queued; CHEER.queued = null;
