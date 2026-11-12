@@ -138,7 +138,7 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   const nfo = await page.ev(`({ native: Capacitor.isNativePlatform(), platform: Capacitor.getPlatform(), plugins: Object.keys(Capacitor.Plugins).sort(), mark: document.documentElement.getAttribute('data-native'), top: getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-top').trim(), bottom: getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-bottom').trim() })`);
   ok('rulează ca aplicație nativă Android', nfo.native && nfo.platform === 'android' && nfo.mark === 'android');
   info('aplicația: ' + JSON.stringify(nfo));
-  for (const p of ['App', 'Clipboard', 'Filesystem', 'Haptics', 'Keyboard', 'Preferences', 'Share', 'SplashScreen', 'SystemBars', 'PortiaWindow', 'PortiaWidget']) ok('pluginul ' + p + ' e disponibil', nfo.plugins.includes(p));
+  for (const p of ['App', 'Clipboard', 'Filesystem', 'Haptics', 'Keyboard', 'Preferences', 'Share', 'SplashScreen', 'SystemBars', 'PortiaWindow', 'PortiaWidget', 'Health']) ok('pluginul ' + p + ' e disponibil', nfo.plugins.includes(p));
   ok('primul ecran e bun venit', await page.ev(`!document.querySelector('#consentSheet').hidden`));
   ok('fără bifa pentru AI când nu există AI', await page.ev(`!document.querySelector('[data-consent="ai"]')`));
   await clearDialogs();

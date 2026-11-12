@@ -43,6 +43,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Porția folosește camera doar când fotografiezi codul de bare al unui produs. Poza e citită pe telefon și nu pleacă nicăieri.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Porția citește din Apple Health greutatea, pașii, somnul și antrenamentele de forță, ca să nu le mai notezi de mână. Datele rămân pe telefon, în jurnalul tău, și nu scriem nimic în Apple Health.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Porția folosește microfonul doar cât ții apăsat butonul de dictare, ca să scrii mesele cu vocea.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

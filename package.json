@@ -23,6 +23,7 @@
     "@capacitor/preferences": "^8.0.0",
     "@capacitor/share": "^8.0.0",
     "@capacitor/splash-screen": "^8.0.0",
+    "@capgo/capacitor-health": "8.11.13",
     "@zxing/library": "0.21.3"
   },
   "devDependencies": {

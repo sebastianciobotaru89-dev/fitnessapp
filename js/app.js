@@ -105,6 +105,7 @@ function keepTargetHistory(prev, next){
   return next;
 }
 function normHabits(h){ return { why: !(h && h.why === false), sleep: !(h && h.sleep === false), train: !(h && h.train === false) }; }
+function normHealth(h){ return h && typeof h === 'object' && h.on ? { on: true, last: Number(h.last) || 0 } : null; }
 function normCoach(c){
   if (!c || typeof c !== 'object') return null;
   const i = c.inc || {}, wd = Number(c.wd), day = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) ? String(s) : null;
@@ -628,9 +629,11 @@ function normDay(d, k){
   const ds = num(d && d.dose); if (ds > 0 && ds <= 60) out.dose = Math.round(ds * 100) / 100;
   if (d && [1, 2, 3].includes(d.appetite)) out.appetite = d.appetite;
   if (d && [0, 1, 2, 3].includes(d.nausea)) out.nausea = d.nausea;
+  // the day's steps, read from Apple Health or Health Connect
+  const st = Math.round(num(d && d.steps)); if (st > 0 && st <= 200000) out.steps = st;
   return out;
 }
-const dayEmpty = d => !d.entries.length && !d.water && !d.weight && !d.type && !d.sleep && !d.why && !d.trained && !d.lift && d.dose == null && d.appetite == null && d.nausea == null;
+const dayEmpty = d => !d.entries.length && !d.water && !d.weight && !d.type && !d.sleep && !d.why && !d.trained && !d.lift && d.dose == null && d.appetite == null && d.nausea == null && !d.steps;
 function normDays(obj){
   const out = {};
   if (obj && typeof obj === 'object') for (const k of Object.keys(obj)) if (/^\d{4}-\d{2}-\d{2}$/.test(k)) {
@@ -658,6 +661,7 @@ function normProfile(p){
     muscle: normMuscle(p.muscle),
     med: normMed(p.med),
     coach: normCoach(p.coach),
+    health: normHealth(p.health),
     tHist: normTHist(p.tHist),
     share: p.share === true,
     targets: { kcal: Math.round(kcal), protein: Math.round(num(t.protein) || 0), carbs: Math.round(num(t.carbs) || 0), fat: Math.round(num(t.fat) || 0), water: Math.round(num(t.water) || 2500) }
@@ -1033,14 +1037,16 @@ function afterLoad(){
   if (S.profileKnown && !hasConsent()){ if (!anySheetOpen()) openConsent(); }
   else if (S.profileKnown && !S.profile && !anySheetOpen()) openSetup(true);
   maybeHold();
+  syncHealth();
   maybeAutoAdapt();
   flushShares();
 }
 
 /* ---------- consent: health data, AI, age ---------- */
-const CONSENT_V = 4;   // 2: sleep and why you eat joined the journal; 3: training and the reference lift; 4: weight-loss medication
+const CONSENT_V = 5;   // 2: sleep and why you eat joined the journal; 3: training and the reference lift; 4: weight-loss medication; 5: Apple Health / Health Connect
 // What joined the journal since a given consent version, for "Am actualizat acordul"
-const CONSENT_NEW = [[2, 'somnul și motivul pentru care mănânci'], [3, 'antrenamentele, cu cea mai grea serie la un exercițiu'], [4, 'medicația pentru greutate, dacă alegi s-o urmărești: doza, apetitul și greața']];
+const CONSENT_NEW = [[2, 'somnul și motivul pentru care mănânci'], [3, 'antrenamentele, cu cea mai grea serie la un exercițiu'], [4, 'medicația pentru greutate, dacă alegi s-o urmărești: doza, apetitul și greața'],
+  [5, 'pașii și, dacă legi Apple Health sau Health Connect, greutatea, somnul și antrenamentele citite de acolo']];
 const consentValid = c => !!(c && c.v >= CONSENT_V && c.health && c.age);
 function consentOf(){ const p = S.profile && S.profile.consent, l = normConsent(lsGet('portia-consent')); return consentValid(p) ? p : consentValid(l) ? l : null; }
 function hasConsent(){ return !!consentOf(); }
@@ -1074,7 +1080,7 @@ function renderConsent(){
         : '<h2 id="cTitle" tabindex="-1">Bun venit în Porția</h2><p>Îți calculez ținta de calorii și macronutrienți, iar mesele le notezi în câteva secunde.</p></div>') +
     '<h3 class="cs-t">Înainte să începi</h3>' +
     '<p>' + (upd ? 'Porția păstrează date despre sănătatea ta, așa că îți cerem din nou acordul explicit. Alegerea pentru AI rămâne cum ai făcut-o.' : 'Porția păstrează date despre sănătatea ta, așa că îți cerem acordul explicit. Nimic nu e bifat dinainte.') + '</p>' +
-    box('health', true, 'Datele despre alimentație, greutate, somn, antrenament și medicație', 'Sunt de acord ca Porția să-mi păstreze mesele, apa, greutatea, țintele, fastingul, somnul, motivul pentru care mănânc, antrenamentele cu seriile notate și, dacă o notez, medicația pentru greutate (doza, apetitul și greața), ca să-mi calculeze progresul și tiparele. Le văd doar eu și le pot șterge oricând.') +
+    box('health', true, 'Datele despre alimentație, greutate, somn, antrenament și medicație', 'Sunt de acord ca Porția să-mi păstreze mesele, apa, greutatea, țintele, fastingul, somnul, motivul pentru care mănânc, antrenamentele cu seriile notate, pașii, ce citește din Apple Health sau Health Connect dacă le leg și, dacă o notez, medicația pentru greutate (doza, apetitul și greața), ca să-mi calculeze progresul și tiparele. Le văd doar eu și le pot șterge oricând.') +
     (S.noSample ? '' : box('ai', false, 'Estimări cu AI', 'Sunt de acord ca textul și pozele meselor, plus totalurile zilelor pentru idei și raport, să fie trimise la Claude, un AI al companiei Anthropic, ca să estimeze caloriile. Fără numele sau e-mailul meu. Fără acest acord notez valorile manual.')) +
     box('age', true, 'Am cel puțin 16 ani', 'Porția nu e pentru copii.') +
     '<div class="medwarn"><b>Porția nu e un dispozitiv medical.</b> Nu înlocuiește sfatul unui medic sau nutriționist, iar estimările sunt aproximative. Dacă ai o afecțiune, ești însărcinată sau ai avut tulburări de alimentație, vorbește întâi cu medicul.</div>' +
@@ -2302,14 +2308,16 @@ function coachReport(){
     if (s != null) L.push('- ritmul pe 3 săptămâni: ' + (s < 0 ? '−' : '+') + fmtRate(s) + ' kg pe săptămână');
   }
   if (C.inc.train){
-    const ex = liftOf(), on = []; let best = null;
+    const ex = liftOf(), on = []; let best = null, steps = 0, stepDays = 0;
     for (let i = 6; i >= 0; i--){
       const k = addDays(today, -i), d = S.days[k]; if (!d) continue;
       if (d.trained) on.push(wd(k));
+      if (d.steps && i > 0){ steps += d.steps; stepDays++; }
       if (d.lift && d.lift.ex === ex.id){ const v = e1rm(d.lift.kg, d.lift.reps); if (!best || v > best.v) best = { v, kg: d.lift.kg, reps: d.lift.reps }; }
     }
     L.push('', 'ANTRENAMENTE', '- ' + (on.length ? on.length + (on.length === 1 ? ' antrenament' : ' antrenamente') + ' (' + on.join(', ') + ')' : 'niciun antrenament notat'));
     if (best){ const ch = muscleStats().change; L.push('- ' + ex.t.toLowerCase() + ': cea mai grea serie ' + fmt1(best.kg) + ' kg × ' + best.reps + ', forța estimată ' + fmt(best.v) + ' kg' + (ch != null ? ' (' + (ch < 0 ? '−' : '+') + Math.abs(Math.round(ch * 100)) + '% față de cele 3 săptămâni de dinainte)' : '')); }
+    if (stepDays) L.push('- pași: în medie ' + fmt(steps / stepDays) + ' pe zi');
   }
   if (C.inc.habits){
     let sl = 0, sn = 0, short = 0; const why = {};
@@ -2373,6 +2381,90 @@ function renderCoach(){
   el.innerHTML = '<div class="ww-top"><span class="ww-ic co-ic">' + CHAT + '</span><div class="ww-txt"><h2 id="coTitle">Raportul săptămânal</h2><span>Pentru ' + esc(C.name || 'antrenorul tău') + (due === todayKey() ? ', azi.' : ', de ' + WD_LONG[C.wd] + '.') + '</span></div></div>' +
     '<p class="co-what">' + inc.join(', ').replace(/, ([^,]*)$/, ' și $1').replace(/^./, c => c.toUpperCase()) + ' din ultimele 7 zile, într-un mesaj pe care îl trimiți tu.</p>' +
     '<div class="row"><button class="btn primary sm" data-action="coach-send">Trimite raportul</button><button class="btn ghost sm" data-action="coach-preview">Vezi raportul</button></div>';
+}
+
+/* ---------- Apple Health and Health Connect: weight, steps, sleep and strength workouts, read only ---------- */
+// Only in the store app, only after the person turns it on and the phone asks for permission. Porția only reads,
+// never writes, and what it reads stays in the journal on the phone. What was noted by hand always wins:
+// a weigh-in or a night already in the journal is never overwritten; steps follow the phone; a strength workout marks
+// the day as trained, never the other way round.
+const HEALTH_READ = ['weight', 'steps', 'sleep', 'workouts'];
+const HEALTH_FIRST = 30, HEALTH_AGAIN = 7, HEALTH_EVERY = 30 * 60e3;
+// Workouts that count as strength training for "Mușchii tăi"; a run or a walk does not mark the day
+const STRENGTH_W = new Set(['strengthTraining', 'traditionalStrengthTraining', 'functionalStrengthTraining', 'weightlifting', 'crossTraining', 'coreTraining', 'calisthenics', 'bootCamp',
+  'backExtension', 'barbellShoulderPress', 'benchPress', 'deadlift', 'latPullDown', 'lunge', 'dumbbellCurlLeftArm', 'dumbbellCurlRightArm', 'dumbbellFrontRaise', 'dumbbellLateralRaise',
+  'dumbbellTricepsExtensionLeftArm', 'dumbbellTricepsExtensionRightArm', 'dumbbellTricepsExtensionTwoArm']);
+const healthOf = () => (S.profile && S.profile.health) || null;
+const healthName = () => PLATFORM === 'ios' ? 'Apple Health' : PLATFORM === 'android' ? 'Health Connect' : 'Apple Health și Health Connect';
+const healthReady = () => NATIVE && !!natPlugin('Health');
+function setHealth(patch){
+  if (!S.profile) return;
+  S.profile = Object.assign(clone(S.profile), { health: patch === null ? null : normHealth(Object.assign({}, healthOf() || {}, patch)) });
+  saveProfile(); if (S.screen === 'profil') renderSettings();
+}
+async function connectHealth(){
+  if (!healthReady()) return;
+  const av = await nat('Health', 'isAvailable');
+  if (!av || av === true || !av.available){
+    toast(PLATFORM === 'android' ? 'Health Connect nu e disponibil. Instalează aplicația Health Connect din Google Play, apoi încearcă din nou.' : 'Apple Health nu e disponibil pe acest dispozitiv.');
+    return;
+  }
+  const st = await nat('Health', 'requestAuthorization', { read: HEALTH_READ, write: [] });
+  if (!st || st === true){ toast('Nu am primit acces la ' + healthName() + '.'); return; }
+  setHealth({ on: true, last: 0 });
+  await syncHealth(true);
+}
+function disconnectHealth(){
+  const old = healthOf(); setHealth(null);
+  toast('Nu mai citesc din ' + healthName() + '. Ce am citit deja rămâne în jurnal.', 'Anulează', () => setHealth(old));
+}
+const isoStart = k => parseKey(k).toISOString();
+// Sleep segments belong to the morning they lead to: shifted by 6 hours, a night ending at 23:40 counts for the next day
+const wakeDay = iso => keyOf(new Date(Date.parse(iso) + 6 * 36e5));
+// Reads the last days from the phone and fills the journal; returns how many days got something new
+async function syncHealth(force){
+  const h = healthOf(); if (!healthReady() || !h || !h.on || S.healthBusy) return 0;
+  if (!force && Date.now() - (h.last || 0) < HEALTH_EVERY) return 0;
+  S.healthBusy = true;
+  const today = todayKey(), from = addDays(today, -((h.last ? HEALTH_AGAIN : HEALTH_FIRST) - 1)), end = new Date().toISOString();
+  const got = { w: {}, st: {}, sl: {}, tr: {} };
+  try {
+    const W = await nat('Health', 'readSamples', { dataType: 'weight', startDate: isoStart(from), endDate: end, limit: 1000, ascending: true });
+    // the first weigh-in of each day: the morning one
+    if (W && W.samples) for (const s of W.samples){ const k = keyOf(new Date(s.startDate)); if (!(k in got.w) && s.value >= 30 && s.value <= 300) got.w[k] = r1(s.value); }
+    const ST = await nat('Health', 'queryAggregated', { dataType: 'steps', startDate: isoStart(from), endDate: end, bucket: 'day', aggregation: 'sum' });
+    if (ST && ST.samples) for (const s of ST.samples){ const v = Math.round(s.value); if (v > 0) got.st[keyOf(new Date(s.startDate))] = v; }
+    const SL = await nat('Health', 'readSamples', { dataType: 'sleep', startDate: isoStart(addDays(from, -1)), endDate: end, limit: 2000, ascending: true });
+    // asleep minutes per morning; a day with only "in bed" segments counts those instead
+    const asleep = {}, inBed = {};
+    if (SL && SL.samples) for (const s of SL.samples){
+      const k = wakeDay(s.endDate), m = Number(s.value) || 0; if (m <= 0) continue;
+      if (!s.sleepState || s.sleepState === 'inBed') inBed[k] = (inBed[k] || 0) + m;
+      else if (s.sleepState !== 'awake') asleep[k] = (asleep[k] || 0) + m;
+    }
+    for (const k of new Set(Object.keys(asleep).concat(Object.keys(inBed)))){ const hrs = (asleep[k] || inBed[k]) / 60; if (hrs >= 3 && hrs <= 14) got.sl[k] = r1(hrs); }
+    const WO = await nat('Health', 'queryWorkouts', { startDate: isoStart(from), endDate: end, limit: 200 });
+    if (WO && WO.workouts) for (const w of WO.workouts) if (STRENGTH_W.has(w.workoutType) && (Number(w.duration) || 0) >= 600) got.tr[keyOf(new Date(w.startDate))] = true;
+  } finally { S.healthBusy = false; }
+  // into the journal: only what is missing, and steps as the phone counts them
+  const n = { w: 0, sl: 0, tr: 0, days: 0 };
+  for (let k = from; k <= today; k = addDays(k, 1)){
+    const cur = getDay(k), d = clone(cur); d.date = k; let ch = false;
+    if (got.w[k] && !d.weight){ d.weight = got.w[k]; n.w++; ch = true; }
+    if (got.sl[k] && !d.sleep && habitsOf().sleep){ d.sleep = got.sl[k]; n.sl++; ch = true; }
+    if (got.tr[k] && !d.trained){ d.trained = true; n.tr++; ch = true; }
+    if (got.st[k] && got.st[k] !== d.steps){ d.steps = got.st[k]; ch = true; }
+    if (!ch) continue;
+    S.days[k] = d; saveDay(k); n.days++;
+  }
+  setHealth({ last: Date.now() });
+  if (n.w) maybeHold();
+  if (n.days) renderAll();
+  if (force){
+    const parts = [n.w ? (n.w === 1 ? 'o cântărire' : cnt(n.w, 'cântăriri')) : '', n.sl ? (n.sl === 1 ? 'o noapte' : cnt(n.sl, 'nopți')) : '', n.tr ? (n.tr === 1 ? 'un antrenament' : cnt(n.tr, 'antrenamente')) : ''].filter(Boolean);
+    toast(parts.length ? 'Am citit din ' + healthName() + ': ' + parts.join(', ') + '.' : 'Am citit din ' + healthName() + '. Nimic nou de adăugat în jurnal.', null, null, Object.keys(got.st).length ? { sub: 'Pașii apar pe Azi, la Antrenament.' } : null);
+  }
+  return n.days;
 }
 
 /* ---------- why you eat: personal patterns from the reason taps, sleep and the journal ---------- */
@@ -4416,6 +4508,7 @@ function renderTrain(){
   let html = '<div class="ww-top"><span class="ww-ic tr-ic">' + DUMBBELL + '</span>' +
       '<div class="ww-txt"><h2 id="trTitle">Antrenament</h2><span>' + ask + '</span></div>' +
       '<div class="ww-num"><b>' + n + '</b><span>în 7 zile</span></div></div>' +
+    (d.steps ? '<p class="tr-steps"><b>' + fmt(d.steps) + '</b> pași' + (k === todayKey() ? ' până acum' : '') + (NATIVE ? ', din ' + esc(healthName()) : '') + '</p>' : '') +
     '<button class="tr-done" data-action="train-toggle" aria-pressed="' + done + '">' + CHECK_ICON + '<span>' + (done ? 'M-am antrenat' : 'Notează antrenamentul') + '</span></button>';
   if (done){
     html += '<div class="tr-lift"><p class="tr-lbl">Cea mai grea serie la <b>' + esc(ex.t.toLowerCase()) + '</b> <em>opțional</em></p>' +
@@ -4802,7 +4895,7 @@ function setupPlan(d, T){
 }
 function saveSetup(){
   const d = S.setup.d, T = computeTargets(d);
-  S.profile = keepTargetHistory(S.profile, { sex: d.sex, age: d.age, height: d.height, weight: d.weight, activity: d.activity, goal: d.goal, custom: false, updatedAt: Date.now(), skin: S.profile ? (S.profile.skin || null) : (lsGet('portia-skin') || null), cycle: S.profile ? (S.profile.cycle || null) : null, muscle: S.profile ? (S.profile.muscle || null) : null, med: S.profile ? (S.profile.med || null) : null, coach: S.profile ? (S.profile.coach || null) : null,
+  S.profile = keepTargetHistory(S.profile, { sex: d.sex, age: d.age, height: d.height, weight: d.weight, activity: d.activity, goal: d.goal, custom: false, updatedAt: Date.now(), skin: S.profile ? (S.profile.skin || null) : (lsGet('portia-skin') || null), cycle: S.profile ? (S.profile.cycle || null) : null, muscle: S.profile ? (S.profile.muscle || null) : null, med: S.profile ? (S.profile.med || null) : null, coach: S.profile ? (S.profile.coach || null) : null, health: S.profile ? (S.profile.health || null) : null,
     adapt: S.profile ? (S.profile.adapt || null) : null, fast: S.profile ? (S.profile.fast || null) : null, plan: setupPlan(d, T), habits: S.profile ? (S.profile.habits || null) : null, share: !!(S.profile && S.profile.share), consent: (S.profile && S.profile.consent) || normConsent(lsGet('portia-consent')),
     targets: { kcal: T.kcal, protein: T.protein, carbs: T.carbs, fat: T.fat, water: T.water } });
   saveProfile();
@@ -4823,6 +4916,7 @@ const PICON = {
   muscle: '<path d="M4 17.5l5-5 3.5 3 7.5-8"/><path d="M15 7.5h5v5"/>',
   med: '<path d="M10.4 20.1a4.5 4.5 0 0 1-6.4-6.4l9.7-9.7a4.5 4.5 0 0 1 6.4 6.4z"/><path d="M8.9 8.9l6.2 6.2"/>',
   coach: '<path d="M5 18.5V7.5A2.5 2.5 0 0 1 7.5 5h9A2.5 2.5 0 0 1 19 7.5v6a2.5 2.5 0 0 1-2.5 2.5H8.5z"/><path d="M9 9.5h6M9 12.5h4"/>',
+  health: '<path d="M12 19.5s-7-4.3-7-9.6A3.9 3.9 0 0 1 12 7.6a3.9 3.9 0 0 1 7 2.3c0 5.3-7 9.6-7 9.6z"/><path d="M7.5 12.5h2.4l1.3-2.2 1.9 4 1.2-1.8h2.2"/>',
   fast: '<circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.5 1.5M10 3h4"/>',
   plan: '<path d="M4 8.5l4 3.5 4-6 4 6 4-3.5-1.5 9.5h-13z"/>',
   data: '<path d="M12 3.5l7 2.8v5.2c0 4.3-3 7.6-7 9-4-1.4-7-4.7-7-9V6.3z"/><path d="M9 12l2 2 4-4"/>',
@@ -4836,7 +4930,7 @@ function profGroups(){
   const p = S.profile, f = fastOf(), c = cycleOf();
   return [
     ['Personalizare', [['appear', 'Aspect', { auto: 'Automat', light: 'Luminos', dark: 'Întunecat' }[S.appearance] || 'Automat'], ['theme', 'Teme de culori', (THEMES[S.theme] || {}).t || '']]],
-    ['Nutriție', [['targets', 'Ținte zilnice', fmt(p.targets.kcal) + ' kcal'], ['goalw', 'Ținta de greutate', p.plan ? (p.plan.hold ? 'Mentenanță, ' : '') + fmt1(p.plan.to) + ' kg' : 'Fă-ți planul'], ['habits', 'Somn și motive', (habitsOf().why || habitsOf().sleep) ? 'Pornite' : 'Oprite'], ['cycle', 'Zile de sală și de pauză', c.on ? 'Activat' : 'Oprit'], ['muscle', 'Antrenament și forță', habitsOf().train ? liftOf().t : 'Oprit'],  ['med', 'Medicație pentru greutate', medOf() ? (medOf().stop ? 'Oprită' : medInfo(medOf()).t) : 'Nu'], ['fast', 'Fasting intermitent', f.hide ? 'Ascuns' : f.plan]]],
+    ['Nutriție', [['targets', 'Ținte zilnice', fmt(p.targets.kcal) + ' kcal'], ['goalw', 'Ținta de greutate', p.plan ? (p.plan.hold ? 'Mentenanță, ' : '') + fmt1(p.plan.to) + ' kg' : 'Fă-ți planul'], ['habits', 'Somn și motive', (habitsOf().why || habitsOf().sleep) ? 'Pornite' : 'Oprite'], ['cycle', 'Zile de sală și de pauză', c.on ? 'Activat' : 'Oprit'], ['muscle', 'Antrenament și forță', habitsOf().train ? liftOf().t : 'Oprit'],  ['med', 'Medicație pentru greutate', medOf() ? (medOf().stop ? 'Oprită' : medInfo(medOf()).t) : 'Nu'], ['health', healthName(), healthOf() ? 'Pornit' : healthReady() ? 'Oprit' : 'În aplicație'], ['fast', 'Fasting intermitent', f.hide ? 'Ascuns' : f.plan]]],
     ['Antrenor', [['coach', 'Antrenorul meu', coachOf() ? (coachOf().name || 'Pornit') : 'Nu']]],
     ['Cont', (SELL ? [['plan', 'Abonament', S.isOwner ? 'Proprietar' : 'Gratuit']] : []).concat([['data', 'Datele tale', S.noSample ? '' : aiConsentOn() ? 'AI pornit' : 'AI oprit'], ['backup', 'Cod de backup', '']])],
     ['Despre', [['tips', 'Cum îl folosești cel mai bine', ''], ['about', 'Despre Porția', '']]]
@@ -4906,6 +5000,15 @@ function renderSettingsInner(){
           swRow('Somnul și motivele meselor', 'coach-inc-habits', C.inc.habits) + (medOf() ? swRow('Medicația, apetitul și greața', 'coach-inc-med', C.inc.med) : '') +
           '<div class="row co-btns"><button class="btn soft sm" data-action="coach-preview">Vezi raportul</button><button class="btn primary sm" data-action="coach-send">Trimite acum</button></div>' +
           (C.sent ? '<p class="hint">Ultimul raport trimis: ' + esc(planDate(C.sent)) + '.</p>' : '') : '') + '</section>'; },
+    health: () => { const h = healthOf(), nm = healthName();
+      const when = h && h.last ? new Date(h.last).toLocaleString('ro-RO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'încă nu';
+      return '<section id="healthSec"><h3>' + esc(nm) + '</h3><p>Porția poate citi din ' + esc(nm) + ' greutatea, pașii, somnul și antrenamentele de forță, ca să nu le mai notezi de mână. Doar citește, nu scrie nimic acolo. Ce ai notat tu de mână nu se schimbă.</p>' +
+        (healthReady()
+          ? swRow('Citește din ' + nm, 'health-on', !!h) +
+            (h ? '<p class="hint">Ultima citire: ' + esc(when) + '. Citesc din nou când deschizi aplicația.</p><div class="row hl-btns"><button class="btn soft sm" data-action="health-sync">Citește acum</button>' +
+              (PLATFORM === 'android' ? '<button class="btn ghost sm" data-action="health-settings">Permisiunile din Health Connect</button>' : '') + '</div>' : '') +
+            (PLATFORM === 'ios' ? '<p class="hint">Ce poate citi Porția alegi în fereastra Apple Health și schimbi oricând din setările Sănătate ale telefonului.</p>' : '')
+          : '<p class="hint">Merge în aplicația Porția pentru iPhone și Android' + (NATIVE ? ', într-o versiune mai nouă' : '') + '.</p>') + '</section>'; },
     plan: () => PLAN_HTML,
     data: () => '<section id="dataSec">' + dataSection() + '</section>',
     backup: () => BACKUP_HTML,
@@ -4940,7 +5043,7 @@ function renderSettingsInner(){
     '<p class="foot">' + store + '</p>';
 }
 // Each row's icon sits on its own soft colour, the same four colours the meals use
-const PTINT = { appear: 4, theme: 3, targets: 2, goalw: 3, habits: 1, cycle: 1, muscle: 2, med: 4, coach: 3, fast: 4, plan: 1, data: 2, backup: 4, tips: 1, about: 0 };
+const PTINT = { appear: 4, theme: 3, targets: 2, goalw: 3, habits: 1, cycle: 1, muscle: 2, med: 4, coach: 3, health: 1, fast: 4, plan: 1, data: 2, backup: 4, tips: 1, about: 0 };
 const SEG_ICON = {
   light: '<circle cx="12" cy="12" r="4"/><path d="M12 2.8v2M12 19.2v2M2.8 12h2M19.2 12h2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M5.5 18.5l1.4-1.4M17.1 6.9l1.4-1.4"/>',
   auto: '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/>',
@@ -5432,6 +5535,9 @@ function bindStatic(){
       case 'coach-inc-weight': case 'coach-inc-train': case 'coach-inc-habits': case 'coach-inc-med': setCoach({ inc: { [a.slice(10)]: b.getAttribute('aria-checked') !== 'true' } }); break;
       case 'coach-send': if (S.mini && S.mini.kind === 'coach') closeMini(); sendCoach(); break;
       case 'coach-preview': openCoachPreview(); break;
+      case 'health-on': if (b.getAttribute('aria-checked') === 'true') disconnectHealth(); else connectHealth(); break;
+      case 'health-sync': syncHealth(true); break;
+      case 'health-settings': nat('Health', 'openHealthConnectSettings'); break;
       case 'plan-open': openPlan(); break;
       case 'plan-hold': maybeHold(true, true); break;
       case 'plan-save': savePlan(); break;
@@ -5583,7 +5689,7 @@ function bindStatic(){
   $('#toastBtn').addEventListener('click', () => { const fn = toastFn; toastFn = null; $('#toast').hidden = true; if (fn) fn(); });
   window.addEventListener('online', () => { Shared.blocked = false; flushShares(); });
   $$('.sheet').forEach(s => s.addEventListener('click', ev => { if (ev.target === s && s.id !== 'setup' && CLOSERS[s.id]) CLOSERS[s.id](); }));
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) renderDayParts(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden){ renderDayParts(); syncHealth(); } });
   const recolorSnow = () => { if (Snow.cvs && !Snow.cvs.hidden){ snowColor(); drawSnow(); } };
   try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', recolorSnow); } catch (e) {}
   try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', refreshAppear); } catch (e) {}

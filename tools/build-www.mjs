@@ -14,6 +14,8 @@ rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 for (const f of FILES) copyFileSync(join(root, f), join(out, f));
 for (const d of DIRS) cpSync(join(root, d), join(out, d), { recursive: true });
+// Health Connect shows the app's privacy policy from inside the app (the health plugin opens privacypolicy.html)
+copyFileSync(join(root, 'confidentialitate.html'), join(out, 'privacypolicy.html'));
 
 // The barcode reader ships inside the app, so it works offline and no code is downloaded at run time.
 const zx = join(root, 'node_modules/@zxing/library/umd/index.min.js');

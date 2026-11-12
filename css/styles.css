@@ -1579,6 +1579,11 @@ button.lib-main:active{background:color-mix(in srgb,var(--ink) 5%,transparent)}
 #coachSec .lbl em{font-style:normal;font-weight:500;color:var(--muted)}
 #coachSec .hint{margin:4px 0 8px}
 .co-btns{margin-top:14px;flex-wrap:wrap;gap:8px}
+/* Apple Health / Health Connect */
+.tr-steps{margin:-4px 0 12px;font-size:13.5px;color:var(--muted)}
+.tr-steps b{color:var(--ink);font-variant-numeric:tabular-nums}
+.hl-btns{margin-top:10px;flex-wrap:wrap;gap:8px}
+#healthSec .hint{margin-top:10px}
 .wdays button[aria-checked="true"]{background:var(--kcal);color:var(--on-kcal)}
 .lnk{border:0;background:none;padding:0;font:inherit;font-weight:700;color:var(--ink);text-decoration:underline;text-underline-offset:2px;cursor:pointer}
 .pl-foot{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);display:grid;gap:10px;justify-items:start}
