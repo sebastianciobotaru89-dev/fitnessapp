@@ -75,8 +75,10 @@
       <div class="meals-today" id="mealsToday" aria-label="Mesele zilei" hidden></div>
       </div>
       <div class="col col-b">
+      <section class="panel" id="insight" aria-labelledby="inTitle" hidden></section>
       <section class="panel" id="coach" aria-labelledby="coTitle" hidden></section>
       <section class="panel" id="sleep" aria-labelledby="slTitle" hidden></section>
+      <section class="panel" id="stress" aria-labelledby="sxTitle" hidden></section>
       <section class="panel" id="train" aria-labelledby="trTitle" hidden></section>
       <section class="panel" id="med" aria-labelledby="mdTitle" hidden></section>
       <section class="panel" id="water" aria-label="Apă"></section>
@@ -146,7 +148,7 @@
           </div>
           <div class="mfit" id="mFit" aria-live="polite"></div>
           <button class="btn act" data-action="add-manual" id="mAdd">Adaugă</button>
-          <p class="hint">Copiază valorile de pe etichetă. Dacă lași caloriile goale, le calculez din macronutrienți.</p>
+          <p class="hint">Copiază valorile de pe etichetă. Dacă lași caloriile goale, se calculează din macronutrienți.</p>
         </div>
 
         <p class="hint" id="aiNote" hidden style="margin-top:10px">Estimarea automată nu e disponibilă aici, așa că notezi valorile manual.</p>
@@ -163,11 +165,11 @@
     </section>
 
     <section class="screen" id="scr-progres" data-screen="progres" hidden aria-labelledby="hProg">
-      <div class="scr-head"><div><h1 id="hProg">Progres</h1><p>Planul, mușchii, ultimele 7 zile și greutatea</p></div></div>
+      <div class="scr-head"><div><h1 id="hProg">Progres</h1><p>Planul, tiparele, mușchii și greutatea</p></div></div>
       <section class="panel" id="plan" aria-labelledby="plTitle" hidden></section>
+      <section class="panel" id="why" aria-labelledby="whyTitle" hidden></section>
       <section class="panel" id="medp" aria-labelledby="mpTitle" hidden></section>
       <section class="panel" id="muscle" aria-labelledby="muTitle" hidden></section>
-      <section class="panel" id="why" aria-labelledby="whyTitle" hidden></section>
       <section class="panel" id="history" aria-label="Ultimele 7 zile"></section>
       <section class="panel" id="weight" aria-labelledby="wTitle">
         <div class="panel-head"><h2 id="wTitle">Greutate</h2><span class="meta tleg" id="wLeg" hidden>planul</span></div>

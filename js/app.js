@@ -11,10 +11,10 @@ const ACT = [
   { id:'xtra',  f:1.9,   t:'Extrem de activ', d:'Muncă fizică grea și antrenament zilnic' }
 ];
 const GOALS = [
-  { id:'cut',    adj:-0.20, prot:2.2, t:'Slăbire',        d:'Pierd grăsime constant (−20% față de menținere)' },
-  { id:'recomp', adj:-0.10, prot:2.2, t:'Recompoziție',   d:'Pierd grăsime și păstrez sau câștig mușchi (−10%)' },
-  { id:'keep',   adj:0,     prot:1.8, t:'Menținere',      d:'Rămân la greutatea de acum' },
-  { id:'bulk',   adj:0.10,  prot:2.0, t:'Masă musculară', d:'Câștig masă cu un surplus mic (+10%)' }
+  { id:'cut',    adj:-0.20, prot:2.2, t:'Slăbire',        d:'Pierzi grăsime constant (−20% față de menținere)' },
+  { id:'recomp', adj:-0.10, prot:2.2, t:'Recompoziție',   d:'Pierzi grăsime și păstrezi sau câștigi mușchi (−10%)' },
+  { id:'keep',   adj:0,     prot:1.8, t:'Menținere',      d:'Rămâi la greutatea de acum' },
+  { id:'bulk',   adj:0.10,  prot:2.0, t:'Masă musculară', d:'Câștigi masă cu un surplus mic (+10%)' }
 ];
 const FAST_PLANS = [{ id: '14:10', h: 14 }, { id: '16:8', h: 16 }, { id: '18:6', h: 18 }, { id: '20:4', h: 20 }];
 // Why a meal was eaten, one tap per meal; and how long you slept, kept on the morning after
@@ -22,8 +22,19 @@ const WHY = [
   { id: 'hunger', t: 'Foame',       of: 'din foame',          pl: 'mesele din foame' },
   { id: 'stress', t: 'Stres',       of: 'de stres',           pl: 'mesele de stres' },
   { id: 'bored',  t: 'Plictiseală', of: 'de plictiseală',     pl: 'mesele de plictiseală' },
-  { id: 'social', t: 'Social',      of: 'în compania altora', pl: 'mesele în compania altora' }
+  { id: 'social', t: 'Social',      of: 'în compania altora', pl: 'mesele în compania altora' },
+  // inertia: eating because it is the usual time, the usual place, the usual thing, without hunger behind it
+  { id: 'habit',  t: 'Obicei',      of: 'din obicei',         pl: 'mesele din obicei', a: 'Inerție sau obicei' }
 ];
+// Stress: a baseline and how eating changes on stressful days, asked in the interview; then how much stress each day brings
+const STRESS_LV = [{ v: 1, t: 'Deloc' }, { v: 2, t: 'Puțin' }, { v: 3, t: 'Mediu' }, { v: 4, t: 'Mult' }, { v: 5, t: 'Foarte mult' }];
+const STRESS_EAT = [
+  { id: 'more',  t: 'Mănânci mai mult',     d: 'Porții mai mari sau mese în plus' },
+  { id: 'crave', t: 'Vin poftele',          d: 'Dulce, sărat, ronțăit pe fugă' },
+  { id: 'less',  t: 'Mănânci mai puțin',    d: 'Sari peste mese sau uiți să mănânci' },
+  { id: 'same',  t: 'Nu se schimbă mult',   d: 'Mănânci cam la fel' }
+];
+const HIGH_STRESS = 4, LOW_STRESS = 2;
 // Micronutrients, for the whole portion: fibre in g, iron, calcium, vitamin C and potassium in mg, vitamin A, B12 and folate in µg.
 // max100 is the most any food has in 100 g (dried herbs, liver, acerola, parmesan, clams), so anything above is refused.
 const MICRO = [
@@ -104,7 +115,8 @@ function keepTargetHistory(prev, next){
   next.tHist = hist.slice(-60);
   return next;
 }
-function normHabits(h){ return { why: !(h && h.why === false), sleep: !(h && h.sleep === false), train: !(h && h.train === false) }; }
+function normHabits(h){ return { why: !(h && h.why === false), sleep: !(h && h.sleep === false), stress: !(h && h.stress === false), train: !(h && h.train === false) }; }
+function normStress(x){ const b = Number(x && x.base); return x && typeof x === 'object' && b >= 1 && b <= 5 && STRESS_EAT.some(e => e.id === x.eat) ? { base: b, eat: x.eat } : null; }
 function normHealth(h){ return h && typeof h === 'object' && h.on ? { on: true, last: Number(h.last) || 0 } : null; }
 function normCoach(c){
   if (!c || typeof c !== 'object') return null;
@@ -619,6 +631,7 @@ function normDay(d, k){
   if (d && (d.type === 'train' || d.type === 'rest')) out.type = d.type;
   if (d && d.why && typeof d.why === 'object'){ const why = {}; for (const m of MEALS) if (WHY.some(x => x.id === d.why[m.id])) why[m.id] = d.why[m.id]; if (Object.keys(why).length) out.why = why; }
   const sl = num(d && d.sleep); if (sl >= 3 && sl <= 14) out.sleep = r1(sl);
+  if (d && [1, 2, 3, 4, 5].includes(d.stress)) out.stress = d.stress;
   if (d && d.trained === true) out.trained = true;
   const L = d && d.lift;
   if (L && typeof L === 'object' && LIFTS.some(x => x.id === L.ex)){
@@ -633,7 +646,7 @@ function normDay(d, k){
   const st = Math.round(num(d && d.steps)); if (st > 0 && st <= 200000) out.steps = st;
   return out;
 }
-const dayEmpty = d => !d.entries.length && !d.water && !d.weight && !d.type && !d.sleep && !d.why && !d.trained && !d.lift && d.dose == null && d.appetite == null && d.nausea == null && !d.steps;
+const dayEmpty = d => !d.entries.length && !d.water && !d.weight && !d.type && !d.sleep && !d.why && !d.trained && !d.lift && d.dose == null && d.appetite == null && d.nausea == null && !d.steps && !d.stress;
 function normDays(obj){
   const out = {};
   if (obj && typeof obj === 'object') for (const k of Object.keys(obj)) if (/^\d{4}-\d{2}-\d{2}$/.test(k)) {
@@ -662,6 +675,7 @@ function normProfile(p){
     med: normMed(p.med),
     coach: normCoach(p.coach),
     health: normHealth(p.health),
+    stress: normStress(p.stress),
     tHist: normTHist(p.tHist),
     share: p.share === true,
     targets: { kcal: Math.round(kcal), protein: Math.round(num(t.protein) || 0), carbs: Math.round(num(t.carbs) || 0), fat: Math.round(num(t.fat) || 0), water: Math.round(num(t.water) || 2500) }
@@ -733,7 +747,7 @@ function writeError(e){
   const c = e && e.code;
   S.syncErr = true;
   const msg = c === 'quota_exceeded' ? 'Spațiul de stocare e plin. Fă un cod de backup din Profil.'
-    : c === 'invalid_argument' ? 'Nu am putut salva. Verifică dacă ești autentificat în Claude.'
+    : c === 'invalid_argument' ? 'Salvarea nu a mers. Verifică dacă ești autentificat în Claude.'
     : c === 'revoked' ? 'Accesul la date s-a oprit. Reîncarcă pagina.'
     : 'Ultima modificare nu s-a salvat. Reîncarcă pagina și încearcă din nou.';
   toast(msg);
@@ -899,7 +913,7 @@ function maybeMigrate(){
   const p = local && normProfile(local.profile);
   if (!p) return;
   S.profile = p; S.days = normDays(local.days); S.library = normLibrary(local.library);
-  uploadAll(false).then(ok => { if (ok) toast('Am mutat datele din browser în contul tău.'); });
+  uploadAll(false).then(ok => { if (ok) toast('Datele din browser au fost mutate în contul tău.'); });
 }
 function anySheetOpen(){ return $$('.sheet:not(.ghost)').some(s => !s.hidden); }
 /* Light / dark: "auto" follows the phone and the Claude app; light or dark pins it for this app */
@@ -1043,10 +1057,11 @@ function afterLoad(){
 }
 
 /* ---------- consent: health data, AI, age ---------- */
-const CONSENT_V = 5;   // 2: sleep and why you eat joined the journal; 3: training and the reference lift; 4: weight-loss medication; 5: Apple Health / Health Connect
-// What joined the journal since a given consent version, for "Am actualizat acordul"
+const CONSENT_V = 6;   // 2: sleep and why you eat joined the journal; 3: training and the reference lift; 4: weight-loss medication; 5: Apple Health / Health Connect; 6: stress
+// What joined the journal since a given consent version, for "Acordul s-a actualizat"
 const CONSENT_NEW = [[2, 'somnul și motivul pentru care mănânci'], [3, 'antrenamentele, cu cea mai grea serie la un exercițiu'], [4, 'medicația pentru greutate, dacă alegi s-o urmărești: doza, apetitul și greața'],
-  [5, 'pașii și, dacă legi Apple Health sau Health Connect, greutatea, somnul și antrenamentele citite de acolo']];
+  [5, 'pașii și, dacă legi Apple Health sau Health Connect, greutatea, somnul și antrenamentele citite de acolo'],
+  [6, 'stresul: cât stres ai de obicei, cum se schimbă mâncarea în zilele stresante și stresul fiecărei zile']];
 const consentValid = c => !!(c && c.v >= CONSENT_V && c.health && c.age);
 function consentOf(){ const p = S.profile && S.profile.consent, l = normConsent(lsGet('portia-consent')); return consentValid(p) ? p : consentValid(l) ? l : null; }
 function hasConsent(){ return !!consentOf(); }
@@ -1076,13 +1091,13 @@ function renderConsent(){
   const box = (k, req, title, sub) => '<label class="cbox"><input type="checkbox" data-consent="' + k + '"' + (d[k] ? ' checked' : '') + '><span><b>' + title + (req ? '' : ' <em>opțional</em>') + '</b><small>' + sub + '</small></span></label>';
   $('#consentCard').innerHTML =
     '<div class="sbody"><div class="welcome"><span class="wl-logo" aria-hidden="true">' + logoSvg(S.theme, 64) + '</span>' +
-      (upd ? '<h2 id="cTitle" tabindex="-1">Am actualizat acordul</h2><p>Porția notează acum și ' + CONSENT_NEW.filter(x => old.v < x[0]).map(x => x[1]).join('; ') + '. Bifează din nou ca să continui.</p></div>'
-        : '<h2 id="cTitle" tabindex="-1">Bun venit în Porția</h2><p>Îți calculez ținta de calorii și macronutrienți, iar mesele le notezi în câteva secunde.</p></div>') +
+      (upd ? '<h2 id="cTitle" tabindex="-1">Acordul s-a actualizat</h2><p>Porția notează acum și ' + CONSENT_NEW.filter(x => old.v < x[0]).map(x => x[1]).join('; ') + '. Bifează din nou ca să continui.</p></div>'
+        : '<h2 id="cTitle" tabindex="-1">Bun venit în Porția</h2><p>Porția îți calculează ținta de calorii și macronutrienți, iar mesele le notezi în câteva secunde.</p></div>') +
     '<h3 class="cs-t">Înainte să începi</h3>' +
-    '<p>' + (upd ? 'Porția păstrează date despre sănătatea ta, așa că îți cerem din nou acordul explicit. Alegerea pentru AI rămâne cum ai făcut-o.' : 'Porția păstrează date despre sănătatea ta, așa că îți cerem acordul explicit. Nimic nu e bifat dinainte.') + '</p>' +
-    box('health', true, 'Datele despre alimentație, greutate, somn, antrenament și medicație', 'Sunt de acord ca Porția să-mi păstreze mesele, apa, greutatea, țintele, fastingul, somnul, motivul pentru care mănânc, antrenamentele cu seriile notate, pașii, ce citește din Apple Health sau Health Connect dacă le leg și, dacă o notez, medicația pentru greutate (doza, apetitul și greața), ca să-mi calculeze progresul și tiparele. Le văd doar eu și le pot șterge oricând.') +
-    (S.noSample ? '' : box('ai', false, 'Estimări cu AI', 'Sunt de acord ca textul și pozele meselor, plus totalurile zilelor pentru idei și raport, să fie trimise la Claude, un AI al companiei Anthropic, ca să estimeze caloriile. Fără numele sau e-mailul meu. Fără acest acord notez valorile manual.')) +
-    box('age', true, 'Am cel puțin 16 ani', 'Porția nu e pentru copii.') +
+    '<p>' + (upd ? 'Porția păstrează date despre sănătatea ta, așa că îți cere din nou acordul explicit. Alegerea pentru AI rămâne cum ai făcut-o.' : 'Porția păstrează date despre sănătatea ta, așa că îți cere acordul explicit. Nimic nu e bifat dinainte.') + '</p>' +
+    box('health', true, 'Datele despre alimentație, greutate, somn, stres, antrenament și medicație', 'Ești de acord ca Porția să-ți păstreze mesele, apa, greutatea, țintele, fastingul, somnul, stresul, motivul pentru care mănânci, antrenamentele cu seriile notate, pașii, ce citește din Apple Health sau Health Connect, dacă le legi, și, dacă o notezi, medicația pentru greutate (doza, apetitul și greața), ca să-ți calculeze progresul și tiparele. Le vezi doar tu și le poți șterge oricând.') +
+    (S.noSample ? '' : box('ai', false, 'Estimări cu AI', 'Ești de acord ca textul și pozele meselor, plus totalurile zilelor pentru idei și raport, să fie trimise la Claude, un AI al companiei Anthropic, ca să estimeze caloriile. Fără numele sau e-mailul tău. Fără acest acord, valorile le notezi manual.')) +
+    box('age', true, 'Ai cel puțin 16 ani', 'Porția nu e pentru copii.') +
     '<div class="medwarn"><b>Porția nu e un dispozitiv medical.</b> Nu înlocuiește sfatul unui medic sau nutriționist, iar estimările sunt aproximative. Dacă ai o afecțiune, ești însărcinată sau ai avut tulburări de alimentație, vorbește întâi cu medicul.</div>' +
     '<p class="hint">' + (S.noSample ? 'Poți șterge totul oricând, din Profil → Datele tale.' : 'Poți porni sau opri AI-ul și poți șterge totul oricând, din Profil → Datele tale.') + '</p></div>' +
     '<div class="sfoot"><button class="btn primary wide" data-action="consent-ok"' + (d.health && d.age ? '' : ' disabled') + '>Continuă</button></div>';
@@ -1129,7 +1144,7 @@ async function deleteAccount(){
     }
   } catch (e) {
     S.restoring = false;
-    if (err) err.textContent = 'Nu am putut șterge tot. Verifică conexiunea și încearcă din nou.';
+    if (err) err.textContent = 'Ștergerea nu a mers până la capăt. Verifică conexiunea și încearcă din nou.';
     if (btn){ btn.disabled = false; btn.textContent = 'Șterge definitiv'; }
     return;
   }
@@ -1215,7 +1230,7 @@ const ERR_MSG = {
   session_expired: 'Sesiunea Claude a expirat. Autentifică-te din nou, apoi reîncearcă.',
   image_rejected: 'Poza nu a putut fi citită. Alege altă poză, JPG sau PNG.',
   refused: 'Cererea nu a putut fi procesată. Descrie doar ce ai mâncat.',
-  empty_completion: 'Nu am primit niciun răspuns. Reformulează mai simplu.',
+  empty_completion: 'Nu a venit niciun răspuns. Reformulează mai simplu.',
   invalid_json: 'Răspunsul nu a putut fi citit. Încearcă din nou.',
   prompt_too_large: 'Textul e prea lung. Scurtează-l și încearcă din nou.'
 };
@@ -1264,7 +1279,7 @@ async function estimate(kind, follow){
     const res = await sample.json(buildPrompt(kind, text), opts);
     if (ctl.signal.aborted) return;
     const items = itemsFrom(res && res.items);
-    if (!items.length){ showErr((res && res.note) ? String(res.note) : 'Nu am găsit alimente. Adaugă mai multe detalii.'); return; }
+    if (!items.length){ showErr((res && res.note) ? String(res.note) : 'Nu s-au găsit alimente. Adaugă mai multe detalii.'); return; }
     const conf = String(res.confidence || '').toLowerCase();
     const q = String(res.intrebare || '').trim().slice(0, 160);
     // a meal with an item that failed the checks can't be "sure", whatever the model said
@@ -1309,7 +1324,7 @@ async function getIdeas(){
     const list = (res && Array.isArray(res.ideas) ? res.ideas : []).map(i => ({
       title: String(i && i.title || '').slice(0, 80), why: String(i && i.why || '').slice(0, 220), items: itemsFrom(i && i.items)
     })).filter(i => i.title && i.items.length).slice(0, 3);
-    S.ideas = list.length ? { state: 'done', meal, list, rem: rem.kcal } : { state: 'error', meal, msg: 'Nu am primit idei potrivite. Încearcă din nou.' };
+    S.ideas = list.length ? { state: 'done', meal, list, rem: rem.kcal } : { state: 'error', meal, msg: 'Nu au venit idei potrivite. Încearcă din nou.' };
   } catch (e) {
     const m = sampleErrMsg(e);
     S.ideas = m ? { state: 'error', meal, msg: m } : null;
@@ -1351,7 +1366,7 @@ async function onPhoto(file){
     $('#photoSub').textContent = 'Atinge ca să alegi alta';
     $('#photoBtn').disabled = false;
   } catch (e) {
-    showErr('Nu am putut deschide poza. Încearcă una în format JPG sau PNG.');
+    showErr('Poza nu s-a putut deschide. Încearcă una în format JPG sau PNG.');
   }
 }
 function clearPhoto(){
@@ -1557,7 +1572,7 @@ function setAdaptAuto(on){
   if (!S.profile) return;
   S.profile = Object.assign(clone(S.profile), { adapt: Object.assign({ last: 0 }, S.profile.adapt || {}, { auto: on }) });
   saveProfile(); renderAdapt();
-  toast(on ? 'Ținta se va ajusta singură o dată pe săptămână.' : 'Ajustarea automată e oprită. Ți-o propun doar aici.');
+  toast(on ? 'Ținta se va ajusta singură o dată pe săptămână.' : 'Ajustarea automată e oprită. Ținta nouă apare doar aici, ca propunere.');
 }
 function renderAdapt(){
   const el = $('#adapt'); if (!el) return;
@@ -1571,7 +1586,7 @@ function renderAdapt(){
     if (A.need.days) left.push(A.need.days + (A.need.days === 1 ? ' zi notată' : ' zile notate'));
     if (A.need.weights) left.push(A.need.weights + (A.need.weights === 1 ? ' cântărire' : ' cântăriri'));
     if (!left.length && (A.need.span || A.need.wspan)) left.push('încă ' + Math.max(A.need.span, A.need.wspan) + ' zile de date');
-    el.innerHTML = '<div class="adapt">' + head + '<p>Calculez cât arzi de fapt, din ce mănânci și cum se mișcă greutatea. Am nevoie de cel puțin 2 săptămâni cu mese notate și câteva cântăriri dimineața.</p>' +
+    el.innerHTML = '<div class="adapt">' + head + '<p>Porția calculează cât arzi de fapt, din ce mănânci și cum se mișcă greutatea. E nevoie de cel puțin 2 săptămâni cu mese notate și câteva cântăriri dimineața.</p>' +
       '<div class="adapt-prog"><span><i style="width:' + pct + '%"></i></span><small>Mai ai nevoie de ' + left.join(' și ') + '.</small></div></div>';
     return;
   }
@@ -1579,9 +1594,9 @@ function renderAdapt(){
   const sw = A.slopeWeek, moved = Math.abs(sw) < 0.05 ? 'a rămas aproape la fel' : (sw < 0 ? 'a scăzut ' : 'a crescut ') + (Math.abs(sw) < 0.05 ? '' : fmt1(Math.abs(sw)) + ' kg pe săptămână');
   const body = '<p>Ai mâncat în medie <strong>' + fmt(A.intake) + ' kcal</strong> pe zi, iar greutatea ' + moved + '. Asta înseamnă că arzi cam <strong>' + fmt(A.tdee) + ' kcal</strong> pe zi.</p>' +
     (recent
-      ? '<p>Pe ' + esc(shortDate(keyOf(new Date(last)))) + ' am ajustat ținta la <strong>' + fmt(A.cur) + ' kcal</strong>. Las câteva zile să se vadă efectul. Următoarea ajustare e posibilă de pe ' + esc(shortDate(keyOf(new Date(last + 7 * 864e5)))) + ', ' + (auto ? 'singură.' : 'din acest card.') + '</p>'
+      ? '<p>Pe ' + esc(shortDate(keyOf(new Date(last)))) + ', ținta s-a ajustat la <strong>' + fmt(A.cur) + ' kcal</strong>. Lasă câteva zile să se vadă efectul. Următoarea ajustare e posibilă de pe ' + esc(shortDate(keyOf(new Date(last + 7 * 864e5)))) + ', ' + (auto ? 'singură.' : 'din acest card.') + '</p>'
       : adaptDue(A)
-        ? '<p>' + adaptReason(A) + (A.kcal !== A.ideal ? ' Ca să nu fie o schimbare bruscă, o mut treptat: întâi la <strong>' + fmt(A.kcal) + ' kcal</strong> (acum ai ' + fmt(A.cur) + ').' : Math.abs(A.diff) >= 50 ? ' Acum ai ' + fmt(A.cur) + '.' : '') + '</p>' +
+        ? '<p>' + adaptReason(A) + (A.kcal !== A.ideal ? ' Ca să nu fie o schimbare bruscă, ținta se mută treptat: întâi la <strong>' + fmt(A.kcal) + ' kcal</strong> (acum ai ' + fmt(A.cur) + ').' : Math.abs(A.diff) >= 50 ? ' Acum ai ' + fmt(A.cur) + '.' : '') + '</p>' +
           (A.pdiff ? '<p>Media greutății e ' + fmt1(A.avg) + ' kg, așa că proteinele trec la <strong>' + fmt(A.protein) + ' g</strong> (' + fmt1(A.perKg) + ' g pe kg, ca până acum).</p>' : '') +
           '<div class="row"><button class="btn primary sm" data-action="adapt-apply">' + (Math.abs(A.diff) >= 50 ? 'Aplică ' + fmt(A.kcal) + ' kcal' + (A.pdiff ? ' și ' + fmt(A.protein) + ' g proteine' : '') : 'Aplică ' + fmt(A.protein) + ' g proteine') + '</button></div>'
         : '<p>Ținta ta de acum, ' + fmt(A.cur) + ' kcal, e potrivită ' + (A.plan ? 'pentru planul tău' : 'pentru ' + esc(A.goal.t.toLowerCase())) + '.</p>');
@@ -1811,7 +1826,7 @@ function renderPlan(){
   const head = '<div class="panel-head"><h2 id="plTitle">' + (hold ? 'Mentenanță' : 'Aliniere cu planul') + '</h2>' + (P ? '<span class="meta">' + (hold ? 'zona ' + zoneTxt : P.dir ? fmt1(P.pl.from) + ' → ' + fmt1(P.pl.to) + ' kg' : 'în jur de ' + fmt1(P.pl.from) + ' kg') + '</span>' : '') + '</div>';
   if (!P){
     el.innerHTML = head + '<div class="align"><div class="al-g">' + alGauge(0, true) + '</div></div>' +
-      '<p class="pl-cta">Spune-mi ce greutate vrei să ai și îți fac planul: cât de repede, până când și, pe parcurs, dacă ești pe drum.</p>' +
+      '<p class="pl-cta">Alege greutatea pe care vrei s-o ai și primești planul: cât de repede, până când și, pe parcurs, dacă ești pe drum.</p>' +
       '<button class="btn primary wide" data-action="plan-open">Fă-ți planul</button>';
     return;
   }
@@ -1888,7 +1903,7 @@ function renderPlan(){
   else if (A && adaptDue(A) && !auto && !hold) lines.push('<b>Ținta de calorii:</b> pentru plan ar trebui ' + fmt(Math.abs(A.diff) >= 50 ? A.kcal : A.cur) + ' kcal' + (A.pdiff ? ' și ' + fmt(A.protein) + ' g proteine' : '') + ' (acum ' + fmt(A.cur) + ' kcal). O aplici din Ținta inteligentă, la Greutate.');
   const F = P.food;
   lines.push(F.logged >= 3 ? '<b>Mâncarea, ultimele 7 zile:</b> ' + F.inT + ' din ' + F.logged + ' zile notate complet au fost în țintă (±10%), în medie ' + fmt(F.avg) + ' kcal din ' + fmt(F.target) + '.'
-    : '<b>Mâncarea:</b> notează mesele câteva zile la rând ca să văd dacă mănânci după plan.');
+    : '<b>Mâncarea:</b> notează mesele câteva zile la rând ca să se vadă dacă mănânci după plan.');
   body += '<div class="pl-lines">' + lines.map(l => '<p>' + l + '</p>').join('') + '</div>';
   if (hold && canApply) body += '<div class="row pl-act"><button class="btn primary sm" data-action="adapt-apply">Aplică ' + fmt(Math.abs(A.diff) >= 50 ? A.kcal : A.cur) + ' kcal' + (A.pdiff ? ' și ' + fmt(A.protein) + ' g proteine' : '') + '</button></div>';
   const ahead = P.slope ? Math.max(1, Math.ceil((P.tol - Math.abs(P.off)) / Math.abs(P.slope))) : 0;
@@ -2053,7 +2068,7 @@ function renderMuscle(){
   const pct = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(Math.round(v * 100)) + '%';
   const head = '<div class="panel-head"><h2 id="muTitle">Mușchii tăi</h2><span class="meta">ultimele 4 săptămâni</span></div>';
   if (!M.days && !M.ever){
-    el.innerHTML = head + '<p class="wy-lead">Când slăbești, vrei să pierzi grăsime, nu mușchi. Aici îți arăt dacă reușești: proteinele, antrenamentele și forța, lângă greutate.</p>' +
+    el.innerHTML = head + '<p class="wy-lead">Când slăbești, vrei să pierzi grăsime, nu mușchi. Aici vezi dacă reușești: proteinele, antrenamentele și forța, lângă greutate.</p>' +
       '<p class="hint">Notează mesele câteva zile și bifează pe Azi când te antrenezi. Dacă vrei, notează și cea mai grea serie la ' + lift + '.</p>';
     return;
   }
@@ -2069,7 +2084,7 @@ function renderMuscle(){
   if (M.ever) lines.push('<b>Antrenamente:</b> ' + (M.sessions === 0 ? 'niciunul' : M.sessions === 1 ? 'unul' : M.sessions) + ' în ultimele 4 săptămâni, cam ' + fmt1(M.perWeek) + ' pe săptămână.');
   if (M.now) lines.push('<b>Forța la ' + lift + ':</b> cea mai grea serie din ultimele 2 săptămâni, ' + fmt1(M.now.kg) + ' kg × ' + M.now.reps + ', înseamnă cam ' + fmt(M.now.v) + ' kg la o repetare' +
     (M.before ? '. În cele 3 săptămâni de dinainte: ' + fmt(M.before.v) + ' kg (' + pct(M.change) + ').' : '.'));
-  else if (M.before) lines.push('<b>Forța la ' + lift + ':</b> ultima serie notată e mai veche de 2 săptămâni. Notează una ca să văd cum evoluează.');
+  else if (M.before) lines.push('<b>Forța la ' + lift + ':</b> ultima serie notată e mai veche de 2 săptămâni. Notează una ca să se vadă cum evoluează.');
   // what it means: only from the numbers above, with the counts in view
   const notes = [], fast = M.slope != null && -M.slope > M.w * PLAN_MAX_LOSS;
   if (M.losing && M.change != null && M.change <= -STRENGTH_DROP){
@@ -2114,9 +2129,9 @@ function stopMed(){
   const m = medOf(); if (!m || m.stop) return;
   const old = clone(S.profile);
   setMed({ stop: todayKey() });
-  toast('Am notat oprirea. Urmăresc mai atent următoarele 12 săptămâni.', 'Anulează', () => { S.profile = old; saveProfile(); renderAll(); if (S.screen === 'profil') renderSettings(); });
+  toast('Oprirea e notată. Următoarele 12 săptămâni sunt urmărite mai atent.', 'Anulează', () => { S.profile = old; saveProfile(); renderAll(); if (S.screen === 'profil') renderSettings(); });
 }
-function resumeMed(){ if (!medOf()) return; setMed({ stop: null }); toast('Am notat că ai reluat tratamentul.'); }
+function resumeMed(){ if (!medOf()) return; setMed({ stop: null }); toast('Reluarea tratamentului e notată.'); }
 // The dose noted before day k: the placeholder, so the same dose is noted in one tap
 function lastDose(k){ for (let i = 1; i <= 120; i++){ const d = S.days[addDays(k, -i)]; if (d && d.dose != null) return d.dose; } return null; }
 function saveDose(){
@@ -2194,7 +2209,7 @@ function renderMedP(){
     if (M.slope != null && M.nowW && -M.slope > M.nowW * PLAN_MAX_LOSS) notes.push(['warn', 'Slăbești ' + fmtRate(M.slope) + ' kg pe săptămână, peste 1% din greutate. Pe medicație se întâmplă des, dar crește riscul să pierzi și mușchi: mănâncă proteinele întregi, antrenează-te de forță și spune-i medicului ritmul.']);
     if (MS.days >= 7 && MS.ok < MS.days * 0.5) notes.push(['tip', 'Cu apetit mic, proteinele rămân ușor sub țintă: ' + (MS.ok ? 'le-ai atins în ' + MS.ok + ' din ' + MS.days + ' zile' : 'nu le-ai atins în niciuna din cele ' + cnt(MS.days, 'zile')) + '. Începe fiecare masă cu partea de proteine.']);
     if (M.hard7 >= 3) notes.push(['warn', 'Ai avut greață moderată sau puternică în ' + M.hard7 + ' din ultimele 7 zile. Vorbește cu medicul dacă nu trece.']);
-    foot = '<div class="row md-foot">' + report + '<button class="btn ghost sm" data-action="med-stop">Am oprit tratamentul</button></div>' +
+    foot = '<div class="row md-foot">' + report + '<button class="btn ghost sm" data-action="med-stop">Notează oprirea</button></div>' +
       '<p class="hint">Porția nu recomandă doze și nu înlocuiește medicul. Raportul are doar ce ai notat tu și rămâne pe telefon până îl trimiți.</p>';
   } else {
     const wk = Math.floor(M.sinceStop / 7) + 1, dS = M.stopW && M.nowW ? M.nowW - M.stopW : null, P = S.profile.plan;
@@ -2202,14 +2217,14 @@ function renderMedP(){
     head = '<div class="panel-head"><h2 id="mpTitle">După medicație</h2><span class="meta">' + (ph === 'after' ? 'săptămâna ' + wk + ' din 12' : 'cele 12 săptămâni s-au încheiat') + '</span></div>';
     tiles = '<dl class="hstats"><div><dt>La oprire</dt><dd>' + (M.stopW ? fmt1(M.stopW) + '<small> kg</small>' : '–') + '</dd></div>' +
       '<div><dt>Acum</dt><dd>' + (M.nowW ? fmt1(M.nowW) + '<small> kg' + (dS != null ? ', ' + kgSigned(dS) : '') + '</small>' : '–') + '</dd></div></dl>';
-    lines.unshift('Ai oprit pe ' + esc(planDate(M.m.stop)) + (M.weeks ? ', după ' + nWeeks(M.weeks) + ' de tratament' : '') + '. După oprire, apetitul revine de obicei, iar o parte din kilograme pot reveni.' + (ph === 'after' ? ' În aceste 12 săptămâni urmăresc mai atent greutatea.' : ''));
+    lines.unshift('Ai oprit pe ' + esc(planDate(M.m.stop)) + (M.weeks ? ', după ' + nWeeks(M.weeks) + ' de tratament' : '') + '. După oprire, apetitul revine de obicei, iar o parte din kilograme pot reveni.' + (ph === 'after' ? ' În aceste 12 săptămâni, greutatea e urmărită mai atent.' : ''));
     if (dS != null){
       if (dS > 1) notes.push(['warn', 'Ai pus la loc ' + fmt1(dS) + ' kg de la oprire. Acum e cel mai ușor de oprit: proteine la fiecare masă, legume și fibre, antrenament de forță și somn. ' +
         (holdOn ? 'Ținta inteligentă coboară puțin caloriile când ieși din zona de mentenanță.' : 'Pornește mentenanța, ca ținta de calorii să te țină în zonă.') + ' Dacă urcă în continuare, vorbește cu medicul.']);
       else notes.push(['good', dS <= 0 ? 'Greutatea se ține de la oprire (' + kgSigned(dS) + ').' : 'Greutatea se ține: ' + kgSigned(dS) + ' de la oprire, în marja obișnuită.']);
     }
     foot = '<div class="row md-foot">' + (!holdOn && M.stopW && ph === 'after' ? '<button class="btn primary sm" data-action="med-hold">Pornește mentenanța la ' + fmt1(M.stopW) + ' kg</button>' : '') + report +
-      '<button class="btn ghost sm" data-action="med-resume">Am reluat tratamentul</button></div>';
+      '<button class="btn ghost sm" data-action="med-resume">Notează reluarea</button></div>';
   }
   if (M.apN) lines.push('<b>Apetitul, 4 săptămâni:</b> mic ' + M.ap[1] + ', normal ' + M.ap[2] + ', mare ' + M.ap[3] + (M.apN === 1 ? ' (o zi notată).' : ', din ' + cnt(M.apN, 'zile notate') + '.'));
   el.innerHTML = head + tiles + '<div class="pl-lines">' + lines.map(l => '<p>' + l + '</p>').join('') + '</div>' +
@@ -2251,7 +2266,7 @@ async function medReport(){
   L.push('- greață, zile notate: deloc ' + M.nz[0] + ', ușoară ' + M.nz[1] + ', moderată ' + M.nz[2] + ', puternică ' + M.nz[3]);
   L.push('', 'Porția nu e un dispozitiv medical și nu recomandă doze. Caloriile și proteinele sunt estimări din jurnalul alimentar.');
   const ok = await saveTextFile('portia-raport-medic-' + today + '.txt', L.join('\n'));
-  toast(ok ? (NATIVE ? 'Raportul e gata de trimis.' : 'Raportul s-a descărcat.') : 'Nu am putut crea raportul.');
+  toast(ok ? (NATIVE ? 'Raportul e gata de trimis.' : 'Raportul s-a descărcat.') : 'Raportul nu s-a putut crea.');
 }
 
 /* ---------- Porția Pro, the first step: a weekly report the person sends their coach or nutritionist ---------- */
@@ -2320,15 +2335,17 @@ function coachReport(){
     if (stepDays) L.push('- pași: în medie ' + fmt(steps / stepDays) + ' pe zi');
   }
   if (C.inc.habits){
-    let sl = 0, sn = 0, short = 0; const why = {};
+    let sl = 0, sn = 0, short = 0, sx = 0, sxn = 0, hard = 0; const why = {};
     for (let i = 6; i >= 0; i--){
       const d = S.days[addDays(today, -i)]; if (!d) continue;
       if (d.sleep){ sl += d.sleep; sn++; if (d.sleep <= SHORT_SLEEP) short++; }
+      if (d.stress){ sx += d.stress; sxn++; if (d.stress >= HIGH_STRESS) hard++; }
       if (d.why) for (const m in d.why) why[d.why[m]] = (why[d.why[m]] || 0) + 1;
     }
     const wl = WHY.filter(r => why[r.id]).map(r => r.t.toLowerCase() + ' ' + why[r.id]);
-    if (sn || wl.length){
-      L.push('', 'SOMN ȘI MOTIVE');
+    if (sn || sxn || wl.length){
+      L.push('', 'SOMN, STRES ȘI MOTIVE');
+      if (sxn) L.push('- stres: în medie ' + fmt1(sx / sxn) + ' din 5, din ' + (sxn === 1 ? 'o zi notată' : sxn + ' zile notate') + (hard ? '; ' + (hard === 1 ? 'o zi' : hard + ' zile') + ' cu stres mare' : ''));
       if (sn) L.push('- somn: în medie ' + fmt1(sl / sn) + ' h, din ' + (sn === 1 ? 'o noapte notată' : sn + ' nopți notate') + (short ? '; ' + (short === 1 ? 'o noapte scurtă' : short + ' nopți scurte') : ''));
       if (wl.length) L.push('- motivele meselor: ' + wl.join(', '));
     }
@@ -2354,7 +2371,7 @@ async function sendCoach(){
   const C = coachOf(); if (!C) return;
   const r = await shareText('Raport săptămânal', coachReport());
   if (r === 'cancel') return;
-  if (!r){ toast('Nu am putut pregăti raportul. Încearcă din nou.'); return; }
+  if (!r){ toast('Raportul nu s-a putut pregăti. Încearcă din nou.'); return; }
   setCoach({ sent: todayKey() });
   toast(r === 'copied' ? 'Raportul e copiat. Lipește-l în conversația cu ' + (C.name || 'antrenorul tău') + '.' : 'Raportul e gata de trimis.');
 }
@@ -2410,13 +2427,13 @@ async function connectHealth(){
     return;
   }
   const st = await nat('Health', 'requestAuthorization', { read: HEALTH_READ, write: [] });
-  if (!st || st === true){ toast('Nu am primit acces la ' + healthName() + '.'); return; }
+  if (!st || st === true){ toast('Accesul la ' + healthName() + ' nu a fost dat.'); return; }
   setHealth({ on: true, last: 0 });
   await syncHealth(true);
 }
 function disconnectHealth(){
   const old = healthOf(); setHealth(null);
-  toast('Nu mai citesc din ' + healthName() + '. Ce am citit deja rămâne în jurnal.', 'Anulează', () => setHealth(old));
+  toast('Legătura cu ' + healthName() + ' e oprită. Ce s-a citit deja rămâne în jurnal.', 'Anulează', () => setHealth(old));
 }
 const isoStart = k => parseKey(k).toISOString();
 // Sleep segments belong to the morning they lead to: shifted by 6 hours, a night ending at 23:40 counts for the next day
@@ -2462,7 +2479,7 @@ async function syncHealth(force){
   if (n.days) renderAll();
   if (force){
     const parts = [n.w ? (n.w === 1 ? 'o cântărire' : cnt(n.w, 'cântăriri')) : '', n.sl ? (n.sl === 1 ? 'o noapte' : cnt(n.sl, 'nopți')) : '', n.tr ? (n.tr === 1 ? 'un antrenament' : cnt(n.tr, 'antrenamente')) : ''].filter(Boolean);
-    toast(parts.length ? 'Am citit din ' + healthName() + ': ' + parts.join(', ') + '.' : 'Am citit din ' + healthName() + '. Nimic nou de adăugat în jurnal.', null, null, Object.keys(got.st).length ? { sub: 'Pașii apar pe Azi, la Antrenament.' } : null);
+    toast(parts.length ? 'Din ' + healthName() + ' au intrat în jurnal: ' + parts.join(', ') + '.' : 'Citirea din ' + healthName() + ' e gata. Nimic nou de adăugat în jurnal.', null, null, Object.keys(got.st).length ? { sub: 'Pașii apar pe Azi, la Antrenament.' } : null);
   }
   return n.days;
 }
@@ -2478,7 +2495,8 @@ const WHY_ICON = {
   stress: '<path d="M13.5 3 6.5 13H12l-1 8 7-10.5h-5.6z"/>',
   bored: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
   social: '<circle cx="9" cy="8.5" r="3"/><path d="M3.5 19.5c.7-3 2.8-4.7 5.5-4.7s4.8 1.7 5.5 4.7"/><circle cx="16.8" cy="9.3" r="2.4"/><path d="M15.8 14.6c2.3 0 4.1 1.4 4.7 4"/>',
-  sleep: '<path d="M19 14.6A7.6 7.6 0 0 1 9.4 5a7.6 7.6 0 1 0 9.6 9.6z"/>'
+  sleep: '<path d="M19 14.6A7.6 7.6 0 0 1 9.4 5a7.6 7.6 0 1 0 9.6 9.6z"/>',
+  habit: '<path d="M4.5 12a7.5 7.5 0 0 1 12.8-5.3L20 9.5"/><path d="M20 4.5v5h-5"/><path d="M19.5 12a7.5 7.5 0 0 1-12.8 5.3L4 14.5"/><path d="M4 19.5v-5h5"/>'
 };
 const whyIcon = k => '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + WHY_ICON[k] + '</svg>';
 function setHabit(key, on){
@@ -2488,25 +2506,26 @@ function setHabit(key, on){
 }
 function whyStats(){
   const today = todayKey(), meals = [], days = [];
-  let tagged = 0, slept = 0;
+  let tagged = 0, slept = 0, stressed = 0;
   for (let i = WHY_WIN - 1; i >= 0; i--){
     const k = addDays(today, -i), d = S.days[k]; if (!d) continue;
     const why = d.why || {}; let any = false;
     for (const m of MEALS){
       const list = d.entries.filter(e => e.meal === m.id); if (!list.length) continue;
       const w = why[m.id] || null; if (w) any = true;
-      meals.push({ k, meal: m.id, kcal: list.reduce((a, e) => a + e.kcal, 0), why: w, sleep: d.sleep || null });
+      meals.push({ k, meal: m.id, kcal: list.reduce((a, e) => a + e.kcal, 0), why: w, sleep: d.sleep || null, stress: d.stress || null });
     }
     if (any) tagged++;
     if (d.sleep) slept++;
+    if (d.stress) stressed++;
     if (i === 0) continue;   // today is not over yet
     const t = dayTotals(d), T = targetsFor(k);
     if (!T || !t.n || t.kcal < Math.max(800, T.kcal * 0.5)) continue;   // only days logged in full
-    days.push({ k, over: t.kcal > T.kcal * 1.1, dinner: d.entries.filter(e => e.meal === 'dinner').reduce((a, e) => a + e.kcal, 0), sleep: d.sleep || null, whys: Object.values(why) });
+    days.push({ k, kcal: t.kcal, stress: d.stress || null, over: t.kcal > T.kcal * 1.1, dinner: d.entries.filter(e => e.meal === 'dinner').reduce((a, e) => a + e.kcal, 0), sleep: d.sleep || null, whys: Object.values(why) });
   }
   const tm = meals.filter(x => x.why), count = {};
   WHY.forEach(r => { count[r.id] = tm.filter(x => x.why === r.id).length; });
-  const out = { tagged, slept, n: tm.length, count, ready: tagged >= WHY_READY, list: [] };
+  const out = { tagged, slept, stressed, n: tm.length, count, ready: tagged >= WHY_READY, list: [] };
   if (!out.ready) return out;
   const avg = a => a.reduce((s, v) => s + v, 0) / a.length, pc = v => Math.round(v * 100) + '%';
   const slot = {}; MEALS.forEach(m => { const v = meals.filter(x => x.meal === m.id).map(x => x.kcal); slot[m.id] = v.length ? avg(v) : 0; });
@@ -2562,7 +2581,28 @@ function whyStats(){
       text: 'După nopți scurte, <b>' + pc(q6) + ' din mese</b> nu sunt din foame, față de ' + pc(q7) + ' după nopți mai lungi.',
       bars: [{ t: 'După nopți scurte', v: q6, s: pc(q6), c: 'sleep' }, { t: 'După nopți mai lungi', v: q7, s: pc(q7) }] });
   }
-  // 5. when a reason shows up in the day
+  // 5. stressful days against calm ones; with the interview answer, what was said against what the journal shows
+  const HS = days.filter(d => d.stress >= HIGH_STRESS), LS = days.filter(d => d.stress && d.stress <= LOW_STRESS), P = S.profile && S.profile.stress;
+  if (HS.length >= WHY_MIN && LS.length >= WHY_MIN){
+    const kh = avg(HS.map(d => d.kcal)), kl = avg(LS.map(d => d.kcal)), diff = kh - kl, n = cnt(HS.length, 'zile') + ' cu stres mare și ' + LS.length + ' calme';
+    const bars = [{ t: 'Zile cu stres mare', v: kh, s: fmt(kh) + ' kcal', c: 'stress' }, { t: 'Zile calme', v: kl, s: fmt(kl) + ' kcal' }];
+    const shows = diff >= 150 ? 'mai mult' : diff <= -150 ? 'mai puțin' : 'cam la fel';
+    if (P){
+      const said = { more: 'mănânci mai mult', crave: 'vin poftele', less: 'mănânci mai puțin', same: 'mâncarea nu se schimbă mult' }[P.eat];
+      const match = P.eat === 'less' ? diff <= -150 : P.eat === 'same' ? Math.abs(diff) < 150 : diff >= 150;
+      out.list.push({ score: match ? 0.9 : 1.2, icon: 'stress', n, sig: 'x-said', bars,
+        text: 'La interviu ai spus că, în zilele stresante, <b>' + said + '</b>. Jurnalul ' + (match ? 'confirmă' : 'arată altceva') + ': în zilele cu stres mare mănânci <b>' + shows + '</b>, ' + fmt(kh) + ' kcal față de ' + fmt(kl) + ' în zilele calme.' });
+    } else if (Math.abs(diff) >= 150) out.list.push({ score: Math.abs(diff) / kl, icon: 'stress', n, sig: 'x', bars,
+      text: 'În zilele cu <b>stres mare</b> mănânci <b>' + shows + '</b>: în medie ' + fmt(kh) + ' kcal, față de ' + fmt(kl) + ' în zilele calme.' });
+  }
+  const MH = tm.filter(x => x.stress >= HIGH_STRESS), ML = tm.filter(x => x.stress && x.stress <= LOW_STRESS);
+  if (MH.length >= 6 && ML.length >= 6){
+    const qh = MH.filter(x => x.why !== 'hunger').length / MH.length, ql = ML.filter(x => x.why !== 'hunger').length / ML.length;
+    if (qh - ql >= 0.2) out.list.push({ score: qh - ql, icon: 'stress', n: cnt(MH.length + ML.length, 'mese'), pct: true, sig: 'xq',
+      text: 'În zilele cu stres mare, <b>' + pc(qh) + ' din mese</b> nu sunt din foame, față de ' + pc(ql) + ' în zilele calme.',
+      bars: [{ t: 'Zile cu stres mare', v: qh, s: pc(qh), c: 'stress' }, { t: 'Zile calme', v: ql, s: pc(ql) }] });
+  }
+  // 6. when a reason shows up in the day
   for (const r of WHY){
     if (r.id === 'hunger') continue;
     const R = tm.filter(x => x.why === r.id); if (R.length < 5) continue;
@@ -2581,14 +2621,15 @@ function renderWhy(){
   const on = !!S.profile && habitsOf().why; el.hidden = !on; if (!on){ el.innerHTML = ''; return; }
   const W = whyStats();
   const head = '<div class="panel-head"><h2 id="whyTitle">De ce mănânci</h2><span class="meta">ultimele 6 săptămâni</span></div>';
-  // how the tagged meals split between the four reasons
+  // how the tagged meals split between the reasons
   const dist = W.n ? '<div class="wy-dist"><div class="wy-stack" role="img" aria-label="' + esc(W.n + ' mese cu motiv: ' + WHY.map(r => r.t.toLowerCase() + ' ' + Math.round(W.count[r.id] / W.n * 100) + '%').join(', ')) + '">' +
       WHY.map(r => W.count[r.id] ? '<i data-r="' + r.id + '" style="flex:' + W.count[r.id] + '"></i>' : '').join('') + '</div>' +
       '<ul class="wy-leg" aria-hidden="true">' + WHY.map(r => '<li data-r="' + r.id + '"><i></i>' + r.t + ' <b>' + Math.round(W.count[r.id] / W.n * 100) + '%</b></li>').join('') + '</ul>' +
       '<p class="hint">' + (W.n === 1 ? 'O masă' : cnt(W.n, 'mese')) + ' cu motiv notat.</p></div>' : '';
-  const sleepHint = W.slept < 7 ? '<p class="hint wy-sleep">Notează și somnul dimineața, pe Azi: așa văd dacă nopțile scurte schimbă ce mănânci.</p>' : '';
+  const notes = [W.slept < 7 && habitsOf().sleep ? 'somnul dimineața' : '', W.stressed < 7 && habitsOf().stress ? 'stresul zilei' : ''].filter(Boolean);
+  const sleepHint = notes.length ? '<p class="hint wy-sleep">Notează și ' + notes.join(' și ') + ', pe Azi: așa se vede dacă nopțile scurte sau zilele grele schimbă ce mănânci.</p>' : '';
   if (!W.ready){
-    el.innerHTML = head + '<p class="wy-lead">După fiecare masă alegi dintr-o atingere de ce ai mâncat: foame, stres, plictiseală sau social. După ' + WHY_READY + ' zile îți arăt aici tiparele tale.</p>' +
+    el.innerHTML = head + '<p class="wy-lead">După fiecare masă alegi dintr-o atingere de ce ai mâncat: foame, stres, plictiseală, social sau obicei. După ' + WHY_READY + ' zile apar aici tiparele tale.</p>' +
       '<div class="wy-prog"><div class="pl-bar" role="img" aria-label="' + W.tagged + ' din ' + WHY_READY + ' zile"><i class="pl-fill" style="width:' + (Math.min(1, W.tagged / WHY_READY) * 100).toFixed(1) + '%"></i></div>' +
       '<p><b>' + W.tagged + ' din ' + WHY_READY + ' zile</b> cu motive notate.</p></div>' + dist + sleepHint;
     return;
@@ -2599,8 +2640,18 @@ function renderWhy(){
   }).join('') + '</div>' : '';
   const cards = W.list.slice(0, 4).map(x => '<article class="wy-card" data-r="' + x.icon + '"><span class="wy-ic">' + whyIcon(x.icon) + '</span><div class="wy-body"><p>' + x.text + '</p>' + bars(x) + '<small>Din ' + x.n + '.</small></div></article>').join('');
   el.innerHTML = head + dist + (cards ? '<h3 class="wy-h">Tiparele tale</h3><div class="wy-cards">' + cards + '</div>'
-      : '<p class="wy-lead">Încă nu văd un tipar clar: mănânci cam la fel, indiferent de motiv' + (W.slept >= 7 ? ' și de somn' : '') + '. Verific din nou pe măsură ce se adună zilele.</p>') +
+      : '<p class="wy-lead">Încă nu se vede un tipar clar: mănânci cam la fel, indiferent de motiv' + (W.slept >= 7 ? ' și de somn' : '') + '. Tiparele apar pe măsură ce se adună zilele.</p>') +
     sleepHint + '<p class="hint wy-note">Sunt observații din jurnalul tău, nu un diagnostic: arată ce apare împreună, nu neapărat de ce. Le calculează aplicația, nu AI-ul.</p>';
+}
+
+// Azi: one of the strongest patterns from Progres, a different one each day, so the behaviour side is in view daily
+function renderInsight(){
+  const el = $('#insight'); if (!el) return;
+  const W = S.profile && habitsOf().why && S.view === todayKey() ? whyStats() : null, list = W && W.ready ? W.list.slice(0, 3) : [];
+  el.hidden = !list.length; if (!list.length){ el.innerHTML = ''; return; }
+  const x = list[Math.floor(parseKey(todayKey()) / 864e5) % list.length];
+  el.innerHTML = '<div class="ww-top in-top" data-r="' + x.icon + '"><span class="ww-ic wy-ic">' + whyIcon(x.icon) + '</span><div class="ww-txt"><h2 id="inTitle">Tiparul tău</h2><span>Din ' + x.n + '</span></div></div>' +
+    '<p class="in-text">' + x.text + '</p><button class="btn ghost sm" data-action="insight-open">' + (W.list.length > 1 ? 'Toate tiparele, în Progres' : 'Vezi în Progres') + '</button>';
 }
 
 /* ---------- intermittent fasting ---------- */
@@ -2684,31 +2735,37 @@ function badgeStats(){
   return st;
 }
 const BADGES = [
-  { id: 'first', t: 'Prima masă', d: 'Notează primul aliment', icon: 'plate', v: s => s.entries, goal: 1 },
+  { id: 'first', t: 'Prima masă', d: 'Notează primul aliment', icon: 'utensils', v: s => s.entries, goal: 1 },
   { id: 's3', t: '3 zile la rând', d: 'Notează mesele 3 zile la rând', icon: 'flame', v: s => s.best, goal: 3 },
-  { id: 's7', t: 'O săptămână', d: '7 zile la rând cu mese notate', icon: 'flame', v: s => s.best, goal: 7 },
-  { id: 's14', t: 'Două săptămâni', d: '14 zile la rând', icon: 'flame', v: s => s.best, goal: 14 },
-  { id: 's30', t: 'O lună întreagă', d: '30 de zile la rând', icon: 'flame', v: s => s.best, goal: 30 },
-  { id: 'm50', t: '50 de alimente', d: 'Notează 50 de alimente', icon: 'plate', v: s => s.entries, goal: 50 },
-  { id: 'prot5', t: 'Proteine bifate', d: 'Atinge proteinele în 5 zile', icon: 'bolt', v: s => s.protDays, goal: 5 },
+  { id: 's7', t: 'O săptămână', d: '7 zile la rând cu mese notate', icon: 'calendar', v: s => s.best, goal: 7 },
+  { id: 's14', t: 'Două săptămâni', d: '14 zile la rând', icon: 'chain', v: s => s.best, goal: 14 },
+  { id: 's30', t: 'O lună întreagă', d: '30 de zile la rând', icon: 'trophy', v: s => s.best, goal: 30 },
+  { id: 'm50', t: '50 de alimente', d: 'Notează 50 de alimente', icon: 'notebook', v: s => s.entries, goal: 50 },
+  { id: 'prot5', t: 'Proteine bifate', d: 'Atinge proteinele în 5 zile', icon: 'egg', v: s => s.protDays, goal: 5 },
   { id: 'target7', t: 'În țintă', d: '7 zile la ±10% de ținta de calorii', icon: 'target', v: s => s.inTarget, goal: 7 },
-  { id: 'water7', t: 'Bine hidratat', d: 'Bea toată apa în 7 zile', icon: 'drop', v: s => s.waterDays, goal: 7 },
+  { id: 'water7', t: 'Bine hidratat', d: 'Bea toată apa în 7 zile', icon: 'glass', v: s => s.waterDays, goal: 7 },
   { id: 'w1', t: 'Prima cântărire', d: 'Notează-ți greutatea', icon: 'scale', v: s => s.weighIns, goal: 1 },
-  { id: 'w10', t: '10 dimineți', d: 'Cântărește-te în 10 dimineți', icon: 'scale', v: s => s.weighIns, goal: 10 },
-  { id: 'kg1', t: 'Primul kilogram', d: 'Primul kg spre obiectivul tău', icon: 'star', v: s => s.kg, goal: 1, skip: () => !S.profile || S.profile.goal === 'keep' },
-  { id: 'fast1', t: 'Primul fasting', d: 'Termină un fasting intermitent', icon: 'clock', v: s => s.fasts, goal: 1 }
+  { id: 'w10', t: '10 dimineți', d: 'Cântărește-te în 10 dimineți', icon: 'sunrise', v: s => s.weighIns, goal: 10 },
+  { id: 'kg1', t: 'Primul kilogram', d: 'Primul kg spre obiectivul tău', icon: 'kettlebell', v: s => s.kg, goal: 1, skip: () => !S.profile || S.profile.goal === 'keep' },
+  { id: 'fast1', t: 'Primul fasting', d: 'Termină un fasting intermitent', icon: 'hourglass', v: s => s.fasts, goal: 1 }
 ];
 const B_ICON = {
+  utensils: '<path d="M7 3v5a2.5 2.5 0 0 0 5 0V3M9.5 3v5M9.5 10.5V21"/><path d="M17 21V3.2c-2 1.3-3 3.6-3 6.8v3.5h3"/>',
   flame: '<path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2.2 1-3.8 2.4-5 .1 1.6.8 2.7 1.8 3.2C11 8.6 11.3 5.6 12 3z"/>',
-  plate: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/>',
-  bolt: '<path d="M13 3L5 13.5h6L10 21l8-10.5h-6L13 3z"/>',
-  target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1.2"/>',
-  drop: '<path d="M12 3.5c3 4 6 7.2 6 10.5a6 6 0 0 1-12 0c0-3.3 3-6.5 6-10.5z"/>',
-  scale: '<rect x="4" y="4" width="16" height="16" rx="4"/><path d="M9 9.5a4 4 0 0 1 6 0M12 9.5l1.5-1.5"/>',
-  star: '<path d="M12 3.5l2.6 5.3 5.9.9-4.2 4.1 1 5.8L12 16.9l-5.3 2.7 1-5.8-4.2-4.1 5.9-.9L12 3.5z"/>',
-  clock: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9.5 2.8h5"/>'
+  calendar: '<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 9.5h16M8.5 3v4M15.5 3v4M9 14.5l2 2 4-4"/>',
+  chain: '<path d="M10.5 13.5a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1 1"/><path d="M13.5 10.5a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1-1"/>',
+  trophy: '<path d="M8 4.5h8V9a4 4 0 0 1-8 0z"/><path d="M8 6.5H5.5A2.5 2.5 0 0 0 8.3 10M16 6.5h2.5a2.5 2.5 0 0 1-2.8 3.5M12 13v3M8.5 20h7M9.6 20l.5-4h3.8l.5 4"/>',
+  notebook: '<rect x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M9 3.5v17M12 8.5h4M12 12h4M12 15.5h2.5"/>',
+  egg: '<path d="M12 3.5c3.2 0 6 5 6 9.2a6 6 0 0 1-12 0C6 8.5 8.8 3.5 12 3.5z"/><circle cx="12" cy="13.5" r="2.4"/>',
+  target: '<circle cx="11" cy="13" r="7.5"/><circle cx="11" cy="13" r="3.5"/><path d="M11 13l8-8M15.5 5H19v3.5"/>',
+  glass: '<path d="M6 4h12l-1.6 14.6a2 2 0 0 1-2 1.8H9.6a2 2 0 0 1-2-1.8z"/><path d="M6.9 11.5c1.7-1 3.4-1 5.1 0s3.4 1 5.1 0"/>',
+  scale: '<rect x="4" y="4" width="16" height="16" rx="4.5"/><path d="M8.5 10.5a3.5 3.5 0 0 1 7 0z"/><path d="M12 10.5l1.3-1.7"/>',
+  sunrise: '<path d="M3.5 18.5h17M7 18.5a5 5 0 0 1 10 0M12 5.5V9M5.6 10.6l1.8 1.8M18.4 10.6l-1.8 1.8"/>',
+  kettlebell: '<path d="M9.2 10.3V8.6a2.8 2.8 0 0 1 5.6 0v1.7"/><circle cx="12" cy="15" r="5.5"/>',
+  hourglass: '<path d="M7 3.5h10M7 20.5h10M8 3.5c0 4.2 4 5.3 4 8.5s-4 4.3-4 8.5M16 3.5c0 4.2-4 5.3-4 8.5s4 4.3 4 8.5M10 18.3h4"/>',
+  sprout: '<path d="M12 20.5v-8M12 12.5C12 9 9.6 6.5 5.5 6.5c0 3.5 2.4 6 6.5 6zM12 14.5c0-3 2.1-5.5 6-5.5 0 3-2.1 5.5-6 5.5z"/>'
 };
-const bIcon = (k, sz) => '<svg viewBox="0 0 24 24" width="' + (sz || 20) + '" height="' + (sz || 20) + '" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (B_ICON[k] || B_ICON.star) + '</svg>';
+const bIcon = (k, sz) => '<svg viewBox="0 0 24 24" width="' + (sz || 20) + '" height="' + (sz || 20) + '" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (B_ICON[k] || B_ICON.sprout) + '</svg>';
 function badgeList(){ const st = badgeStats(); return { st, list: BADGES.filter(b => !(b.skip && b.skip())).map(b => { const v = b.v(st); return Object.assign({}, b, { val: v, done: v >= b.goal }); }) }; }
 function checkBadges(){
   if (!S.loaded || !S.profile) return;
@@ -2728,7 +2785,7 @@ function renderBadges(){
   const { st, list } = badgeList(), nDone = list.filter(b => b.done).length;
   const doing = list.filter(b => !b.done), won = list.filter(b => b.done), days = n => n + (n === 1 ? ' zi' : ' zile');
   $('#miniCard').innerHTML = sheetHead('miniTitle', 'Serii și provocări', 'close-mini') +
-    '<div class="b-hero' + (st.streak ? ' on' : '') + '"><span class="b-flame">' + bIcon(st.streak ? 'flame' : 'star', 30) + '</span><div><p class="r-num"><b>' + st.streak + '</b><span>' + (st.streak === 1 ? 'zi la rând' : 'zile la rând') + '</span></p>' +
+    '<div class="b-hero' + (st.streak ? ' on' : '') + '"><span class="b-flame">' + bIcon(st.streak ? 'flame' : 'sprout', 30) + '</span><div><p class="r-num"><b>' + st.streak + '</b><span>' + (st.streak === 1 ? 'zi la rând' : 'zile la rând') + '</span></p>' +
       '<p class="r-sub">Recordul tău: ' + days(st.best) + '. ' + (st.streak ? 'O zi intră în serie dacă notezi măcar un aliment.' : 'Notează un aliment azi și seria pornește.') + '</p></div></div>' +
     (doing.length ? '<div class="qa-head b-head"><h3>În lucru</h3></div><div class="qa-list b-doing">' + doing.map(b => {
       const pct = Math.max(0, Math.min(100, Math.round(b.val / b.goal * 100)));
@@ -2909,7 +2966,7 @@ function renderLib(){
     : '<div class="lib-empty lib-favs"><span class="qa-ic">' + STAR_SM + '</span><p>În Jurnal, atinge steaua de lângă o masă ca s-o păstrezi aici.</p></div>';
   $('#libCard').innerHTML = sheetHead('libTitle', 'Rețete și favorite', 'close-lib') +
     '<p class="lib-to"><span class="ml-dot ml-' + S.meal + '"></span>Ce atingi se adaugă la ' + meal + (S.view === todayKey() ? '' : ', ' + dayWord(S.view).toLowerCase()) + '.</p>' +
-    '<section class="lib-sec"><div class="qa-head"><h3>Rețetele mele</h3><button class="qa-link with-ic" data-action="recipe-new">' + PLUS_SM + 'Rețetă nouă</button></div>' + rec + '</section>' +
+    '<section class="lib-sec"><div class="qa-head"><h3>Rețetele tale</h3><button class="qa-link with-ic" data-action="recipe-new">' + PLUS_SM + 'Rețetă nouă</button></div>' + rec + '</section>' +
     '<section class="lib-sec"><div class="qa-head"><h3>Mese favorite</h3></div>' + fav + '</section>' +
     prodSection();
   if (keep){ const n = $('#' + keep[0]); if (n){ n.focus({ preventScroll: true }); try { n.setSelectionRange(keep[1], keep[2]); } catch (e) {} } }
@@ -3052,7 +3109,7 @@ async function recipeAi(){
     const res = await sample.json(prompt, { signal: ctl.signal, modelTier: 'default' });
     if (ctl.signal.aborted || !S.rdraft) return;
     const items = checkItems((res && Array.isArray(res.items) ? res.items : []).map(normItem).filter(Boolean).slice(0, 30));
-    if (!items.length){ err.textContent = 'Nu am găsit ingrediente. Scrie-le cu cantități, separate prin virgulă.'; err.hidden = false; return; }
+    if (!items.length){ err.textContent = 'Nu s-au găsit ingrediente. Scrie-le cu cantități, separate prin virgulă.'; err.hidden = false; return; }
     S.rdraft.items.push(...items);
     if (ta) ta.value = '';
     renderRecipeItems();
@@ -3334,7 +3391,7 @@ async function onBarcodePhoto(file){
     try { code = await aiReadCode(await prepareImage(file)); } catch (e) { code = null; }
   }
   $('#bcInput').value = '';
-  if (!code){ S.bc = { state: 'error', msg: 'Nu am putut citi codul. Fă poza mai de aproape, cu codul drept și bine luminat, sau scrie cifrele de sub cod.' }; renderBarcode(); return; }
+  if (!code){ S.bc = { state: 'error', msg: 'Codul nu s-a putut citi. Fă poza mai de aproape, cu codul drept și bine luminat, sau scrie cifrele de sub cod.' }; renderBarcode(); return; }
   $('#bcCode').value = code;
   lookupCode(code);
 }
@@ -3366,7 +3423,7 @@ function renderBarcode(){
   const B = S.bc;
   if (!B){ el.innerHTML = ''; return; }
   if (B.state === 'scanning'){
-    el.innerHTML = '<div class="status" style="margin-top:0"><span class="spin" aria-hidden="true"></span><p>' + (B.ai ? 'Claude citește cifrele codului…' : 'Citesc codul de bare…') + '</p></div>';
+    el.innerHTML = '<div class="status" style="margin-top:0"><span class="spin" aria-hidden="true"></span><p>' + (B.ai ? 'Claude citește cifrele codului…' : 'Se citește codul de bare…') + '</p></div>';
     return;
   }
   if (B.state === 'error'){ el.innerHTML = '<p class="err" style="margin-top:0">' + esc(B.msg) + '</p>'; return; }
@@ -3388,7 +3445,7 @@ function renderBarcode(){
   const accept = (S.imgLimits && S.imgLimits.mediaTypes && S.imgLimits.mediaTypes.join(',')) || 'image/jpeg,image/png,image/webp';
   const field = (id, label, key, unit, cls, mode) => '<div class="' + (cls || '') + '"><label class="lbl" for="' + id + '">' + label + '</label>' + (unit ? '<div class="unit">' : '') + '<input type="text" id="' + id + '"' + (mode ? ' inputmode="' + mode + '"' : '') + ' value="' + esc(d[key]) + '">' + (unit ? '<em>' + unit + '</em></div>' : '') + '</div>';
   el.innerHTML = '<div class="bc-card"><div class="bc-top"><div><b>' + (B.editing ? 'Editează produsul' : 'Produs nou') + '</b><span class="meta">Cod ' + esc(B.code) + (B.warn ? '. Verifică cifrele, codul pare incomplet.' : '') + '</span></div></div>' +
-    (B.looking ? '<div class="status" style="margin-top:0"><span class="spin" aria-hidden="true"></span><p>' + (sharedOn() ? (offOn() ? 'Caut produsul în baza comună Porția și în Open Food Facts…' : 'Caut produsul în baza comună Porția…') : 'Caut produsul în Open Food Facts…<small>O bază de date deschisă, cu produse din toată lumea.</small>') + '</p></div>' : '') +
+    (B.looking ? '<div class="status" style="margin-top:0"><span class="spin" aria-hidden="true"></span><p>' + (sharedOn() ? (offOn() ? 'Se caută produsul în baza comună Porția și în Open Food Facts…' : 'Se caută produsul în baza comună Porția…') : 'Se caută produsul în Open Food Facts…<small>O bază de date deschisă, cu produse din toată lumea.</small>') + '</p></div>' : '') +
     (B.editing || B.off || B.src ? '' : '<p class="hint">Nu e încă în lista ta. ' + (canAI ? 'Fotografiază tabelul cu valori nutriționale de pe ambalaj sau completează manual.' : 'Completează valorile de pe etichetă.') + ' Îl salvez, ca data viitoare să-l găsești instant.</p>') +
     (canAI ? '<label class="photo-pick" for="bcLabelInput"><input type="file" id="bcLabelInput" accept="' + accept + '"><span class="ph">' + CAM_ICON + '</span><span><b>Fotografiază eticheta</b><span>tabelul „Valori nutriționale”</span></span></label>' : '') +
     (B.reading ? '<div class="status" style="margin-top:0"><span class="spin" aria-hidden="true"></span><p>Claude citește eticheta…<small>Durează de obicei 10–30 de secunde.</small></p></div>' : '') +
@@ -3430,13 +3487,13 @@ async function readLabel(file){
     const res = await sample.json(LABEL_PROMPT, { images: [blob], signal: ctl.signal, modelTier: 'default' });
     if (ctl.signal.aborted || S.bc !== B) return;
     const per = res && res.per100;
-    if (!per){ B.err = 'Nu am găsit tabelul cu valori nutriționale. Fă poza mai de aproape, doar pe tabel.'; return; }
+    if (!per){ B.err = 'Tabelul cu valori nutriționale nu s-a găsit. Fă poza mai de aproape, doar pe tabel.'; return; }
     let kcal = num(per.kcal); if (!(kcal > 0) && num(per.kj) > 0) kcal = num(per.kj) / 4.184;
     B.draft = { name: String((res && res.name) || '').slice(0, 80), unit: res.unit === 'ml' ? 'ml' : 'g', kcal: inVal(Math.round(kcal)), protein: inVal(num(per.protein)), carbs: inVal(num(per.carbs)), fat: inVal(num(per.fat)),
       serving: num(res.serving) > 0 ? String(Math.round(num(res.serving))) : '', pack: num(res.package) > 0 ? String(Math.round(num(res.package))) : '',
       micro: microClean({ fiber: per.fiber }, 100) };
     const iss = per100Issues({ name: B.draft.name, kcal: num(B.draft.kcal), protein: num(B.draft.protein), carbs: num(B.draft.carbs), fat: num(B.draft.fat), kj: num(per.kj) }), bad = iss.hard.concat(iss.soft);
-    B.note = bad.length ? 'Am completat valorile de pe etichetă, dar ' + bad.join(' și ') + '. Compară-le cu eticheta înainte să salvezi.' : 'Am completat valorile de pe etichetă. Verifică-le, apoi salvează.';
+    B.note = bad.length ? 'Valorile de pe etichetă sunt completate, dar ' + bad.join(' și ') + '. Compară-le cu eticheta înainte să salvezi.' : 'Valorile de pe etichetă sunt completate. Verifică-le, apoi salvează.';
     B.noteWarn = bad.length > 0;
   } catch (e) {
     if (ctl.signal.aborted) return;
@@ -3469,7 +3526,7 @@ function saveProduct(){
   toast(msg, null, null, share ? { sub: 'Se trimite în baza comună…' } : null);
   if (share) shareProduct(p).then(r => {
     if ($('#toast').hidden || $('#toastMsg').textContent !== msg) return;
-    toast(msg, null, null, { sub: !r ? 'Nu am putut trimite acum. Reîncerc mai târziu.' : r.rejected ? 'Serverul nu l-a primit. Verifică numele și valorile.' : r.status === 'verified' ? 'Confirmat: acum îl găsesc direct toți' : 'Trimis. După încă o confirmare îl găsesc toți.' });
+    toast(msg, null, null, { sub: !r ? 'Trimiterea nu a mers acum. Se reîncearcă mai târziu.' : r.rejected ? 'Serverul nu l-a primit. Verifică numele și valorile.' : r.status === 'verified' ? 'Confirmat: acum îl găsesc direct toți' : 'Trimis. După încă o confirmare îl găsesc toți.' });
   });
 }
 function addBarcodeEntry(){
@@ -3534,9 +3591,9 @@ async function lookupOnline(B){
     fill(found);
     B.off = true;
     const iss = per100Issues({ name: d.name, kcal: num(d.kcal), protein: num(d.protein), carbs: num(d.carbs), fat: num(d.fat) }), bad = iss.hard.concat(iss.soft);
-    B.note = !found.kcal ? 'Am găsit numele în Open Food Facts, dar fără valori nutriționale. Completează-le de pe etichetă.'
-      : bad.length ? 'Am găsit produsul în Open Food Facts, dar ' + bad.join(' și ') + '. Datele de acolo sunt adăugate de voluntari, așa că verifică-le cu eticheta.'
-      : 'Am găsit produsul în Open Food Facts. Datele sunt adăugate de voluntari, așa că verifică-le cu eticheta, apoi salvează.';
+    B.note = !found.kcal ? 'Numele s-a găsit în Open Food Facts, dar fără valori nutriționale. Completează-le de pe etichetă.'
+      : bad.length ? 'Produsul s-a găsit în Open Food Facts, dar ' + bad.join(' și ') + '. Datele de acolo sunt adăugate de voluntari, așa că verifică-le cu eticheta.'
+      : 'Produsul s-a găsit în Open Food Facts. Datele sunt adăugate de voluntari, așa că verifică-le cu eticheta, apoi salvează.';
     B.noteWarn = bad.length > 0;
   } else if (sh){
     fill(sharedDraft(sh.p)); B.src = 'pending'; B.noteWarn = true;
@@ -3601,8 +3658,8 @@ async function flushShares(){
 async function withdrawShares(){
   const b = $('[data-action="share-withdraw"]'); if (b){ b.disabled = true; b.textContent = 'Se retrag…'; }
   const r = await sharedCall('DELETE', '', { install: installId() });
-  if (r && r.ok){ lsSet('portia-shared', false); lsSet(SHARE_Q, []); toast('Am retras produsele trimise de pe acest dispozitiv.'); }
-  else toast('Nu am putut ajunge la server. Încearcă din nou mai târziu.');
+  if (r && r.ok){ lsSet('portia-shared', false); lsSet(SHARE_Q, []); toast('Produsele trimise de pe acest dispozitiv au fost retrase.'); }
+  else toast('Serverul nu a răspuns. Încearcă din nou mai târziu.');
   if (S.screen === 'profil') renderSettings();
 }
 
@@ -3660,8 +3717,8 @@ function importPreviewHtml(){
   const room = Math.max(0, PROD_MAX - S.library.products.length), fit = Math.min(R.fresh, room);
   let h = R.ok.length
     ? '<p><b>Gata de adăugat: ' + nProd(R.ok.length) + '</b>' + (R.upd ? ' (' + [R.fresh ? R.fresh + ' noi' : '', R.upd + (R.upd === 1 ? ' actualizat' : ' actualizate')].filter(Boolean).join(', ') + ')' : '') + '.</p>'
-    : '<p><b>Nu am găsit încă niciun produs valid.</b></p>';
-  if (fit < R.fresh) h += '<p>Biblioteca are loc pentru ' + PROD_MAX + ' de produse, așa că adaug doar ' + (fit === 1 ? 'primul nou' : 'primele ' + fit + ' noi') + '.</p>';
+    : '<p><b>Încă nu e niciun produs valid.</b></p>';
+  if (fit < R.fresh) h += '<p>Biblioteca are loc pentru ' + PROD_MAX + ' de produse, așa că se adaugă doar ' + (fit === 1 ? 'primul nou' : 'primele ' + fit + ' noi') + '.</p>';
   if (R.bad.length) h += '<p class="muted">' + (R.bad.length === 1 ? 'Un rând sărit: ' : R.bad.length + ' rânduri sărite: ') + R.bad.slice(0, 3).map(b => 'rândul ' + b[0] + ', ' + esc(b[1])).join('; ') + (R.bad.length > 3 ? '; și încă ' + (R.bad.length - 3) : '') + '.</p>';
   return h;
 }
@@ -3681,7 +3738,7 @@ async function readImportFile(f){
     if (txt.includes('\uFFFD')){ try { txt = new TextDecoder('windows-1250').decode(buf); } catch (e) {} } // older Excel saves Romanian text this way
     const ta = $('#impText'); if (ta) ta.value = txt;
     onImportText(txt);
-  } catch (e) { toast('Nu am putut citi fișierul.'); }
+  } catch (e) { toast('Fișierul nu s-a putut citi.'); }
 }
 function importProducts(){
   const R = S.prodIO && S.prodIO.parsed; if (!R || !R.ok.length) return;
@@ -3752,7 +3809,7 @@ function toggleVoice(id){
   };
   rec.onerror = ev => {
     if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed' || ev.error === 'audio-capture') voiceBlocked();
-    else if (ev.error === 'no-speech') toast('Nu am auzit nimic. Atinge microfonul și încearcă din nou.');
+    else if (ev.error === 'no-speech') toast('Nu s-a auzit nimic. Atinge microfonul și încearcă din nou.');
     else if (ev.error !== 'aborted') toast('Dictarea nu a mers de data asta. Încearcă din nou.');
   };
   rec.onend = () => {
@@ -3998,7 +4055,7 @@ function toast(msg, label, fn, opt){
   const wy = $('#toastWhy'), ask = opt && opt.why;
   if (wy){
     wy.hidden = !ask; el.classList.toggle('asks', !!ask);
-    wy.innerHTML = ask ? '<span>De ce ai mâncat?</span>' + WHY.map(r => '<button data-action="toast-why" data-k="' + ask.k + '" data-meal="' + ask.meal + '" data-why="' + r.id + '">' + r.t + '</button>').join('') : '';
+    wy.innerHTML = ask ? '<span>De ce ai mâncat?</span>' + WHY.map(r => '<button data-action="toast-why" data-k="' + ask.k + '" data-meal="' + ask.meal + '" data-why="' + r.id + '"' + (r.a ? ' aria-label="' + r.a + '"' : '') + '>' + r.t + '</button>').join('') : '';
   }
   toastFn = fn || null;
   b.hidden = !fn; b.textContent = label || '';
@@ -4009,8 +4066,8 @@ function toast(msg, label, fn, opt){
 }
 
 /* ---------- render ---------- */
-function renderAll(){ renderSync(); renderHeader(); renderHero(); renderMeals(); renderTabs(); renderRecent(); renderPreview(); renderIdeas(); renderDiary(); renderCoach(); renderSleep(); renderTrain(); renderMed(); renderWater(); renderFast(); renderPlan(); renderMedP(); renderMuscle(); renderWhy(); renderWeight(); renderHistory(); widgetSync(); }
-function renderDayParts(){ renderHeader(); renderHero(); renderRecent(); renderManualFit(); renderDiary(); renderCoach(); renderSleep(); renderTrain(); renderMed(); renderWater(); renderFast(); renderPlan(); renderMedP(); renderMuscle(); renderWhy(); renderWeight(); renderHistory(); renderPreview(); widgetSync(); }
+function renderAll(){ renderSync(); renderHeader(); renderHero(); renderMeals(); renderTabs(); renderRecent(); renderPreview(); renderIdeas(); renderDiary(); renderInsight(); renderCoach(); renderSleep(); renderStress(); renderTrain(); renderMed(); renderWater(); renderFast(); renderPlan(); renderMedP(); renderMuscle(); renderWhy(); renderWeight(); renderHistory(); widgetSync(); }
+function renderDayParts(){ renderHeader(); renderHero(); renderRecent(); renderManualFit(); renderDiary(); renderInsight(); renderCoach(); renderSleep(); renderStress(); renderTrain(); renderMed(); renderWater(); renderFast(); renderPlan(); renderMedP(); renderMuscle(); renderWhy(); renderWeight(); renderHistory(); renderPreview(); widgetSync(); }
 // ---------- home screen and lock screen widgets ----------
 // The store app hands its widgets today's figures, tomorrow's targets and the theme's colours.
 // They stay on the phone: iOS keeps them in the app's own App Group, Android in the app's preferences.
@@ -4159,7 +4216,7 @@ function nativeInit(){
 }
 function renderProfileEmpty(){
   $('#settingsCard').innerHTML = '<div class="scr-head"><div><h1 id="setTitle" tabindex="-1">Profil</h1><p>Ținte, teme și datele tale</p></div></div>' +
-    '<section class="panel"><h3>Încă nu ai un profil</h3><p>Răspunde la cinci întrebări scurte și îți calculez ținta zilnică de calorii și macronutrienți.</p><button class="btn primary" data-action="open-setup">Începe interviul</button></section>';
+    '<section class="panel"><h3>Încă nu ai un profil</h3><p>Răspunde la câteva întrebări scurte și primești ținta zilnică de calorii și macronutrienți.</p><button class="btn primary" data-action="open-setup">Începe interviul</button></section>';
 }
 function onScroll(){
   const a = $('#appbar'); if (!a) return;
@@ -4175,7 +4232,7 @@ function renderHero(){
   if (!p){
     el.className = 'hero-card is-empty';
     el.innerHTML = S.loaded
-      ? '<p class="hc-label">Ținta ta zilnică</p><h2 class="hc-title">Hai să-ți calculăm caloriile și macronutrienții</h2><p class="hc-text">Cinci întrebări scurte. Nu trebuie să știi niciun număr.</p><button class="btn hc-cta" data-action="open-setup">Începe interviul</button>'
+      ? '<p class="hc-label">Ținta ta zilnică</p><h2 class="hc-title">Află-ți caloriile și macronutrienții</h2><p class="hc-text">Câteva întrebări scurte. Nu trebuie să știi niciun număr.</p><button class="btn hc-cta" data-action="open-setup">Începe interviul</button>'
       : '<div class="skel" aria-hidden="true"></div><p class="hc-text">Se încarcă jurnalul tău…</p>';
     return;
   }
@@ -4369,7 +4426,7 @@ function renderPreview(){
   const ask = d.question && (d.src === 'text' || d.src === 'photo') && !S.aiOff
     ? '<div class="ask"><p><b>Claude întreabă:</b> ' + esc(d.question) + '</p><div class="ask-row"><label class="sr" for="askIn">Răspunsul tău</label><div class="dict' + (voiceOn() ? ' has-mic' : '') + '"><input type="text" id="askIn" placeholder="ex: o lingură">' + micBtn('askIn') + '</div><button class="btn soft sm" data-action="ask-send">Recalculează</button></div></div>' : '';
   const flagged = d.items.filter(it => it.warn).length;
-  const guard = (flagged ? '<p class="warnbox">' + (flagged === 1 ? 'Un aliment are valori care nu se potrivesc între ele' : flagged + ' alimente au valori care nu se potrivesc între ele') + '. Le-am marcat cu „verifică”. Corectează porția sau scoate-le înainte să adaugi.</p>' : '') +
+  const guard = (flagged ? '<p class="warnbox">' + (flagged === 1 ? 'Un aliment are valori care nu se potrivesc între ele' : flagged + ' alimente au valori care nu se potrivesc între ele') + '. Sunt marcate cu „verifică”. Corectează porția sau scoate-le înainte să adaugi.</p>' : '') +
     (tot.kcal > 4000 ? '<p class="warnbox">Totalul trece de 4.000 kcal pentru o singură masă. Verifică porțiile.</p>' : '');
   el.innerHTML = '<div class="panel-head"><h2 id="pvTitle">Verifică și adaugă</h2>' + '<span class="aichip">Generat de AI</span>' + (cc ? '<span class="conf cf-' + cc.cls + '"><i></i>Siguranță ' + esc(d.confidence) + '</span>' : '') + '</div>' +
     guard + '<ul class="pitems">' + rows + '</ul>' +
@@ -4406,7 +4463,7 @@ function renderIdeas(){
         (over > 50 ? '<p class="warn">Trece cu ' + fmt(over) + ' kcal peste ce ți-a rămas azi.</p>' : '') +
         (odd ? '<p class="warn">Unele valori nu se potrivesc între ele. Verifică-le după ce o alegi.</p>' : '') +
         '<ul>' + idea.items.map(it => '<li>' + esc(it.name) + '</li>').join('') + '</ul>' +
-        '<div class="row"><span class="mx"><span><i class="dot p"></i>' + fmt1(tot.p) + ' g</span><span><i class="dot c"></i>' + fmt1(tot.c) + ' g</span><span><i class="dot f"></i>' + fmt1(tot.f) + ' g</span></span><button class="btn soft sm" data-action="use-idea" data-i="' + n + '">Aleg asta</button></div></div>';
+        '<div class="row"><span class="mx"><span><i class="dot p"></i>' + fmt1(tot.p) + ' g</span><span><i class="dot c"></i>' + fmt1(tot.c) + ' g</span><span><i class="dot f"></i>' + fmt1(tot.f) + ' g</span></span><button class="btn soft sm" data-action="use-idea" data-i="' + n + '">Alege asta</button></div></div>';
     }).join('') + '</div><div class="row" style="margin-top:10px"><button class="rm" data-action="ideas">Alte idei</button></div>';
   }
   body += '<p class="hint" style="margin-top:10px">Idei generate de AI (Claude). Verifică porțiile înainte să le adaugi.</p>';
@@ -4482,7 +4539,7 @@ function renderDiary(){
   renderMealsToday(day);
 }
 const whyRow = (m, cur) => '<div class="mc-why" role="radiogroup" aria-label="De ce ai mâncat la ' + m.t.toLowerCase() + '?"><span class="mc-why-t">De ce ai mâncat?</span>' +
-  WHY.map(r => '<button role="radio" aria-checked="' + (cur === r.id) + '" data-action="why" data-meal="' + m.id + '" data-why="' + r.id + '">' + r.t + '</button>').join('') + '</div>';
+  WHY.map(r => '<button role="radio" aria-checked="' + (cur === r.id) + '" data-action="why" data-meal="' + m.id + '" data-why="' + r.id + '"' + (r.a ? ' aria-label="' + r.a + '"' : '') + '>' + r.t + '</button>').join('') + '</div>';
 const MOON = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14.6A7.6 7.6 0 0 1 9.4 5a7.6 7.6 0 1 0 9.6 9.6z"/><path d="M16.5 3.5v3M15 5h3"/></svg>';
 // Sleep: one tap in the morning; it belongs to the day that follows the night
 function renderSleep(){
@@ -4493,6 +4550,35 @@ function renderSleep(){
       '<div class="ww-txt"><h2 id="slTitle">Somn</h2><span>' + (S.view === todayKey() ? 'Cât ai dormit azi-noapte?' : 'Cât ai dormit în noaptea dinainte?') + '</span></div>' +
       '<div class="ww-num"><b>' + (h ? (o ? o.t : fmt1(h)) + '<small> h</small>' : '–') + '</b>' + (h ? '<span>' + (h <= SHORT_SLEEP ? 'noapte scurtă' : 'odihnit') + '</span>' : '') + '</div></div>' +
     '<div class="sl-opts" role="radiogroup" aria-label="Ore de somn">' + SLEEP_OPTS.map(x => '<button role="radio" aria-checked="' + (h === x.h) + '" aria-label="' + x.a + '" data-action="sleep" data-h="' + x.h + '">' + x.t + '<small>ore</small></button>').join('') + '</div>';
+}
+// Stress: one tap a day, 1 to 5; on a hard day, a tip that follows what the interview said about stress and food
+function setStress(k, v){
+  const next = getDay(k).stress === v ? null : v;
+  mutateDay(k, d => { if (next) d.stress = next; else delete d.stress; });
+  buzz('tick');
+}
+function setStressProfile(patch){
+  if (!S.profile) return;
+  const cur = S.profile.stress || { base: 3, eat: 'same' };
+  S.profile = Object.assign(clone(S.profile), { stress: normStress(Object.assign({}, cur, patch)) });
+  saveProfile(); renderAll(); if (S.screen === 'profil') renderSettings();
+}
+function renderStress(){
+  const el = $('#stress'); if (!el) return;
+  const on = !!S.profile && habitsOf().stress; el.hidden = !on; if (!on){ el.innerHTML = ''; return; }
+  const k = S.view, v = getDay(k).stress || null, o = STRESS_LV.find(x => x.v === v), P = S.profile.stress;
+  let tip = '';
+  if (v >= HIGH_STRESS && P){
+    tip = { more: 'Zi grea. În zilele așa, porțiile tale cresc de obicei: o masă plănuită dinainte, cu proteine și legume, ține mai bine decât o interdicție.',
+      crave: 'Zi grea, iar în zilele așa vin poftele. O gustare aleasă dinainte (iaurt, fructe, o mână de nuci) e mai ușor de ținut decât „nimic”.',
+      less: 'Zi grea. Sub stres sari des peste mese: o gustare simplă, cu proteine, te ferește de o foame mare seara.',
+      same: '' }[P.eat];
+  }
+  el.innerHTML = '<div class="ww-top"><span class="ww-ic sx-ic">' + whyIcon('stress') + '</span>' +
+      '<div class="ww-txt"><h2 id="sxTitle">Stres</h2><span>' + (k === todayKey() ? 'Cât stres ai azi?' : 'Cât stres a fost în ziua asta?') + '</span></div>' +
+      '<div class="ww-num"><b>' + (v ? v + '<small> din 5</small>' : '–') + '</b>' + (o ? '<span>' + o.t.toLowerCase() + '</span>' : '') + '</div></div>' +
+    '<div class="md-seg sx-seg" role="radiogroup" aria-label="Stresul zilei">' + STRESS_LV.map(x => '<button role="radio" aria-checked="' + (v === x.v) + '" aria-label="' + x.v + ', ' + x.t.toLowerCase() + '" data-action="stress" data-v="' + x.v + '">' + x.v + '</button>').join('') + '</div>' +
+    '<div class="sx-ends" aria-hidden="true"><span>deloc</span><span>foarte mult</span></div>' + (tip ? '<p class="hint md-tip">' + tip + '</p>' : '');
 }
 const DUMBBELL = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 7v10M17.5 7v10M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/></svg>';
 // One tap for the session; once it is noted, the heaviest set of the reference lift, optional
@@ -4509,7 +4595,7 @@ function renderTrain(){
       '<div class="ww-txt"><h2 id="trTitle">Antrenament</h2><span>' + ask + '</span></div>' +
       '<div class="ww-num"><b>' + n + '</b><span>în 7 zile</span></div></div>' +
     (d.steps ? '<p class="tr-steps"><b>' + fmt(d.steps) + '</b> pași' + (k === todayKey() ? ' până acum' : '') + (NATIVE ? ', din ' + esc(healthName()) : '') + '</p>' : '') +
-    '<button class="tr-done" data-action="train-toggle" aria-pressed="' + done + '">' + CHECK_ICON + '<span>' + (done ? 'M-am antrenat' : 'Notează antrenamentul') + '</span></button>';
+    '<button class="tr-done" data-action="train-toggle" aria-pressed="' + done + '">' + CHECK_ICON + '<span>' + (done ? 'Antrenament făcut' : 'Notează antrenamentul') + '</span></button>';
   if (done){
     html += '<div class="tr-lift"><p class="tr-lbl">Cea mai grea serie la <b>' + esc(ex.t.toLowerCase()) + '</b> <em>opțional</em></p>' +
       '<div class="tr-row"><div class="unit"><label class="sr" for="liftKg">Greutatea în kilograme</label><input type="text" id="liftKg" inputmode="decimal" placeholder="' + (last ? fmt1(last.kg) : '0') + '" value="' + (L ? fmt1(L.kg) : '') + '"><em>kg</em></div>' +
@@ -4518,7 +4604,7 @@ function renderTrain(){
         '<button class="btn soft" data-action="lift-save">' + (L ? 'Schimbă' : 'Notează') + '</button></div>' +
       '<p class="hint">' + (L ? 'Notat: ' + fmt1(L.kg) + ' kg × ' + L.reps + ', adică cam ' + fmt(e1rm(L.kg, L.reps)) + ' kg la o repetare.'
         : last ? 'Ultima dată: ' + fmt1(last.kg) + ' kg × ' + last.reps + '. Lasă câmpurile goale ca să notezi aceeași serie.'
-        : 'Din serii văd dacă forța se menține când slăbești. Exercițiul îl schimbi din Profil.') + '</p>' +
+        : 'Din serii se vede dacă forța se menține când slăbești. Exercițiul îl schimbi din Profil.') + '</p>' +
       (L ? '<button class="btn ghost sm" data-action="lift-del">Șterge seria</button>' : '') + '</div>';
   }
   el.innerHTML = html;
@@ -4554,7 +4640,7 @@ function renderMed(){
   el.innerHTML = '<div class="ww-top"><span class="ww-ic md-ic">' + PILL + '</span><div class="ww-txt"><h2 id="mdTitle">Medicație</h2><span>' + esc(I.t) + '. ' + when + '</span></div>' +
       '<div class="ww-num"><b>' + (has ? fmtMg(d.dose) + '<small> mg</small>' : '–') + '</b><span>' + (has ? 'notată' : 'doza') + '</span></div></div>' +
     '<div class="tr-row"><div class="unit"><label class="sr" for="medDose">Doza în miligrame</label><input type="text" id="medDose" inputmode="decimal" placeholder="' + (last != null ? fmtMg(last) : '0') + '" value="' + (has ? fmtMg(d.dose) : '') + '"><em>mg</em></div>' +
-      '<button class="btn soft" data-action="dose-save">' + (has ? 'Schimbă' : I.weekly ? 'Am făcut injecția' : 'Am luat doza') + '</button></div>' +
+      '<button class="btn soft" data-action="dose-save">' + (has ? 'Schimbă' : I.weekly ? 'Notează injecția' : 'Notează doza') + '</button></div>' +
     '<p class="hint md-hint">' + (has ? 'Notat: ' + fmtMg(d.dose) + ' mg. <button class="lnk" data-action="dose-del">Șterge</button>'
       : last != null ? 'Ultima doză notată: ' + fmtMg(last) + ' mg. Lasă câmpul gol ca s-o notezi la fel.' : 'Doza ți-o stabilește medicul. Aici doar o notezi.') + '</p>' +
     '<p class="md-lbl">Apetit</p>' + segBtns('appetite', APPETITE, d.appetite, 'Apetit') +
@@ -4776,7 +4862,7 @@ function histPaint(){
 }
 
 /* ---------- setup interview ---------- */
-const STEPS = ['intro','sex','age','body','activity','goal','target','result'];
+const STEPS = ['intro','sex','age','body','activity','goal','target','stress','result'];
 // Keeping your weight needs no target, so that step is skipped
 const stepOn = (st, d) => !(st === 'target' && d.goal === 'keep');
 function nextStep(dlt){ let i = S.setup.step; do { i += dlt; } while (i > 0 && i < STEPS.length - 1 && !stepOn(STEPS[i], S.setup.d)); return Math.max(0, Math.min(STEPS.length - 1, i)); }
@@ -4784,7 +4870,8 @@ function openSetup(first){
   const base = S.profile ? S.profile : PREFILL;
   S.setup = {
     step: S.profile ? 1 : 0, first: !S.profile && !!first,
-    d: { sex: base.sex || null, age: base.age || PREFILL.age, height: base.height || PREFILL.height, weight: base.weight || PREFILL.weight, activity: base.activity || null, goal: base.goal || PREFILL.goal, target: S.profile && S.profile.plan ? S.profile.plan.to : NaN }
+    d: { sex: base.sex || null, age: base.age || PREFILL.age, height: base.height || PREFILL.height, weight: base.weight || PREFILL.weight, activity: base.activity || null, goal: base.goal || PREFILL.goal, target: S.profile && S.profile.plan ? S.profile.plan.to : NaN,
+      stressBase: S.profile && S.profile.stress ? String(S.profile.stress.base) : null, stressEat: S.profile && S.profile.stress ? S.profile.stress.eat : null }
   };
   $('#sClose').hidden = S.setup.first;
   showSheet('#setup');
@@ -4793,11 +4880,12 @@ function openSetup(first){
 function stepValid(){
   const d = S.setup.d, st = STEPS[S.setup.step];
   if (st === 'sex') return !!d.sex;
-  if (st === 'age') return d.age >= 14 && d.age <= 90;
+  if (st === 'age') return d.age >= 16 && d.age <= 90;
   if (st === 'body') return d.height >= 120 && d.height <= 230 && d.weight >= 35 && d.weight <= 250;
   if (st === 'activity') return !!d.activity;
   if (st === 'goal') return !!d.goal;
   if (st === 'target') return !planCheck(d.goal, d.weight, d.target, d.height);
+  if (st === 'stress') return !!d.stressBase && !!d.stressEat;
   return true;
 }
 function optList(field, list){
@@ -4811,8 +4899,8 @@ function renderSetup(){
   let b = '';
   if (st === 'intro'){
     const tick = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
-    b = '<div class="intro-art" aria-hidden="true"><svg viewBox="0 0 160 160"><circle cx="80" cy="80" r="66" class="ia-t"/><circle cx="80" cy="80" r="66" class="ia-k" stroke-dasharray="414.7" stroke-dashoffset="120"/><circle cx="80" cy="80" r="50" class="ia-t"/><circle cx="80" cy="80" r="50" class="ia-p" stroke-dasharray="314.2" stroke-dashoffset="110"/><circle cx="80" cy="80" r="34" class="ia-t"/><circle cx="80" cy="80" r="34" class="ia-c" stroke-dasharray="213.6" stroke-dashoffset="60"/><circle cx="80" cy="80" r="18" class="ia-t"/><circle cx="80" cy="80" r="18" class="ia-f" stroke-dasharray="113.1" stroke-dashoffset="40"/></svg></div>' + '<h2 id="sTitle" tabindex="-1">Hai să-ți calculăm ținta</h2><p>Câteva întrebări scurte. La final îți calculez caloriile, proteinele, glucidele, grăsimile, apa și planul până la greutatea pe care o vrei.</p>' +
-      '<ul class="intro-list"><li>' + tick + 'Nu trebuie să știi niciun număr</li><li>' + tick + 'Durează cam un minut</li><li>' + tick + 'Poți schimba totul oricând, din Profil</li></ul>' + (S.profile ? '<p>Am completat deja ce știu despre tine. Verifică și corectează unde e cazul.</p>' : '');
+    b = '<div class="intro-art" aria-hidden="true"><svg viewBox="0 0 160 160"><circle cx="80" cy="80" r="66" class="ia-t"/><circle cx="80" cy="80" r="66" class="ia-k" stroke-dasharray="414.7" stroke-dashoffset="120"/><circle cx="80" cy="80" r="50" class="ia-t"/><circle cx="80" cy="80" r="50" class="ia-p" stroke-dasharray="314.2" stroke-dashoffset="110"/><circle cx="80" cy="80" r="34" class="ia-t"/><circle cx="80" cy="80" r="34" class="ia-c" stroke-dasharray="213.6" stroke-dashoffset="60"/><circle cx="80" cy="80" r="18" class="ia-t"/><circle cx="80" cy="80" r="18" class="ia-f" stroke-dasharray="113.1" stroke-dashoffset="40"/></svg></div>' + '<h2 id="sTitle" tabindex="-1">Ținta ta, în câteva întrebări</h2><p>Câteva întrebări scurte. La final primești caloriile, proteinele, glucidele, grăsimile, apa și planul până la greutatea pe care o vrei.</p>' +
+      '<ul class="intro-list"><li>' + tick + 'Nu trebuie să știi niciun număr</li><li>' + tick + 'Durează cam un minut</li><li>' + tick + 'Poți schimba totul oricând, din Profil</li></ul>' + (S.profile ? '<p>Răspunsurile de data trecută sunt deja completate. Verifică și corectează unde e cazul.</p>' : '');
   } else if (st === 'sex'){
     b = '<h2 id="sTitle" tabindex="-1">Sexul biologic</h2><p>Formula metabolismului diferă puțin între bărbați și femei.</p>' + optList('sex', [{ id:'m', t:'Bărbat' }, { id:'f', t:'Femeie' }]);
   } else if (st === 'age'){
@@ -4828,8 +4916,13 @@ function renderSetup(){
     b = '<h2 id="sTitle" tabindex="-1">Ce vrei să obții?</h2>' + optList('goal', GOALS);
   } else if (st === 'target'){
     if (!isFinite(d.target) || planDir(d.weight, d.target) !== goalDir(d.goal)) d.target = defaultTarget(d.goal, d.weight, d.height);
-    b = '<h2 id="sTitle" tabindex="-1">' + (d.goal === 'bulk' ? 'Până la ce greutate vrei să crești?' : 'Ce greutate vrei să atingi?') + '</h2><p>Acum ai ' + fmt1(d.weight) + ' kg. Îți fac planul: cât de repede și până când. În Progres vezi apoi dacă ești pe drum.</p>' +
+    b = '<h2 id="sTitle" tabindex="-1">' + (d.goal === 'bulk' ? 'Până la ce greutate vrei să crești?' : 'Ce greutate vrei să atingi?') + '</h2><p>Acum ai ' + fmt1(d.weight) + ' kg. Primești planul: cât de repede și până când. În Progres vezi apoi dacă ești pe drum.</p>' +
       '<div class="numfield"><button class="round" data-action="s-step" data-field="target" data-d="-0.5" aria-label="Mai puțin">−</button><div class="unit"><label class="sr" for="sTarget">Greutatea țintă</label><input type="text" inputmode="decimal" id="sTarget" data-field="target" value="' + esc(fmt1(d.target)) + '"><em>kg</em></div><button class="round" data-action="s-step" data-field="target" data-d="0.5" aria-label="Mai mult">+</button></div><p class="ferr" id="sErr"></p><p class="plan-prev" id="sPlanPrev"></p>';
+  } else if (st === 'stress'){
+    // a little personality: how much stress is usual, and what it does to eating; used for the patterns in Progres
+    b = '<h2 id="sTitle" tabindex="-1">Stresul și mâncarea</h2><p>Stresul schimbă des felul în care mănânci. Cu răspunsurile astea, Porția îți arată în Progres dacă jurnalul confirmă ce simți.</p>' +
+      '<span class="lbl">De obicei, cât stres ai?</span><div class="md-seg st-seg" role="radiogroup" aria-label="Stresul obișnuit">' + STRESS_LV.map(x => '<button role="radio" data-action="s-pick" data-field="stressBase" data-v="' + x.v + '" aria-checked="' + (d.stressBase === String(x.v)) + '">' + x.t + '</button>').join('') + '</div>' +
+      '<span class="lbl" style="margin-top:16px">Într-o zi stresantă, ce se întâmplă cu mâncarea?</span>' + optList('stressEat', STRESS_EAT);
   } else {
     const T = computeTargets(d);
     const g = GOALS.find(x => x.id === d.goal);
@@ -4841,7 +4934,7 @@ function renderSetup(){
         '<span class="d-center" aria-hidden="true"><span class="d-label">pe zi</span><b class="big-num" id="resNum">' + fmt(T.kcal) + '</b><span class="hc-sub">kcal pentru ' + esc(g.t.toLowerCase()) + '</span></span></div>' +
       '<dl class="rgrid"><div><dt><i class="dot p"></i>Proteine</dt><dd>' + fmt(T.protein) + '<small> g</small></dd></div><div><dt><i class="dot c"></i>Glucide</dt><dd>' + fmt(T.carbs) + '<small> g</small></dd></div><div><dt><i class="dot f"></i>Grăsimi</dt><dd>' + fmt(T.fat) + '<small> g</small></dd></div><div><dt><i class="dot w"></i>Apă</dt><dd>' + fmtL(T.water) + '<small> L</small></dd></div></dl>' +
       setupPlanLine(d, T) +
-      '<details class="how"><summary>Cum am calculat</summary><p>Metabolismul bazal e ' + fmt(T.bmr) + ' kcal (formula Mifflin-St Jeor). Înmulțit cu ' + nf3.format(T.actF) + ' pentru activitate dă ' + fmt(T.tdee) + ' kcal de menținere, apoi ' + adjTxt + '. Proteine ' + fmt1(T.protPerKg) + ' g pe kg, grăsimi 25% din calorii, restul glucide. Poți ajusta oricând numerele din Profil.</p></details></div>';
+      '<details class="how"><summary>Cum s-a calculat</summary><p>Metabolismul bazal e ' + fmt(T.bmr) + ' kcal (formula Mifflin-St Jeor). Înmulțit cu ' + nf3.format(T.actF) + ' pentru activitate dă ' + fmt(T.tdee) + ' kcal de menținere, apoi ' + adjTxt + '. Proteine ' + fmt1(T.protPerKg) + ' g pe kg, grăsimi 25% din calorii, restul glucide. Poți ajusta oricând numerele din Profil.</p></details></div>';
   }
   $('#sBody').innerHTML = b;
   if (st === 'target') updateSetupPlan();
@@ -4873,7 +4966,7 @@ function setupInput(field, raw){
   const ok = stepValid(), st = STEPS[S.setup.step];
   $('#sNext').disabled = !ok;
   const err = $('#sErr');
-  if (err) err.textContent = ok ? '' : st === 'age' ? 'Introdu o vârstă între 14 și 90 de ani.' : st === 'target' ? planCheck(S.setup.d.goal, S.setup.d.weight, S.setup.d.target, S.setup.d.height) : 'Verifică valorile: înălțime 120–230 cm, greutate 35–250 kg.';
+  if (err) err.textContent = ok ? '' : st === 'age' ? 'Introdu o vârstă între 16 și 90 de ani. Porția nu e pentru cei sub 16 ani.' : st === 'target' ? planCheck(S.setup.d.goal, S.setup.d.weight, S.setup.d.target, S.setup.d.height) : 'Verifică valorile: înălțime 120–230 cm, greutate 35–250 kg.';
   if (st === 'target') updateSetupPlan();
 }
 function setupPlanLine(d, T){
@@ -4895,7 +4988,7 @@ function setupPlan(d, T){
 }
 function saveSetup(){
   const d = S.setup.d, T = computeTargets(d);
-  S.profile = keepTargetHistory(S.profile, { sex: d.sex, age: d.age, height: d.height, weight: d.weight, activity: d.activity, goal: d.goal, custom: false, updatedAt: Date.now(), skin: S.profile ? (S.profile.skin || null) : (lsGet('portia-skin') || null), cycle: S.profile ? (S.profile.cycle || null) : null, muscle: S.profile ? (S.profile.muscle || null) : null, med: S.profile ? (S.profile.med || null) : null, coach: S.profile ? (S.profile.coach || null) : null, health: S.profile ? (S.profile.health || null) : null,
+  S.profile = keepTargetHistory(S.profile, { sex: d.sex, age: d.age, height: d.height, weight: d.weight, activity: d.activity, goal: d.goal, stress: normStress({ base: Number(d.stressBase), eat: d.stressEat }), custom: false, updatedAt: Date.now(), skin: S.profile ? (S.profile.skin || null) : (lsGet('portia-skin') || null), cycle: S.profile ? (S.profile.cycle || null) : null, muscle: S.profile ? (S.profile.muscle || null) : null, med: S.profile ? (S.profile.med || null) : null, coach: S.profile ? (S.profile.coach || null) : null, health: S.profile ? (S.profile.health || null) : null,
     adapt: S.profile ? (S.profile.adapt || null) : null, fast: S.profile ? (S.profile.fast || null) : null, plan: setupPlan(d, T), habits: S.profile ? (S.profile.habits || null) : null, share: !!(S.profile && S.profile.share), consent: (S.profile && S.profile.consent) || normConsent(lsGet('portia-consent')),
     targets: { kcal: T.kcal, protein: T.protein, carbs: T.carbs, fat: T.fat, water: T.water } });
   saveProfile();
@@ -4930,8 +5023,8 @@ function profGroups(){
   const p = S.profile, f = fastOf(), c = cycleOf();
   return [
     ['Personalizare', [['appear', 'Aspect', { auto: 'Automat', light: 'Luminos', dark: 'Întunecat' }[S.appearance] || 'Automat'], ['theme', 'Teme de culori', (THEMES[S.theme] || {}).t || '']]],
-    ['Nutriție', [['targets', 'Ținte zilnice', fmt(p.targets.kcal) + ' kcal'], ['goalw', 'Ținta de greutate', p.plan ? (p.plan.hold ? 'Mentenanță, ' : '') + fmt1(p.plan.to) + ' kg' : 'Fă-ți planul'], ['habits', 'Somn și motive', (habitsOf().why || habitsOf().sleep) ? 'Pornite' : 'Oprite'], ['cycle', 'Zile de sală și de pauză', c.on ? 'Activat' : 'Oprit'], ['muscle', 'Antrenament și forță', habitsOf().train ? liftOf().t : 'Oprit'],  ['med', 'Medicație pentru greutate', medOf() ? (medOf().stop ? 'Oprită' : medInfo(medOf()).t) : 'Nu'], ['health', healthName(), healthOf() ? 'Pornit' : healthReady() ? 'Oprit' : 'În aplicație'], ['fast', 'Fasting intermitent', f.hide ? 'Ascuns' : f.plan]]],
-    ['Antrenor', [['coach', 'Antrenorul meu', coachOf() ? (coachOf().name || 'Pornit') : 'Nu']]],
+    ['Nutriție', [['targets', 'Ținte zilnice', fmt(p.targets.kcal) + ' kcal'], ['goalw', 'Ținta de greutate', p.plan ? (p.plan.hold ? 'Mentenanță, ' : '') + fmt1(p.plan.to) + ' kg' : 'Fă-ți planul'], ['habits', 'Somn, stres și motive', (habitsOf().why || habitsOf().sleep || habitsOf().stress) ? 'Pornite' : 'Oprite'], ['cycle', 'Zile de sală și de pauză', c.on ? 'Activat' : 'Oprit'], ['muscle', 'Antrenament și forță', habitsOf().train ? liftOf().t : 'Oprit'],  ['med', 'Medicație pentru greutate', medOf() ? (medOf().stop ? 'Oprită' : medInfo(medOf()).t) : 'Nu'], ['health', healthName(), healthOf() ? 'Pornit' : healthReady() ? 'Oprit' : 'În aplicație'], ['fast', 'Fasting intermitent', f.hide ? 'Ascuns' : f.plan]]],
+    ['Antrenor', [['coach', 'Antrenorul tău', coachOf() ? (coachOf().name || 'Pornit') : 'Nu']]],
     ['Cont', (SELL ? [['plan', 'Abonament', S.isOwner ? 'Proprietar' : 'Gratuit']] : []).concat([['data', 'Datele tale', S.noSample ? '' : aiConsentOn() ? 'AI pornit' : 'AI oprit'], ['backup', 'Cod de backup', '']])],
     ['Despre', [['tips', 'Cum îl folosești cel mai bine', ''], ['about', 'Despre Porția', '']]]
   ];
@@ -4974,24 +5067,27 @@ function renderSettingsInner(){
     targets: () => '<section>' + TARGETS_HTML() + '</section>',
     cycle: () => '<section id="cycleSec">' + cycleSection() + '</section>',
     fast: () => '<section id="fastSec">' + fastSection() + '</section>',
-    habits: () => '<section id="habitsSec"><h3>Somn și motive</h3><p>După fiecare masă te întreb dintr-o atingere de ce ai mâncat: foame, stres, plictiseală sau social. Dimineața notezi cât ai dormit. După două săptămâni îți arăt în Progres tiparele tale, de exemplu dacă mănânci mai mult seara după nopți scurte.</p>' +
-      swRow('Întreabă de ce ai mâncat', 'habit-why', habitsOf().why) + swRow('Notează somnul pe Azi', 'habit-sleep', habitsOf().sleep) +
-      '<p class="hint">Ce ai notat deja rămâne în jurnal și când le oprești.</p></section>',
-    muscle: () => '<section id="muscleSec"><h3>Antrenament și forță</h3><p>Pe Azi bifezi când te antrenezi și, dacă vrei, notezi cea mai grea serie la un exercițiu de referință. În Progres îți arăt dacă îți păstrezi mușchii: proteinele, antrenamentele și forța, lângă greutate.</p>' +
+    habits: () => { const P = S.profile.stress || {};
+      return '<section id="habitsSec"><h3>Somn, stres și motive</h3><p>După fiecare masă alegi dintr-o atingere de ce ai mâncat: foame, stres, plictiseală, social sau obicei. Dimineața notezi cât ai dormit, iar peste zi cât stres ai. După două săptămâni, Progres îți arată tiparele tale, de exemplu dacă mănânci mai mult în zilele stresante sau seara după nopți scurte.</p>' +
+        swRow('Întreabă de ce ai mâncat', 'habit-why', habitsOf().why) + swRow('Notează somnul pe Azi', 'habit-sleep', habitsOf().sleep) + swRow('Notează stresul pe Azi', 'habit-stress', habitsOf().stress) +
+        '<span class="lbl">De obicei, cât stres ai?</span><div class="md-seg st-seg" role="radiogroup" aria-label="Stresul obișnuit">' + STRESS_LV.map(x => '<button role="radio" data-action="stress-base" data-v="' + x.v + '" aria-checked="' + (P.base === x.v) + '">' + x.t + '</button>').join('') + '</div>' +
+        '<span class="lbl">Într-o zi stresantă, mâncarea</span><div class="row" role="radiogroup" aria-label="Mâncarea în zilele stresante">' + STRESS_EAT.map(x => '<button class="chip" role="radio" data-action="stress-eat" data-v="' + x.id + '" aria-checked="' + (P.eat === x.id) + '">' + x.t + '</button>').join('') + '</div>' +
+        '<p class="hint">Ce ai notat deja rămâne în jurnal și când le oprești.</p></section>'; },
+    muscle: () => '<section id="muscleSec"><h3>Antrenament și forță</h3><p>Pe Azi bifezi când te antrenezi și, dacă vrei, notezi cea mai grea serie la un exercițiu de referință. În Progres vezi dacă îți păstrezi mușchii: proteinele, antrenamentele și forța, lângă greutate.</p>' +
       swRow('Notează antrenamentele pe Azi', 'habit-train', habitsOf().train) +
       '<span class="lbl">Exercițiul de referință</span><div class="row" role="radiogroup" aria-label="Exercițiul de referință">' + LIFTS.map(x => '<button class="chip" role="radio" data-action="lift-ex" data-ex="' + x.id + '" aria-checked="' + (liftOf().id === x.id) + '">' + x.t + '</button>').join('') + '</div>' +
       '<p class="hint">Alege un exercițiu pe care îl faci des, cu greutăți. Forța se compară doar la același exercițiu, așa că seriile notate la altul rămân în jurnal, dar nu intră în calcul.</p></section>',
     med: () => { const m = medOf(), I = medInfo(m);
-      return '<section id="medSec"><h3>Medicație pentru greutate</h3><p>Dacă iei un medicament pentru greutate, de exemplu semaglutidă sau tirzepatidă, notezi pe Azi doza, apetitul și greața. În Progres vezi legătura cu greutatea și cu mușchii, iar după ce oprești tratamentul urmăresc mai atent primele 12 săptămâni.</p>' +
+      return '<section id="medSec"><h3>Medicație pentru greutate</h3><p>Dacă iei un medicament pentru greutate, de exemplu semaglutidă sau tirzepatidă, notezi pe Azi doza, apetitul și greața. În Progres vezi legătura cu greutatea și cu mușchii, iar după ce oprești tratamentul, primele 12 săptămâni sunt urmărite mai atent.</p>' +
         swRow('Iau un medicament pentru greutate', 'med-on', !!m) +
         (m ? '<span class="lbl">Medicamentul</span><div class="row" role="radiogroup" aria-label="Medicamentul">' + MEDS.map(x => '<button class="chip" role="radio" data-action="med-drug" data-drug="' + x.id + '" aria-checked="' + (m.drug === x.id) + '">' + x.t + '</button>').join('') + '</div>' +
           (I.ex ? '<p class="hint">' + esc(I.ex) + (I.weekly ? ', o injecție pe săptămână.' : ', o doză pe zi.') + '</p>' : '') +
           (I.weekly ? '<span class="lbl">Ziua injecției</span><div class="wdays" role="radiogroup" aria-label="Ziua injecției">' + WD_ORDER.map(d => '<button role="radio" data-action="med-wd" data-wd="' + d + '" aria-checked="' + (m.wd === d) + '">' + WD_NAME[d] + '</button>').join('') + '</div>' : '') +
           '<p class="md-state">' + (m.stop ? 'Ai oprit tratamentul pe ' + esc(planDate(m.stop)) + '.' : 'Tratament în desfășurare' + (m.start ? ', notat din ' + esc(planDate(m.start)) : '') + '.') + '</p>' +
-          '<div class="row">' + (m.stop ? '<button class="btn ghost sm" data-action="med-resume">Am reluat tratamentul</button>' : '<button class="btn ghost sm" data-action="med-stop">Am oprit tratamentul</button>') + '</div>' : '') +
+          '<div class="row">' + (m.stop ? '<button class="btn ghost sm" data-action="med-resume">Notează reluarea</button>' : '<button class="btn ghost sm" data-action="med-stop">Notează oprirea</button>') + '</div>' : '') +
         '<div class="medwarn"><b>Porția nu recomandă doze.</b> Doza și orice schimbare le stabilește medicul. Aici notezi doar ce ți-a prescris, ca să vezi legătura cu greutatea, apetitul și mușchii.</div></section>'; },
     coach: () => { const C = coachOf();
-      return '<section id="coachSec"><h3>Antrenorul meu</h3><p>Dacă lucrezi cu un antrenor sau un nutriționist, Porția îți pregătește în fiecare săptămână un raport scurt cu mesele, greutatea și antrenamentele. I-l trimiți tu, de exemplu pe WhatsApp: nu pleacă nimic singur.</p>' +
+      return '<section id="coachSec"><h3>Antrenorul tău</h3><p>Dacă lucrezi cu un antrenor sau un nutriționist, Porția îți pregătește în fiecare săptămână un raport scurt cu mesele, greutatea și antrenamentele. I-l trimiți tu, de exemplu pe WhatsApp: nu pleacă nimic singur.</p>' +
         swRow('Lucrez cu un antrenor sau nutriționist', 'coach-on', !!C) +
         (C ? '<label class="lbl" for="coachName">Numele antrenorului <em>opțional</em></label><input type="text" id="coachName" maxlength="40" autocomplete="off" value="' + esc(C.name) + '" placeholder="de exemplu Andrei">' +
           '<span class="lbl">Ziua raportului</span><div class="wdays" role="radiogroup" aria-label="Ziua raportului">' + WD_ORDER.map(d => '<button role="radio" data-action="coach-wd" data-wd="' + d + '" aria-checked="' + (C.wd === d) + '">' + WD_NAME[d] + '</button>').join('') + '</div>' +
@@ -5005,7 +5101,7 @@ function renderSettingsInner(){
       return '<section id="healthSec"><h3>' + esc(nm) + '</h3><p>Porția poate citi din ' + esc(nm) + ' greutatea, pașii, somnul și antrenamentele de forță, ca să nu le mai notezi de mână. Doar citește, nu scrie nimic acolo. Ce ai notat tu de mână nu se schimbă.</p>' +
         (healthReady()
           ? swRow('Citește din ' + nm, 'health-on', !!h) +
-            (h ? '<p class="hint">Ultima citire: ' + esc(when) + '. Citesc din nou când deschizi aplicația.</p><div class="row hl-btns"><button class="btn soft sm" data-action="health-sync">Citește acum</button>' +
+            (h ? '<p class="hint">Ultima citire: ' + esc(when) + '. Citirea se reia când deschizi aplicația.</p><div class="row hl-btns"><button class="btn soft sm" data-action="health-sync">Citește acum</button>' +
               (PLATFORM === 'android' ? '<button class="btn ghost sm" data-action="health-settings">Permisiunile din Health Connect</button>' : '') + '</div>' : '') +
             (PLATFORM === 'ios' ? '<p class="hint">Ce poate citi Porția alegi în fereastra Apple Health și schimbi oricând din setările Sănătate ale telefonului.</p>' : '')
           : '<p class="hint">Merge în aplicația Porția pentru iPhone și Android' + (NATIVE ? ', într-o versiune mai nouă' : '') + '.</p>') + '</section>'; },
@@ -5515,7 +5611,11 @@ function bindStatic(){
       case 'share-default': if (S.profile){ S.profile = Object.assign(clone(S.profile), { share: b.getAttribute('aria-checked') !== 'true' }); saveProfile(); renderSettings(); } break;
       case 'why': setWhy(S.view, b.dataset.meal, b.dataset.why); break;
       case 'sleep': setSleep(S.view, Number(b.dataset.h)); break;
-      case 'habit-why': case 'habit-sleep': case 'habit-train': setHabit({ 'habit-why': 'why', 'habit-sleep': 'sleep', 'habit-train': 'train' }[a], b.getAttribute('aria-checked') !== 'true'); break;
+      case 'stress': setStress(S.view, Number(b.dataset.v)); break;
+      case 'stress-base': setStressProfile({ base: Number(b.dataset.v) }); break;
+      case 'stress-eat': setStressProfile({ eat: b.dataset.v }); break;
+      case 'insight-open': go('progres'); setTimeout(() => scrollTo($('#why')), 80); break;
+      case 'habit-why': case 'habit-sleep': case 'habit-stress': case 'habit-train': setHabit({ 'habit-why': 'why', 'habit-sleep': 'sleep', 'habit-stress': 'stress', 'habit-train': 'train' }[a], b.getAttribute('aria-checked') !== 'true'); break;
       case 'train-toggle': toggleTrained(); break;
       case 'lift-save': saveLift(); break;
       case 'lift-del': delLift(); break;

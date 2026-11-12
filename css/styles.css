@@ -1595,13 +1595,13 @@ button.lib-main:active{background:color-mix(in srgb,var(--ink) 5%,transparent)}
 @media (prefers-reduced-motion: reduce){.al-needle{transition:none}}
 
 /* Why you eat: one tap per meal (in the toast and on the meal card), sleep on Azi, patterns in Progres */
-[data-r="hunger"]{--rc:var(--kcal)} [data-r="stress"]{--rc:var(--over)} [data-r="bored"]{--rc:var(--fat)} [data-r="social"]{--rc:var(--carb)} [data-r="sleep"]{--rc:var(--sleep)}
+[data-r="hunger"]{--rc:var(--kcal)} [data-r="stress"]{--rc:var(--over)} [data-r="bored"]{--rc:var(--fat)} [data-r="social"]{--rc:var(--carb)} [data-r="sleep"]{--rc:var(--sleep)} [data-r="habit"]{--rc:var(--water)}
 .toast.asks{flex-wrap:wrap;row-gap:2px;padding-bottom:10px}
 .t-why{flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:2px 2px 0}
 .t-why span{flex-basis:100%;padding:2px 0 2px;font-size:12.5px;opacity:.72}
 .t-why button{flex:1 1 auto;min-height:38px;padding:6px 10px;border-radius:12px;color:var(--toast-fg);background:color-mix(in srgb,var(--toast-fg) 12%,transparent);font-weight:650;font-size:13.5px}
 .t-why button:active{background:color-mix(in srgb,var(--toast-act) 30%,transparent)}
-.mc-why{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:10px 0 2px}
+.mc-why{display:grid;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));gap:6px;margin:10px 0 2px}
 .mc-why-t{grid-column:1/-1;font-size:12.5px;font-weight:650;color:var(--muted)}
 .mc-why button{min-height:36px;padding:6px 4px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:13px;font-weight:650;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background-color .15s,border-color .15s}
 .mc-why button[aria-checked="true"]{background:var(--mc);border-color:var(--mc);color:var(--mi)}
@@ -1660,3 +1660,17 @@ button.lib-main:active{background:color-mix(in srgb,var(--ink) 5%,transparent)}
 .mi-day .hint{margin-top:2px}
 @media (min-width:600px){.mi-rings{grid-template-columns:repeat(8,minmax(0,1fr))}}
 @media (min-width:900px){.diary > .mi-day{grid-column:1 / -1}}
+
+/* Stress: the Azi card, the interview and Profile scale */
+.sx-ic{color:var(--over);background:color-mix(in srgb,var(--over) 14%,var(--surface))}
+.sx-seg button{font-family:var(--f-display);font-weight:780;font-size:17px}
+.sx-seg button[aria-checked="true"]{border-color:var(--over);background:color-mix(in srgb,var(--over) 16%,var(--surface))}
+.sx-ends{display:flex;justify-content:space-between;margin-top:6px;padding:0 4px;font-size:12px;color:var(--muted)}
+.st-seg{margin-bottom:6px}
+.st-seg button{font-size:12.5px;line-height:1.15;padding:4px 3px;min-height:46px;white-space:normal}
+.st-seg button[aria-checked="true"]{border-color:var(--kcal);background:color-mix(in srgb,var(--kcal) 14%,var(--surface))}
+#habitsSec .lbl{display:block;margin-top:14px}
+#habitsSec .row{flex-wrap:wrap;gap:6px}
+/* Azi: the pattern of the day */
+.in-top .wy-ic{width:42px;height:42px;border-radius:14px}
+.in-text{margin:0 0 12px;text-wrap:pretty}
