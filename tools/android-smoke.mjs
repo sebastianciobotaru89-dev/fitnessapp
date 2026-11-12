@@ -109,12 +109,15 @@ const back = () => sh('adb shell input keyevent 4');
 async function clearDialogs(){
   for (let i = 0; i < 4; i++){
     let focus = ''; try { focus = sh('adb shell dumpsys window').split('\n').filter(l => /mCurrentFocus/.test(l)).join(' ').trim(); } catch {}
-    if (!focus || /com\.portia\.app/.test(focus)) return true;
+    // the "not responding" dialog for Porția itself names the app, so it is told apart by its title
+    if (!focus || (/com\.portia\.app/.test(focus) && !/Not Responding|nu răspunde/i.test(focus))) return true;
     info('fereastră peste aplicație: ' + focus.slice(0, 160));
     try { sh('adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS'); } catch {}
     try {
       sh('adb shell uiautomator dump /sdcard/ui.xml');
-      const m = sh('adb shell cat /sdcard/ui.xml').match(/text="(Wait|Așteaptă|OK|Close app|Închide aplicația)"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+      // "Wait" first: a slow emulator is not a hung app, so the app is kept, never closed
+      const ui = sh('adb shell cat /sdcard/ui.xml'), btn = t => ui.match(new RegExp('text="(' + t + ')"[^>]*bounds="\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]"'));
+      const m = btn('Wait|Așteaptă') || btn('OK') || btn('Close app|Închide aplicația');
       if (m) sh(`adb shell input tap ${(+m[2] + +m[4]) >> 1} ${(+m[3] + +m[5]) >> 1}`);
       else if (i >= 2) start();
     } catch {}
@@ -253,17 +256,25 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   // A cold start right after the system switched dark mode back can hit "not responding" on a slow emulator, and with
   // the error dialogs hidden the system then closes the app. The restart is tried a second time and the ANR is reported;
   // a second failure still fails the test, so a real hang is not hidden.
+  // With the error dialogs hidden, the system closes an app at its first ANR. A cold start on this emulator can spend
+  // several seconds on one frame, so during restarts the dialog stays visible and clearDialogs answers "Wait", the
+  // way a person would; every ANR is still reported.
   const restart = async () => {
-    for (let attempt = 0; ; attempt++){
-      sh(`adb shell am force-stop ${PKG}`); start(); await sleep(6000);
-      try { page.close(); } catch {}
-      try { page = await connect(); return; } catch (e) {
-        let anr = ''; try { anr = sh('adb logcat -d').split('\n').filter(l => /ANR in .*com\.portia\.app/.test(l)).slice(-1)[0] || ''; } catch {}
-        info('repornirea ' + (attempt + 1) + ' nu a găsit aplicația' + (anr ? ': ' + anr.trim().slice(0, 220) : ''));
-        if (attempt) throw e;
-        await clearDialogs(); await sleep(4000);
+    try { sh('adb shell settings put global hide_error_dialogs 0'); } catch {}
+    try {
+      for (let attempt = 0; ; attempt++){
+        sh(`adb shell am force-stop ${PKG}`); start(); await sleep(6000);
+        await clearDialogs();
+        try { page.close(); } catch {}
+        try { page = await connect(); await sleep(3000); await clearDialogs(); return; } catch (e) {
+          if (attempt) throw e;
+          await clearDialogs(); await sleep(4000);
+        } finally {
+          let anr = ''; try { anr = sh('adb logcat -d').split('\n').filter(l => /ANR in .*com\.portia\.app/.test(l)).slice(-1)[0] || ''; } catch {}
+          if (anr && anr !== restart.lastAnr){ restart.lastAnr = anr; info('ANR la repornire: ' + anr.trim().slice(0, 220)); }
+        }
       }
-    }
+    } finally { try { sh('adb shell settings put global hide_error_dialogs 1'); } catch {} }
   };
 
   // closing and reopening the app keeps everything
