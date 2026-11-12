@@ -151,8 +151,15 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   // a journal with content, then a restart, as a returning user sees it
   const { data, consent } = seed();
   await page.ev(`localStorage.setItem('portia-consent', ${JSON.stringify(JSON.stringify(consent))}); localStorage.setItem('mt-local', ${JSON.stringify(JSON.stringify(data))}); location.reload(); true`);
-  await sleep(4000);
-  ok('jurnalul se încarcă', await page.ev(`!document.querySelector('#hero.is-empty') && document.querySelectorAll('#mealsToday .mt.has').length === 2`));
+  // A busy emulator can take many seconds to draw the reloaded journal (frames of several seconds show in the log), so
+  // the check waits for the journal itself, up to 45 s, instead of a fixed time; an app that never loads still fails.
+  const journalShown = `!document.querySelector('#hero.is-empty') && document.querySelectorAll('#mealsToday .mt.has').length === 2`;
+  let loaded = false; const t0 = Date.now();
+  await sleep(2000);
+  while (!loaded && Date.now() - t0 < 45000){ try { loaded = await page.ev(journalShown); } catch {} if (!loaded) await sleep(1000); }
+  if (loaded && Date.now() - t0 > 8000) info('jurnalul s-a încărcat în ' + Math.round((Date.now() - t0) / 1000) + ' s');
+  if (loaded) await page.ev(`new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))`);
+  ok('jurnalul se încarcă', loaded);
   shot('2-azi');
   await clearDialogs();
   let box = webviewBox(); if (!box){ await clearDialogs(); await sleep(1000); box = webviewBox(); }
@@ -262,14 +269,15 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   // closing and reopening the app keeps everything
   await sleep(4000);
   await restart(); await sleep(1500);
-  ok('datele rămân după închiderea aplicației', await page.ev(`!document.querySelector('#hero.is-empty') && document.querySelectorAll('#mealsToday .mt.has').length === 2`));
+  let kept = false; for (let i = 0; i < 30 && !kept; i++){ try { kept = await page.ev(journalShown); } catch {} if (!kept) await sleep(1000); }
+  ok('datele rămân după închiderea aplicației', kept);
   // iOS and Android can clear a web view's storage; the native copy brings the journal back
   // like the OS clearing it: empty the web view's storage, then open the app again from scratch
   await page.ev(`localStorage.clear(); true`); await sleep(300);
   await restart(); await sleep(1500);
   const restored = `!!JSON.parse(localStorage.getItem('mt-local') || 'null') && !document.querySelector('#hero.is-empty')`;
   let back2 = false;
-  for (let i = 0; i < 10 && !back2; i++){ try { back2 = await page.ev(restored); } catch {} if (!back2) await sleep(1000); }
+  for (let i = 0; i < 30 && !back2; i++){ try { back2 = await page.ev(restored); } catch {} if (!back2) await sleep(1000); }
   ok('jurnalul revine din memoria nativă', back2, back2 ? undefined : await page.ev(`({ keys: Object.keys(localStorage), hero: document.querySelector('#hero').className })`).catch(e => String(e)));
 
   // the home screen widgets: registered, fed by the app, drawn, and their links open the right screen
