@@ -229,16 +229,30 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   ok('modul întunecat al telefonului schimbă aplicația', /rgb\((\d+), (\d+), (\d+)\)/.test(darkBg) && darkBg.match(/\d+/g).slice(0, 3).every(n => +n < 60), darkBg);
   sh('adb shell cmd uimode night no'); await sleep(2000);
 
+  // A cold start right after the system switched dark mode back can hit "not responding" on a slow emulator, and with
+  // the error dialogs hidden the system then closes the app. The restart is tried a second time and the ANR is reported;
+  // a second failure still fails the test, so a real hang is not hidden.
+  const restart = async () => {
+    for (let attempt = 0; ; attempt++){
+      sh(`adb shell am force-stop ${PKG}`); start(); await sleep(6000);
+      try { page.close(); } catch {}
+      try { page = await connect(); return; } catch (e) {
+        let anr = ''; try { anr = sh('adb logcat -d').split('\n').filter(l => /ANR in .*com\.portia\.app/.test(l)).slice(-1)[0] || ''; } catch {}
+        info('repornirea ' + (attempt + 1) + ' nu a găsit aplicația' + (anr ? ': ' + anr.trim().slice(0, 220) : ''));
+        if (attempt) throw e;
+        await clearDialogs(); await sleep(4000);
+      }
+    }
+  };
+
   // closing and reopening the app keeps everything
-  await sleep(2500);
-  sh(`adb shell am force-stop ${PKG}`); start(); await sleep(6000);
-  page.close(); page = await connect(); await sleep(1500);
+  await sleep(4000);
+  await restart(); await sleep(1500);
   ok('datele rămân după închiderea aplicației', await page.ev(`!document.querySelector('#hero.is-empty') && document.querySelectorAll('#mealsToday .mt.has').length === 2`));
   // iOS and Android can clear a web view's storage; the native copy brings the journal back
   // like the OS clearing it: empty the web view's storage, then open the app again from scratch
   await page.ev(`localStorage.clear(); true`); await sleep(300);
-  sh(`adb shell am force-stop ${PKG}`); start(); await sleep(6000);
-  page.close(); page = await connect(); await sleep(1500);
+  await restart(); await sleep(1500);
   const restored = `!!JSON.parse(localStorage.getItem('mt-local') || 'null') && !document.querySelector('#hero.is-empty')`;
   let back2 = false;
   for (let i = 0; i < 10 && !back2; i++){ try { back2 = await page.ev(restored); } catch {} if (!back2) await sleep(1000); }
