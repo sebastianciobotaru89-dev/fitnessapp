@@ -569,18 +569,26 @@ function keyOf(d){ return d.getFullYear() + '-' + String(d.getMonth()+1).padStar
 function parseKey(k){ const p = k.split('-').map(Number); return new Date(p[0], p[1]-1, p[2]); }
 function addDays(k, n){ const d = parseKey(k); d.setDate(d.getDate() + n); return keyOf(d); }
 function todayKey(){ return keyOf(new Date()); }
+// Dates: one Intl formatter per set of options, built once and reused. The locale date methods build a new one on every
+// call, and the week strip alone formats over a dozen dates on each render.
+const DTF = new Map();
+function dfmt(d, o){
+  const k = JSON.stringify(o);
+  let f = DTF.get(k); if (!f){ f = new Intl.DateTimeFormat('ro-RO', o); DTF.set(k, f); }
+  return f.format(d);
+}
 function dayWord(k){
   const t = todayKey();
   if (k === t) return 'Azi';
   if (k === addDays(t, -1)) return 'Ieri';
-  return cap(parseKey(k).toLocaleDateString('ro-RO', { weekday:'long' }));
+  return cap(dfmt(parseKey(k), { weekday:'long' }));
 }
 function dateLine(k){
   const t = todayKey();
   const opts = (k === t || k === addDays(t, -1)) ? { weekday:'long', day:'numeric', month:'long' } : { day:'numeric', month:'long', year:'numeric' };
-  return parseKey(k).toLocaleDateString('ro-RO', opts);
+  return dfmt(parseKey(k), opts);
 }
-const shortDate = k => parseKey(k).toLocaleDateString('ro-RO', { day:'numeric', month:'short' });
+const shortDate = k => dfmt(parseKey(k), { day:'numeric', month:'short' });
 function autoMeal(){
   const d = new Date(); const h = d.getHours() + d.getMinutes()/60;
   if (h < 10.5) return 'breakfast';
@@ -1134,7 +1142,7 @@ function dataSection(){
   const where = S.mode === 'cloud' ? 'în contul tău Claude' : S.mode === 'local' ? 'doar ' + HERE : 'doar cât timp e deschisă pagina';
   return '<h3>Datele tale</h3><p>Porția păstrează mesele, apa, greutatea, țintele, fastingul și setările, ' + where + '.' + (S.noSample ? (NATIVE ? ' Nu le trimite nicăieri. Singura legătură la internet e căutarea unui cod de bare în Open Food Facts, care primește doar codul.' : '') : ' Când folosești AI, textul sau poza mesei merg la Claude (Anthropic) doar ca să fie estimate, fără numele sau e-mailul tău.') + '</p>' +
     (S.noSample ? '' : swRow('Estimări cu AI (Claude)', 'consent-ai', ai)) +
-    (c ? '<p class="hint" style="margin-bottom:12px">Ai dat acordul pentru datele de sănătate pe ' + esc(new Date(c.health).toLocaleDateString('ro-RO', { day: 'numeric', month: 'long', year: 'numeric' })) + '. Ca să-l retragi, șterge contul, pentru că fără aceste date aplicația nu poate funcționa. Codul de backup de mai jos îți dă o copie a tuturor datelor.</p>' : '') +
+    (c ? '<p class="hint" style="margin-bottom:12px">Ai dat acordul pentru datele de sănătate pe ' + esc(dfmt(new Date(c.health), { day: 'numeric', month: 'long', year: 'numeric' })) + '. Ca să-l retragi, șterge contul, pentru că fără aceste date aplicația nu poate funcționa. Codul de backup de mai jos îți dă o copie a tuturor datelor.</p>' : '') +
     (PRODUCTS_API ? '<h3 class="ds-sub">Baza comună de produse</h3><p>Când salvezi un produs de pe etichetă, poți bifa să-l trimiți în baza comună Porția: codul, numele și valorile, plus un număr aleator al acestui dispozitiv, nu numele sau contul tău. Serverul păstrează doar o amprentă criptată a dispozitivului și a rețelei, ca nimeni să nu poată confirma singur un produs.</p>' +
       swRow('Bifează trimiterea pentru produsele noi', 'share-default', !!(S.profile && S.profile.share)) +
       (lsGet('portia-shared') ? '<div class="row" style="margin:4px 0 14px"><button class="btn ghost sm" data-action="share-withdraw">Retrage produsele trimise</button></div>' : '') : '') +
@@ -1651,7 +1659,7 @@ const planDir = (from, to) => to <= from - 0.5 ? -1 : to >= from + 0.5 ? 1 : 0;
 const goalDir = g => g === 'cut' || g === 'recomp' ? -1 : g === 'bulk' ? 1 : 0;
 const fmtRate = v => nf2.format(Math.round(Math.abs(v) * 20) / 20);
 const nWeeks = n => n <= 1 ? 'o săptămână' : n + (n >= 20 ? ' de săptămâni' : ' săptămâni');
-const planDate = (k, short) => { const d = parseKey(k), o = { day: 'numeric', month: short ? 'short' : 'long' }; if (d.getFullYear() !== new Date().getFullYear()) o.year = 'numeric'; return d.toLocaleDateString('ro-RO', o); };
+const planDate = (k, short) => { const d = parseKey(k), o = { day: 'numeric', month: short ? 'short' : 'long' }; if (d.getFullYear() !== new Date().getFullYear()) o.year = 'numeric'; return dfmt(d, o); };
 function normPlan(x){
   if (!x || typeof x !== 'object' || !/^\d{4}-\d{2}-\d{2}$/.test(String(x.start || ''))) return null;
   const from = num(x.from), to = num(x.to), rate = num(x.rate);
@@ -2261,7 +2269,7 @@ function medHold(){
 async function medReport(){
   const M = medStats(); if (!M) return;
   const p = S.profile, MS = muscleStats(), today = todayKey(), L = [];
-  const full = k => parseKey(k).toLocaleDateString('ro-RO', { day: 'numeric', month: 'long', year: 'numeric' });
+  const full = k => dfmt(parseKey(k), { day: 'numeric', month: 'long', year: 'numeric' });
   const sg = v => (v < 0 ? '−' : '+');
   L.push('PORȚIA: RAPORT PENTRU MEDIC', 'Generat pe ' + full(today) + '. Datele sunt notate de pacient în aplicație și nu sunt măsurători medicale.', '');
   L.push('TRATAMENT', M.info.t + (M.info.ex ? ' (' + M.info.ex + ')' : '') + (M.info.weekly ? ', injecție săptămânală' + (M.m.wd != null ? ', ' + WD_LONG[M.m.wd] : '') : ''),
@@ -2315,7 +2323,7 @@ async function shareText(title, text){
 // The last seven days, today included, in a short text that reads well in a chat
 function coachReport(){
   const C = coachOf() || normCoach({}), p = S.profile, today = todayKey(), from = addDays(today, -6), L = [];
-  const day = k => parseKey(k).toLocaleDateString('ro-RO', { day: 'numeric', month: 'long' }), wd = k => WD_NAME[parseKey(k).getDay()];
+  const day = k => dfmt(parseKey(k), { day: 'numeric', month: 'long' }), wd = k => WD_NAME[parseKey(k).getDay()];
   const zile = n => n === 1 ? 'o zi' : n + ' zile';
   L.push('Porția · raport săptămânal' + (C.name ? ' pentru ' + C.name : ''), day(from) + ' – ' + day(today) + ' ' + parseKey(today).getFullYear(), '', 'MÂNCAREA');
   let logged = 0, inK = 0, pOk = 0, kS = 0, kT = 0, pS = 0, pT = 0; const per = [];
@@ -2683,7 +2691,7 @@ function setFast(patch){
 }
 function lastMealAt(){ let best = 0; const t = todayKey(); [t, addDays(t, -1)].forEach(k => { const d = S.days[k]; if (d) d.entries.forEach(e => { if (e.at > best && e.at <= Date.now()) best = e.at; }); }); return best; }
 const hm = ms => { const m = Math.max(0, Math.round(ms / 6e4)), h = Math.floor(m / 60), r = m % 60; return h ? h + ' h' + (r ? ' ' + r + ' min' : '') : r + ' min'; };
-const clockOf = ts => new Date(ts).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+const clockOf = ts => dfmt(new Date(ts), { hour: '2-digit', minute: '2-digit' });
 function whenOf(ts){ const k = keyOf(new Date(ts)), t = todayKey(); return (k === t ? 'azi' : k === addDays(t, -1) ? 'ieri' : k === addDays(t, 1) ? 'mâine' : shortDate(k)) + ' la ' + clockOf(ts); }
 function startFast(fromLast){ const at = fromLast ? lastMealAt() : Date.now(); if (!at) return; setFast({ start: at }); toast('Fasting pornit. Se termină ' + whenOf(at + fastHours(fastOf()) * 36e5) + '.'); }
 function stopFast(auto){
@@ -2794,8 +2802,16 @@ function checkBadges(){
   if (!fresh.length) return;
   lsSet('portia-badges', seen.concat(fresh));
   const b = BADGES.find(x => x.id === fresh[fresh.length - 1]);
-  S.newBadge = fresh.length > 1 ? { id: 'many', many: fresh.length, icon: 'star', until: Date.now() + 12000 } : { id: b.id, t: b.t, icon: b.icon, until: Date.now() + 12000 };
+  S.newBadge = fresh.length > 1 ? { id: 'many', many: fresh.length, icon: 'trophy', until: Date.now() + 12000 } : { id: b.id, t: b.t, icon: b.icon, until: Date.now() + 12000 };
   setTimeout(() => { if (S.newBadge && Date.now() >= S.newBadge.until){ S.newBadge = null; renderHero(); } }, 12200);
+  return true;
+}
+// The badge check walks the whole journal, so it runs once things settle after a render, not inside each render;
+// a badge just won then shows on the hero with one more render
+let badgeT = 0, badgeHold = false;
+function checkBadgesSoon(){
+  clearTimeout(badgeT);
+  badgeT = setTimeout(() => { if (checkBadges()){ badgeHold = true; try { renderHero(); } finally { badgeHold = false; } } }, 600);
 }
 function openBadges(){ S.newBadge = null; S.mini = { kind: 'badges' }; renderBadges(); showSheet('#miniSheet'); $('#miniTitle').focus({ preventScroll: true }); renderHero(); }
 function renderBadges(){
@@ -4262,7 +4278,7 @@ function renderHero(){
       : '<div class="skel" aria-hidden="true"></div><p class="hc-text">Se încarcă jurnalul tău…</p>';
     return;
   }
-  if (S.loaded) checkBadges();
+  if (S.loaded && !badgeHold) checkBadgesSoon();
   const nb = S.loaded && S.newBadge && Date.now() < S.newBadge.until ? S.newBadge : null;
   const T = targetsFor(S.view), t = dayTotals(S.days[S.view]);
   const rem = T.kcal - t.kcal, over = rem < 0;
@@ -4703,7 +4719,7 @@ function smoothPath(P){
   for (let i = 0; i < n - 1; i++){ const h = dx[i] / 3; d += 'C' + f(P[i][0] + h) + ' ' + f(P[i][1] + t[i] * h) + ' ' + f(P[i + 1][0] - h) + ' ' + f(P[i + 1][1] - t[i + 1] * h) + ' ' + f(P[i + 1][0]) + ' ' + f(P[i + 1][1]); }
   return d;
 }
-const longDay = k => cap(parseKey(k).toLocaleDateString('ro-RO', { weekday: 'long', day: 'numeric', month: 'long' }));
+const longDay = k => cap(dfmt(parseKey(k), { weekday: 'long', day: 'numeric', month: 'long' }));
 const signed1 = v => (v > 0.04 ? '+' : v < -0.04 ? '−' : '') + fmt1(Math.abs(v));
 function renderWeight(){
   const today = todayKey(); const cur = getDay(S.view).weight || null;
@@ -5123,7 +5139,7 @@ function renderSettingsInner(){
           '<div class="row co-btns"><button class="btn soft sm" data-action="coach-preview">Vezi raportul</button><button class="btn primary sm" data-action="coach-send">Trimite acum</button></div>' +
           (C.sent ? '<p class="hint">Ultimul raport trimis: ' + esc(planDate(C.sent)) + '.</p>' : '') : '') + '</section>'; },
     health: () => { const h = healthOf(), nm = healthName();
-      const when = h && h.last ? new Date(h.last).toLocaleString('ro-RO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'încă nu';
+      const when = h && h.last ? dfmt(new Date(h.last), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'încă nu';
       return '<section id="healthSec"><h3>' + esc(nm) + '</h3><p>Porția poate citi din ' + esc(nm) + ' greutatea, pașii, somnul și antrenamentele de forță, ca să nu le mai notezi de mână. Doar citește, nu scrie nimic acolo. Ce ai notat tu de mână nu se schimbă.</p>' +
         (healthReady()
           ? swRow('Citește din ' + nm, 'health-on', !!h) +

@@ -1674,3 +1674,9 @@ button.lib-main:active{background:color-mix(in srgb,var(--ink) 5%,transparent)}
 /* Azi: the pattern of the day */
 .in-top .wy-ic{width:42px;height:42px;border-radius:14px}
 .in-text{margin:0 0 12px;text-wrap:pretty}
+/* Android: many WebViews draw blur and glow filters on the CPU, and a blurred bar is redrawn on every scrolled frame.
+   There the top bar is opaque and the bottom one nearly so, instead of blurred, and the calorie ring keeps its colour without the
+   glow. The look stays the same at a glance; iOS and the web keep the blur. */
+html[data-native="android"] .appbar{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:var(--bg)}
+html[data-native="android"] .tabbar{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:color-mix(in srgb,var(--surface) 98%,transparent)}
+html[data-native="android"] .hero-card .r-val{filter:none}
