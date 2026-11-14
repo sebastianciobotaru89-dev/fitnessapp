@@ -483,18 +483,32 @@ function mirrorFlush(){
   mirrorQ.forEach((s, k) => nat('Preferences', 'set', { key: k, value: s }));
   mirrorQ.clear();
 }
+// Returns how many keys came back from the native copy into the web view
 async function nativeRestore(){
-  if (!NATIVE) return;
+  if (!NATIVE) return 0;
   const r = await nat('Preferences', 'keys');
   const keys = (r && Array.isArray(r.keys) ? r.keys : []).filter(k => MIRROR_RX.test(k));
+  let n = 0;
   for (const k of keys){
     let have = null; try { have = localStorage.getItem(k); } catch (e) {}
     if (have != null) continue;
     const v = await nat('Preferences', 'get', { key: k });
-    if (v && typeof v.value === 'string') try { localStorage.setItem(k, v.value); } catch (e) {}
+    if (v && typeof v.value === 'string') try { localStorage.setItem(k, v.value); n++; } catch (e) {}
   }
   // anything that so far lived only in the web view gets its native copy now
   try { Object.keys(localStorage).filter(k => MIRROR_RX.test(k) && keys.indexOf(k) < 0).forEach(k => mirrorSet(k, localStorage.getItem(k))); } catch (e) {}
+  return n;
+}
+// The native copy matters only when the web view lost its storage. A busy phone can be slow to answer, and a reply can
+// get lost while the page reloads (seen on the Android emulator: the app then stayed blank). So the start waits for it
+// at most 2 s and then goes on from the web view's storage; the copy is asked once more, and if it brings anything
+// back, the page loads again from it.
+async function nativeRestoreSoon(){
+  const R = nativeRestore().catch(() => 0);
+  const first = await Promise.race([R, new Promise(r => setTimeout(() => r(-1), 2000))]);
+  if (first !== -1) return;
+  let done = false; const fin = n => { if (done) return; done = true; if (n > 0) location.reload(); };
+  R.then(fin); setTimeout(() => nativeRestore().catch(() => 0).then(fin), 1000);
 }
 // Haptics: a light tap for small actions, a success pattern when something is saved, a tick when the day changes
 const HAPTIC = { commit: 'success', 'add-manual': 'success', 'bc-add': 'success', 'fav-add': 'success', 'recipe-log': 'success', 'rl-add': 'success', 's-save': 'success', 'water-add': 'light', 'water-set': 'light', nav: 'tick', 'quick-add': 'light', 'meal-open': 'light', 'week-prev': 'tick', 'week-next': 'tick', 'go-today': 'tick', 'fast-start': 'medium', 'fast-stop': 'medium', 'del': 'medium', 'e-del': 'medium' };
@@ -850,7 +864,7 @@ function loadCache(){
 async function boot(){
   // Outside Claude (e.g. GitHub Pages, the store apps) there is no owner: paid themes stay locked
   if (!window.claude || typeof window.claude.use !== 'function') S.isOwner = false;
-  if (NATIVE) await nativeRestore();
+  if (NATIVE) await nativeRestoreSoon();
   S.hostTheme = document.documentElement.getAttribute('data-theme');
   applyMode();
   try {
