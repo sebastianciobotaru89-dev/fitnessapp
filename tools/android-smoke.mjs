@@ -132,6 +132,18 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   // a slow emulator can show "Pixel Launcher isn't responding" over everything; those dialogs are not the app's
   try { sh('adb shell settings put global hide_error_dialogs 1'); sh('adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS'); } catch {}
   console.log(sh(`adb install -r ${APK}`).trim());
+  // Right after boot Google's apps start and the APK is compiled, with the CPU near 100%. The first start waits until
+  // the processor is less than half busy for two samples in a row, at most about 90 s, so a busy system is not taken
+  // for a hung app. The share of busy time comes from two readings of /proc/stat, two seconds apart.
+  const busy = async () => {
+    const read = () => sh('adb shell head -1 /proc/stat').trim().split(/\s+/).slice(1).map(Number);
+    const a = read(); await sleep(2000); const b = read();
+    const d = b.map((v, i) => v - a[i]), total = d.reduce((x, y) => x + y, 0);
+    return total ? 1 - (d[3] + (d[4] || 0)) / total : 1;
+  };
+  { let calm = 0, last = 1, i = 0;
+    for (; i < 30 && calm < 2; i++){ try { last = await busy(); } catch { last = 0; } calm = last < 0.5 ? calm + 1 : 0; if (calm < 2) await sleep(1000); }
+    console.log('procesorul emulatorului: ' + Math.round(last * 100) + '% ocupat după ' + i + ' măsurători'); }
   sh('adb logcat -c');
   // The first start of a freshly installed app, on an emulator that has just booted, can spend more than 5 s on one
   // frame (CPU at 99%, the web view's GPU thread in software). With the error dialogs hidden the system then closes the
