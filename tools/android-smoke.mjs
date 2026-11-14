@@ -133,8 +133,26 @@ const resumed = () => /com\.portia\.app/.test(sh('adb shell dumpsys activity act
   try { sh('adb shell settings put global hide_error_dialogs 1'); sh('adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS'); } catch {}
   console.log(sh(`adb install -r ${APK}`).trim());
   sh('adb logcat -c');
-  start(); await sleep(9000);
-  let page = await connect();
+  // The first start of a freshly installed app, on an emulator that has just booted, can spend more than 5 s on one
+  // frame (CPU at 99%, the web view's GPU thread in software). With the error dialogs hidden the system then closes the
+  // app at its first ANR. So the first start shows the dialog and answers "Wait", like the restarts below, and is tried
+  // a second time; the ANR is reported, and a second failure still fails the test.
+  const firstStart = async () => {
+    try { sh('adb shell settings put global hide_error_dialogs 0'); } catch {}
+    try {
+      for (let attempt = 0; ; attempt++){
+        start(); await sleep(9000); await clearDialogs();
+        try { const p = await connect(); await clearDialogs(); return p; } catch (e) {
+          if (attempt) throw e;
+          let anr = ''; try { anr = sh('adb logcat -d').split('\n').filter(l => /ANR in .*com\.portia\.app/.test(l)).slice(-1)[0] || ''; } catch {}
+          info('prima pornire n-a reușit' + (anr ? ', ANR: ' + anr.trim().slice(0, 200) : '') + '; încă o încercare');
+          try { sh(`adb shell am force-stop ${PKG}`); } catch {}
+          await sleep(3000);
+        }
+      }
+    } finally { try { sh('adb shell settings put global hide_error_dialogs 1'); } catch {} }
+  };
+  let page = await firstStart();
   await sleep(1500);
   shot('1-bun-venit');
 
