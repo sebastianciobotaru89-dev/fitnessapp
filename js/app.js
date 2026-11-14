@@ -1784,8 +1784,7 @@ function planStateRaw(asOf){
       held.counted++; if (Math.abs(ws.reduce((a, x) => a + x, 0) / ws.length - pl.from) <= tol) held.inZone++;
     }
   }
-  return { pl, dir, hold, held, start, age, total, weeks, at, endKey: dir ? addDays(start, Math.ceil(weeks * 7)) : null, planned, trend, n, ready, off, tol, zone, slope, cur, done,
-    frac: dir ? Math.max(0, Math.min(1, done / total)) : 0, planFrac: dir ? Math.max(0, Math.min(1, Math.abs(at(age) - pl.from) / total)) : 0,
+  return { pl, dir, hold, held, start, age, total, weeks, at, endKey: dir ? addDays(start, Math.ceil(weeks * 7)) : null, planned, trend, md: meanD, n, ready, off, tol, zone, slope, cur, done,
     eta, food: { logged, inT, avg: logged ? sum / logged : 0, target: logged ? tsum / logged : 0 }, warn, readyOn: addDays(start, PLAN_WAIT) };
 }
 
@@ -1831,18 +1830,67 @@ function maybeHold(force, tapped){
   return true;
 }
 
-// The meter: a half dial; the green middle is the plan's margin, the needle is how far ahead or behind you are
-const AL_X = 120, AL_Y = 122, AL_R = 94;
-const alPt = (deg, r) => [(AL_X + r * Math.sin(deg * Math.PI / 180)).toFixed(1), (AL_Y - r * Math.cos(deg * Math.PI / 180)).toFixed(1)];
-const alArc = (a, b, r) => { const p = alPt(a, r), q = alPt(b, r); return 'M' + p[0] + ' ' + p[1] + ' A' + r + ' ' + r + ' 0 0 1 ' + q[0] + ' ' + q[1]; };
-const AL_TICKS = (() => {
-  let s = '';
-  for (let a = -90; a <= 90; a += 10){ const mj = a % 30 === 0, p = alPt(a, mj ? 107 : 110), q = alPt(a, 116); s += '<line' + (mj ? ' class="mj"' : '') + ' x1="' + p[0] + '" y1="' + p[1] + '" x2="' + q[0] + '" y2="' + q[1] + '"/>'; }
-  return '<g class="al-ticks">' + s + '</g>';
-})();
-const alGauge = (deg, idle) => '<svg class="al-svg' + (idle ? ' idle' : '') + '" viewBox="0 0 240 134" aria-hidden="true">' + AL_TICKS +
-  '<path class="al-trk" d="' + alArc(-90, 90, AL_R) + '"/><path class="al-zone" d="' + alArc(-30, 30, AL_R) + '"/>' +
-  '<g class="al-needle" style="--a:' + deg.toFixed(1) + 'deg"><path d="M' + (AL_X - 4.5) + ' ' + AL_Y + ' L' + AL_X + ' ' + (AL_Y - 82) + ' L' + (AL_X + 4.5) + ' ' + AL_Y + ' Z"/><circle cx="' + AL_X + '" cy="' + AL_Y + '" r="10"/><circle class="al-hub" cx="' + AL_X + '" cy="' + AL_Y + '" r="3.6"/></g></svg>';
+// The corridor: the plan's line from the start to the target, with its margin around it, and your weigh-ins inside.
+// The line is the same 10-day average the status is judged on, drawn at the middle day of its weigh-ins, so the dot
+// sits inside the band exactly when the status says you are on the plan. Maintenance and keeping are a flat band.
+const PC_W = 336, PC_H = 164, PC_L = 6, PC_R = 330, PC_T = 26, PC_B = 130;
+function planChart(P, aria){
+  const pl = P.pl, dir = P.dir, endD = dir ? Math.ceil(P.weeks * 7) : 0;
+  const x0 = P.hold ? (P.age > 84 ? P.age - 84 : Math.min(0, P.age - 10)) : dir ? 0 : Math.max(0, P.age - 84);
+  const x1 = dir ? Math.max(endD, P.age, 7) : Math.max(x0 + 42, P.age + 14);
+  // the weigh-ins by day from the start; before the start only in maintenance, as in planState
+  const W = {};
+  for (let j = x0 - 9; j <= P.age; j++){ if (j < 0 && !P.hold) continue; const v = S.days[addDays(P.start, j)]; if (v && v.weight) W[j] = v.weight; }
+  const trail = []; let last = '';
+  for (let d = x0; d <= P.age; d++){
+    let s = 0, sd = 0, n = 0, sig = '';
+    for (let j = d - 9; j <= d; j++) if (W[j]){ s += W[j]; sd += j; n++; sig += j + ','; }
+    if (!n || sig === last) continue; last = sig;
+    if (sd / n >= x0) trail.push([sd / n, s / n]);
+  }
+  const dots = Object.keys(W).map(Number).filter(j => j >= x0).map(j => [j, W[j]]);
+  const ds = [x0]; if (dir && endD > x0 && endD < x1) ds.push(endD); ds.push(x1);
+  const up = ds.map(d => [d, P.at(d) + P.tol]), dn = ds.map(d => [d, P.at(d) - P.tol]);
+  const vals = [pl.from, pl.to].concat(up.map(p => p[1]), dn.map(p => p[1]), trail.map(p => p[1]), dots.map(p => p[1]));
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (hi - lo < 3){ const m = (hi + lo) / 2; lo = m - 1.5; hi = m + 1.5; }
+  const pad = (hi - lo) * 0.06; lo -= pad; hi += pad;
+  const X = d => PC_L + (PC_R - PC_L) * (d - x0) / Math.max(1, x1 - x0), Y = w => PC_B - (w - lo) / (hi - lo) * (PC_B - PC_T);
+  const f = v => v.toFixed(1), pt = p => f(X(p[0])) + ' ' + f(Y(p[1])), poly = a => 'M' + a.map(pt).join(' L');
+  const xn = X(P.age);
+  let s = '<path class="plc-band" d="' + poly(up) + ' L' + dn.slice().reverse().map(pt).join(' L') + ' Z"/>' +
+    '<path class="plc-edge" d="' + poly(up) + '"/><path class="plc-edge" d="' + poly(dn) + '"/>' +
+    '<path class="plc-mid" d="' + poly(ds.map(d => [d, P.at(d)])) + '"/>';
+  if (xn < PC_R - 1) s += '<rect class="plc-veil" x="' + f(xn) + '" y="' + (PC_T - 14) + '" width="' + f(PC_R - xn + 4) + '" height="' + (PC_B - PC_T + 28) + '"/>';
+  s += '<line class="plc-now" x1="' + f(xn) + '" x2="' + f(xn) + '" y1="' + (PC_T - 12) + '" y2="' + (PC_B + 10) + '"/>';
+  if (dots.length <= 160) s += dots.map(p => '<circle class="plc-dot" cx="' + f(X(p[0])) + '" cy="' + f(Y(p[1])) + '" r="2.2"/>').join('');
+  if (trail.length >= 2) s += '<path class="plc-trail" pathLength="1" d="' + smoothPath(trail.map(p => [X(p[0]), Y(p[1])])) + '"/>';
+  // the ends: where the plan started and the target, with their weights on the outside of the band
+  if (dir){
+    const sx = X(0), sy = Y(pl.from), gx = X(endD), gy = Y(pl.to), down = dir < 0;
+    s += '<circle class="plc-start" cx="' + f(sx) + '" cy="' + f(sy) + '" r="4"/><circle class="plc-goal-ring" cx="' + f(gx) + '" cy="' + f(gy) + '" r="9"/><circle class="plc-goal" cx="' + f(gx) + '" cy="' + f(gy) + '" r="4.5"/>' +
+      '<text class="plc-v" x="' + f(sx - 2) + '" y="' + f(down ? sy - 11 : sy + 19) + '">' + fmt1(pl.from) + '</text>' +
+      '<text class="plc-v" x="' + f(Math.min(gx + 5, PC_R + 4)) + '" y="' + f(down ? gy + 22 : gy - 14) + '" text-anchor="end">' + fmt1(pl.to) + ' kg</text>';
+  } else s += '<text class="plc-v" x="' + (PC_R + 2) + '" y="' + f(Y(pl.from + P.tol) - 7) + '" text-anchor="end">' + fmt1(pl.from) + ' kg ±' + fmt1(P.tol) + '</text>';
+  if (P.trend != null){
+    const mx = f(X(Math.max(x0, Math.min(x1, P.md)))), my = f(Y(P.trend));
+    s += '<g class="plc-me"><circle class="plc-halo" cx="' + mx + '" cy="' + my + '" r="11"/><circle class="plc-you" cx="' + mx + '" cy="' + my + '" r="5.5"/></g>';
+  }
+  // the dates under it: the target's first, then today, then the start, each only where it has room
+  const ax = [], put = (x, c, t, a) => { if (ax.every(o => Math.abs(o.c - c) >= 52)) ax.push({ x, c, t, a }); };
+  if (dir) put(X(endD) + 4, X(endD) - 20, planDate(P.endKey, true), 'end');
+  put(xn < PC_L + 14 ? xn - 2 : xn > PC_R - 14 ? xn + 2 : xn, xn, 'azi', xn < PC_L + 14 ? 'start' : xn > PC_R - 14 ? 'end' : 'middle');
+  put(PC_L - 2, PC_L + 22, planDate(addDays(P.start, x0), true), 'start');
+  s += ax.map(o => '<text x="' + f(o.x) + '" y="' + (PC_H - 4) + '" text-anchor="' + o.a + '">' + esc(o.t) + '</text>').join('');
+  return '<div class="plc" data-z="' + P.zone + '" role="img" aria-label="' + esc(aria) + '"><svg viewBox="0 0 ' + PC_W + ' ' + PC_H + '" aria-hidden="true">' + s + '</svg></div>';
+}
+// Before there is a plan: what the corridor looks like, without data
+const PC_IDLE = '<div class="plc idle" aria-hidden="true"><svg viewBox="0 0 ' + PC_W + ' 136">' +
+  '<path class="plc-band" d="M6 22 L296 92 L330 92 L330 118 L296 118 L6 48 Z"/><path class="plc-edge" d="M6 22 L296 92 L330 92"/><path class="plc-edge" d="M6 48 L296 118 L330 118"/>' +
+  '<path class="plc-mid" d="M6 35 L296 105 L330 105"/><rect class="plc-veil" x="132" y="10" width="202" height="122"/>' +
+  '<path class="plc-trail" d="M6 35 C24 38 40 44 58 47 S92 58 108 60 S124 64 132 66"/>' +
+  '<circle class="plc-start" cx="6" cy="35" r="4"/><circle class="plc-goal-ring" cx="296" cy="105" r="9"/><circle class="plc-goal" cx="296" cy="105" r="4.5"/>' +
+  '<g class="plc-me"><circle class="plc-halo" cx="132" cy="66" r="11"/><circle class="plc-you" cx="132" cy="66" r="5.5"/></g></svg></div>';
 function renderPlan(){
   const el = $('#plan'); if (!el) return;
   const p = S.profile; if (!p){ el.hidden = true; el.innerHTML = ''; return; }
@@ -1851,7 +1899,7 @@ function renderPlan(){
   const zoneTxt = P ? fmt1(P.pl.from - P.tol) + '–' + fmt1(P.pl.from + P.tol) + ' kg' : '';
   const head = '<div class="panel-head"><h2 id="plTitle">' + (hold ? 'Mentenanță' : 'Aliniere cu planul') + '</h2>' + (P ? '<span class="meta">' + (hold ? 'zona ' + zoneTxt : P.dir ? fmt1(P.pl.from) + ' → ' + fmt1(P.pl.to) + ' kg' : 'în jur de ' + fmt1(P.pl.from) + ' kg') + '</span>' : '') + '</div>';
   if (!P){
-    el.innerHTML = head + '<div class="align"><div class="al-g">' + alGauge(0, true) + '</div></div>' +
+    el.innerHTML = head + PC_IDLE +
       '<p class="pl-cta">Alege greutatea pe care vrei s-o ai și primești planul: cât de repede, până când și, pe parcurs, dacă ești pe drum.</p>' +
       '<button class="btn primary wide" data-action="plan-open">Fă-ți planul</button>';
     return;
@@ -1861,7 +1909,7 @@ function renderPlan(){
   if (P.zone === 'wait'){
     const miss = Math.max(0, PLAN_WEIGHS - P.n), more = miss === 1 ? 'încă o cântărire' : 'încă ' + miss + ' cântăriri', early = P.age < PLAN_WAIT && !hold;
     label = early ? 'Abia ai pornit' : 'Mai cântărește-te';
-    sub = early ? 'Acul pornește pe ' + planDate(P.readyOn) + (miss ? ', după ' + more + '.' : '.') : 'Acul pornește după ' + more + ' în următoarele zile.';
+    sub = early ? 'Comparația cu planul începe pe ' + planDate(P.readyOn) + (miss ? ', după ' + more + '.' : '.') : 'Comparația cu planul începe după ' + more + ' în următoarele zile.';
   } else if (P.zone === 'done'){
     label = 'Ținta atinsă'; sub = 'Media ta e ' + fmt1(P.trend) + ' kg, ' + (P.dir < 0 ? 'sub' : 'peste') + ' ținta de ' + fmt1(pl.to) + ' kg.';
   } else if (hold){
@@ -1875,12 +1923,10 @@ function renderPlan(){
     label = { on: 'Stabil', up: 'Ai urcat', down: 'Ai coborât' }[P.zone];
     sub = P.zone === 'on' ? (Math.abs(P.off) < 0.05 ? 'Exact la ' + fmt1(pl.from) + ' kg.' : 'La ' + kg(P.off) + ' de ' + fmt1(pl.from) + ' kg, în marjă.') : 'Cu ' + kg(P.off) + ' ' + (P.off > 0 ? 'peste' : 'sub') + ' ' + fmt1(pl.from) + ' kg.';
   }
-  const idle = P.zone === 'wait', deg = idle ? 0 : Math.max(-86, Math.min(86, P.off / (3 * P.tol) * 90));
-  const sides = P.dir ? ['În urmă', 'Înainte'] : ['Mai ușor', 'Mai greu'];
-  const basis = P.trend != null && !idle ? '<p class="al-basis">Media cântăririlor din ultimele 10 zile e ' + fmt1(P.trend) + ' kg' + (P.zone === 'done' || hold ? '.' : '; planul cerea ' + fmt1(P.planned) + ' kg.') + '</p>' : '';
-  let body = '<div class="align"><div class="al-g" role="img" aria-label="' + esc('Aliniere cu planul: ' + label + '. ' + sub) + '">' + alGauge(deg, idle) +
-    '<div class="al-sides" aria-hidden="true"><span>' + sides[0] + '</span><span>' + sides[1] + '</span></div></div>' +
-    '<div class="al-read" data-z="' + P.zone + '"><b>' + label + '</b><span>' + esc(sub) + '</span></div>' + basis + '</div>';
+  const idle = P.zone === 'wait';
+  const basis = P.trend != null && !idle ? '<p class="al-basis">Linia e media cântăririlor pe 10 zile: ' + fmt1(P.trend) + ' kg' + (P.zone === 'done' || hold ? '' : ', planul cerea ' + fmt1(P.planned) + ' kg') + '. Banda e marja de ±' + fmt1(P.tol) + ' kg.</p>' : '';
+  const aria = (P.dir ? 'Culoarul planului, de la ' + fmt1(pl.from) + ' la ' + fmt1(pl.to) + ' kg, până pe ' + planDate(P.endKey) : 'Zona de ' + zoneTxt) + '. ' + label + '. ' + sub;
+  let body = '<div class="al-read" data-z="' + P.zone + '"><b>' + label + '</b><span>' + esc(sub) + '</span></div>' + planChart(P, aria) + basis;
   if (hold){
     // the two phases: the plan that reached the target, then maintenance
     const pv = pl.prev, H = P.held;
@@ -1891,11 +1937,9 @@ function renderPlan(){
     body += '<dl class="hstats pl-tiles"><div><dt>Greutatea de menținut</dt><dd>' + fmt1(pl.from) + '<small> kg</small></dd></div>' +
       '<div><dt>Săptămâni în zonă</dt><dd>' + (H.counted ? H.inZone + '<small> din ' + H.counted + '</small>' : '<small>după prima săptămână</small>') + '</dd></div></dl>';
   } else if (P.dir){
-    const moved = P.done >= 0 ? 'Ai ' + (P.dir < 0 ? 'slăbit' : 'câștigat') + ' ' + fmt1(P.done) + ' kg din ' + fmt1(P.total) + '.' : 'Ești cu ' + fmt1(-P.done) + ' kg ' + (P.dir < 0 ? 'peste' : 'sub') + ' greutatea de start.';
+    const moved = Math.abs(P.done) < 0.05 ? 'Încă la greutatea de start.' : P.done > 0 ? 'Ai ' + (P.dir < 0 ? 'slăbit' : 'câștigat') + ' ' + fmt1(P.done) + ' kg din ' + fmt1(P.total) + '.' : 'Ești cu ' + fmt1(-P.done) + ' kg ' + (P.dir < 0 ? 'peste' : 'sub') + ' greutatea de start.';
     const want = Math.abs(P.at(P.age) - pl.from);
-    body += '<div class="pl-prog"><div class="pl-bar" role="img" aria-label="' + esc(moved + ' Planul cerea ' + fmt1(want) + ' kg până azi.') + '"><i class="pl-fill" style="width:' + (P.frac * 100).toFixed(1) + '%"></i><i class="pl-mark" style="left:' + (P.planFrac * 100).toFixed(1) + '%"><span>plan</span></i></div>' +
-      '<div class="pl-ends" aria-hidden="true"><span>' + fmt1(pl.from) + ' kg</span><span>' + fmt1(pl.to) + ' kg</span></div>' +
-      '<p class="pl-done"><b>' + moved + '</b> Planul cerea ' + fmt1(want) + ' kg până azi.</p></div>' +
+    body += '<p class="pl-done"><b>' + moved + '</b> Planul cerea ' + fmt1(want) + ' kg până azi.</p>' +
       '<dl class="hstats pl-tiles"><div><dt>Ritmul planului</dt><dd>' + (P.dir < 0 ? '−' : '+') + fmtRate(pl.rate) + '<small> kg pe săpt.</small></dd></div><div><dt>Ajungi la ' + fmt1(pl.to) + ' kg</dt><dd>' + esc(planDate(P.endKey, true)) + '</dd></div></dl>';
   } else {
     body += '<dl class="hstats pl-tiles"><div><dt>Greutatea de menținut</dt><dd>' + fmt1(pl.from) + '<small> kg</small></dd></div><div><dt>Marja</dt><dd>±' + PLAN_KEEP_TOL + '<small> kg</small></dd></div></dl>';
@@ -1969,11 +2013,11 @@ function holdNotes(P, A){
     : 'Media a coborât sub zona ta (de la ' + edge + ' kg). Dacă rămâne așa și săptămâna viitoare, ' + (smart ? 'ținta urcă puțin.' : 'mănâncă puțin mai mult.');
   return '<div class="banner warn"><p>' + t + '</p></div>';
 }
-// The needle swings in from the left when you open Progres
+// When you open Progres the line draws itself from the start and the dot lands where you are
 function alignSweep(){
-  const n = $('#plan .al-svg:not(.idle) .al-needle'); if (!n || reduceMotion()) return;
-  n.classList.add('rest'); void n.getBoundingClientRect();
-  requestAnimationFrame(() => requestAnimationFrame(() => n.classList.remove('rest')));
+  const c = $('#plan .plc:not(.idle)'); if (!c || reduceMotion()) return;
+  c.classList.add('rest'); void c.getBoundingClientRect();
+  requestAnimationFrame(() => requestAnimationFrame(() => c.classList.remove('rest')));
 }
 
 // The sheet that makes or changes the plan
