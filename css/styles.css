@@ -1680,3 +1680,29 @@ button.lib-main:active{background:color-mix(in srgb,var(--ink) 5%,transparent)}
 html[data-native="android"] .appbar{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:var(--bg)}
 html[data-native="android"] .tabbar{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:color-mix(in srgb,var(--surface) 98%,transparent)}
 html[data-native="android"] .hero-card .r-val{filter:none}
+/* Voice: the sheet behind the microphone on Azi */
+.v-top{display:grid;justify-items:center;gap:10px;margin:4px 0 14px}
+.v-mic{width:76px;height:76px;border-radius:50%;border:0;display:grid;place-items:center;background:var(--kcal);color:var(--on-kcal);cursor:pointer;box-shadow:0 10px 24px -10px color-mix(in srgb,var(--kcal) 70%,transparent);transition:transform .15s}
+.v-mic svg{width:32px;height:32px}
+.v-mic:active{transform:scale(.95)}
+.v-mic.on{background:var(--over);color:#fff;animation:vpulse 1.4s ease-in-out infinite}
+@keyframes vpulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--over) 45%,transparent)}50%{box-shadow:0 0 0 16px color-mix(in srgb,var(--over) 0%,transparent)}}
+@media (prefers-reduced-motion:reduce){.v-mic.on{animation:none}}
+.v-state{margin:0 0 12px;text-align:center;font-size:14px;color:var(--muted);text-wrap:pretty}
+.v-ex{margin:8px 0 0}
+.v-card{margin-top:14px;padding:14px;border-radius:18px;background:var(--sunk)}
+.v-card h3{margin:0 0 10px;font-size:15px}
+.v-card .hint{margin:10px 0 0}
+.v-tg{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.v-tg li{display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:2px 10px}
+.v-tg span{font-weight:650}
+.v-tg b{font-family:var(--f-display);font-weight:780;font-size:19px;font-variant-numeric:tabular-nums}
+.v-tg b small{font-family:var(--f-body);font-size:12.5px;font-weight:600;color:var(--muted)}
+.v-tg em{grid-column:1/-1;font-style:normal;font-size:12.5px;color:var(--muted)}
+.v-items{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.v-items label{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+.v-items input{margin-top:3px;width:18px;height:18px;accent-color:var(--kcal)}
+.v-items b{display:block;font-weight:680}
+.v-items small{display:block;font-size:12.5px;color:var(--muted)}
+.v-miss{margin:10px 0 0;font-size:13.5px;text-wrap:pretty}
+.v-meals{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 4px}

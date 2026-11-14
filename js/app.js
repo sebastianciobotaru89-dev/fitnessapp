@@ -3239,7 +3239,7 @@ function reportRow(){
     (S.aiOff ? '<span></span>' : '<button class="btn ' + (sunday ? 'primary' : 'soft') + ' sm" data-action="report-new">' + (sunday ? 'Fă raportul de duminică' : 'Raportul săptămânii') + '</button>') +
     (last ? '<button class="rm" data-action="report-open">Ultimul raport: ' + esc(shortDate(last.id)) + '</button>' : '') + '</div>';
 }
-function closeMini(){ if (S.repCtl){ S.repCtl.abort(); S.repCtl = null; } closeSheet('#miniSheet'); S.mini = null; }
+function closeMini(){ if (S.mini && S.mini.kind === 'voice'){ Voice.after = null; stopVoice(); } if (S.repCtl){ S.repCtl.abort(); S.repCtl = null; } closeSheet('#miniSheet'); S.mini = null; }
 function openReport(){
   const r = S.library.reports[0]; if (!r) return;
   S.mini = { kind: 'report', state: 'done', report: r };
@@ -3798,7 +3798,7 @@ async function downloadProducts(){
 /* ---------- voice dictation ---------- */
 // Web Speech API (Safari, Chrome). Where the page gets no microphone (often inside Claude), the buttons hide and the keyboard's own mic remains.
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-const Voice = { rec: null, target: null, blocked: false };
+const Voice = { rec: null, target: null, blocked: false, after: null };
 const voiceOn = () => !!SpeechRec && !Voice.blocked;
 function micBtn(id){
   if (!voiceOn()) return '';
@@ -3848,12 +3848,197 @@ function toggleVoice(id){
   };
   rec.onend = () => {
     if (Voice.rec === rec){ Voice.rec = null; Voice.target = null; }
+    if (id === 'vText' && Voice.after){ const f = Voice.after; Voice.after = null; f(); }
     const cur = document.getElementById(id); if (cur) cur.placeholder = ph;
     syncMics();
   };
   try { rec.start(); } catch (e) { Voice.rec = null; Voice.target = null; el.placeholder = ph; toast('Dictarea nu a pornit. Încearcă din nou.'); }
   syncMics();
 }
+
+/* ---------- voice: say what you ate, or change the targets ---------- */
+// The microphone on Azi. What is said is read by the app: a request to change the targets ("caloriile la 2.000 și
+// proteinele la 150") becomes a proposal to confirm; anything else is food. With AI estimates on, the food goes to the
+// usual estimate, checked before saving; without them it is matched with foods already in the journal and the library.
+// Nothing is saved without a tap. Where the page has no speech recognition (the store apps), the same sheet takes the
+// text from the keyboard's own microphone.
+const voiceEngine = () => voiceOn() ? 'web' : 'keys';
+function openVoice(){
+  if (!S.profile){ openSetup(); return; }
+  Voice.after = null; stopVoice();
+  S.mini = { kind: 'voice', text: '', out: null, meal: S.view === todayKey() ? autoMeal() : S.meal };
+  renderVoice(); showSheet('#miniSheet');
+  if (voiceEngine() === 'web') listenVoice();
+  else setTimeout(() => { const t = $('#vText'); if (t) t.focus(); }, 350);
+}
+function listenVoice(){
+  const m = S.mini; if (!m || m.kind !== 'voice') return;
+  if (Voice.rec && Voice.target === 'vText'){ try { Voice.rec.stop(); } catch (e) {} return; }
+  m.out = null; renderVoice();
+  // when listening ends with something said, it is read at once
+  Voice.after = () => { const t = $('#vText'); if (S.mini && S.mini.kind === 'voice'){ S.mini.text = t ? t.value : S.mini.text; if (S.mini.text.trim()) voiceGo(); else renderVoice(); } };
+  toggleVoice('vText');
+  renderVoice();
+}
+function renderVoice(){
+  const m = S.mini; if (!m || m.kind !== 'voice') return;
+  const web = voiceEngine() === 'web', on = !!Voice.rec && Voice.target === 'vText';
+  const box = $('#vText'); if (box) m.text = box.value;
+  $('#miniCard').innerHTML = sheetHead('miniTitle', 'Spune ce ai mâncat', 'close-mini') +
+    (web ? '<div class="v-top"><button class="v-mic' + (on ? ' on' : '') + '" data-action="voice-listen" aria-pressed="' + on + '" aria-label="' + (on ? 'Oprește ascultarea' : 'Vorbește') + '">' + MIC_ICON + '</button>' +
+        '<p class="v-state" aria-live="polite">' + (on ? 'Se ascultă. Vorbește normal, apoi taci o clipă.' : 'Atinge microfonul și spune ce ai mâncat.') + '</p></div>'
+      : '<p class="v-state">Atinge câmpul de mai jos, apoi microfonul de pe tastatură, și spune ce ai mâncat.</p>') +
+    '<label class="sr" for="vText">Ce ai spus</label><textarea id="vText" rows="3" placeholder="ex: 200 g piept de pui cu orez și o salată">' + esc(m.text) + '</textarea>' +
+    (m.out ? '' : '<p class="hint v-ex">Poți spune și ținte, de exemplu „Setează caloriile la 2.000 și proteinele la 150”.</p>') +
+    '<div id="vOut">' + (m.out ? voiceOutHtml(m) : '') + '</div>' +
+    (m.out ? '' : '<div class="row ebtns"><button class="btn primary wide" data-action="voice-go">Gata</button></div>');
+}
+// Numbers as the recognizer writes them: "2.000" and "2 000" are 2000, "1,5" is 1.5; small number words become digits
+const NUM_WORDS = { 'un': 1, 'o': 1, 'una': 1, 'unu': 1, 'doi': 2, 'două': 2, 'doua': 2, 'trei': 3, 'patru': 4, 'cinci': 5, 'șase': 6, 'sase': 6, 'șapte': 7, 'sapte': 7, 'opt': 8, 'nouă': 9, 'noua': 9, 'zece': 10, 'jumătate': 0.5, 'jumatate': 0.5 };
+function voiceNums(s){
+  let t = String(s).toLowerCase().replace(/(\d)[.\s](\d{3})(?!\d)/g, '$1$2').replace(/(\d),(\d)/g, '$1.$2');
+  t = t.replace(/(\d+(?:\.\d+)?)\s*(?:de\s+)?mii\b/g, (x, n) => String(Math.round(Number(n) * 1000))).replace(/\bo\s+mie\b/g, '1000');
+  return t.replace(/(^|[\s,;])(un|o|una|unu|doi|două|doua|trei|patru|cinci|șase|sase|șapte|sapte|opt|nouă|noua|zece|jumătate|jumatate)(?=\s)/g, (x, pre, w) => pre + NUM_WORDS[w]);
+}
+const deacc = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+// Targets: each clause pairs one nutrient with the number said next to it
+const TGT_SAY = [
+  { k: 'kcal', rx: /calori|kcal/ }, { k: 'protein', rx: /protein/ }, { k: 'carbs', rx: /glucid|carbohidra|carbo\b/ },
+  { k: 'fat', rx: /grasim|lipid/ }, { k: 'water', rx: /\bapa\b|\bapei\b|lichide/ }
+];
+function parseVoiceTargets(raw){
+  const s = deacc(voiceNums(raw));
+  const intent = /seteaz|schimb|modific|\bpune|vreau|\btint|obiectiv|fixeaz|ajusteaz/.test(s);
+  if (/manca|baut/.test(s) && !/\btint|seteaz/.test(s)) return null;
+  const v = {};
+  for (const cl of s.split(/,|;|\bsi\b|\biar\b/)){
+    const n = cl.match(/(\d+(?:\.\d+)?)/); if (!n) continue;
+    const x = TGT_SAY.find(t => t.rx.test(cl)); if (!x || v[x.k] != null) continue;
+    let val = Number(n[1]);
+    if (x.k === 'water') val = /\bml\b|mililitri/.test(cl) ? val : (/litr|\bl\b/.test(cl) || val <= 10) ? val * 1000 : val;
+    v[x.k] = Math.round(val);
+  }
+  if (!Object.keys(v).length) return null;
+  // without a word like "setează", only a text made of nutrients and numbers counts as targets
+  if (!intent){
+    const rest = s.replace(/calori\w*|kcal|protein\w*|glucid\w*|carbohidra\w*|carbo|grasim\w*|lipid\w*|\bapa\b|\bapei\b|lichide|\d+(\.\d+)?|\b(la|de|si|iar|g|grame|gr|litri|litru|l|ml|mililitri|pe|zi|ziua)\b|[,.;:]/g, ' ').trim();
+    if (rest.split(/\s+/).filter(Boolean).length > 1) return null;
+  }
+  return voiceTargets(v);
+}
+// What is not said is filled in: from the calories, the macros keep their proportions; from the macros, the calories follow
+function voiceTargets(v){
+  const T = S.profile.targets, has = k => v[k] != null;
+  let kcal = v.kcal, protein = has('protein') ? v.protein : T.protein, carbs = has('carbs') ? v.carbs : T.carbs, fat = has('fat') ? v.fat : T.fat;
+  if (!has('kcal')){
+    kcal = has('protein') || has('carbs') || has('fat') ? Math.round((protein * 4 + carbs * 4 + fat * 9) / 10) * 10 : T.kcal;
+  } else if (has('carbs') && has('fat')){
+    // all said: kept as said
+  } else if (has('fat')) carbs = Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4));
+  else if (has('carbs')) fat = Math.max(0, Math.round((kcal - protein * 4 - carbs * 4) / 9));
+  else { const t2 = adaptTargets(kcal, protein); carbs = t2.carbs; fat = t2.fat; }
+  const water = has('water') ? v.water : T.water, fromMacros = protein * 4 + carbs * 4 + fat * 9;
+  let err = '';
+  if (!(kcal >= 800 && kcal <= 6000)) err = 'Caloriile trebuie să fie între 800 și 6000.';
+  else if (![protein, carbs, fat].every(x => x >= 0 && x <= 600)) err = 'Macronutrienții trebuie să fie între 0 și 600 g.';
+  else if (!(water >= 500 && water <= 8000)) err = 'Apa trebuie să fie între 0,5 și 8 litri.';
+  return { said: v, kcal, protein, carbs, fat, water, err, off: Math.abs(fromMacros - kcal) > kcal * 0.1 ? Math.round(fromMacros) : null };
+}
+// Food without AI: each part of the sentence is matched with a food already in the journal or the library
+const VOICE_STOP = new Set(['de', 'cu', 'la', 'din', 'si', 'am', 'mancat', 'baut', 'niste', 'in', 'pe', 'plus', 'iar', 'apoi', 'dupa', 'gr', 'grame', 'gram', 'bucati', 'bucata', 'portie', 'portii', 'felie', 'felii', 'lingura', 'linguri', 'cana', 'pahar', 'ml', 'litri', 'azi', 'pentru', 'mic', 'dejun', 'pranz', 'cina', 'gustare',
+  // nutrients are not foods: "un iaurt cu 10 grame de proteine" is one yogurt
+  'proteine', 'proteina', 'calorii', 'kcal', 'glucide', 'grasimi', 'carbohidrati']);
+const voiceWords = s => deacc(s).split(/[^a-z0-9]+/).filter(w => w.length >= 3 && !VOICE_STOP.has(w) && !/^\d/.test(w));
+function knownFoods(){
+  const map = new Map();
+  for (const k of Object.keys(S.days).sort().reverse()) for (const e of S.days[k].entries){
+    const n = deacc(e.name); if (!map.has(n)) map.set(n, { name: e.name, grams: e.grams, kcal: e.kcal, protein: e.protein, carbs: e.carbs, fat: e.fat, micro: e.micro });
+  }
+  for (const p of (S.library && S.library.products) || []){
+    const n = deacc(p.name); if (map.has(n)) continue;
+    const g = p.serving || 100, f = g / 100;
+    map.set(n, { name: p.name, grams: g, kcal: Math.round(p.per100.kcal * f), protein: r1(p.per100.protein * f), carbs: r1(p.per100.carbs * f), fat: r1(p.per100.fat * f) });
+  }
+  return [...map.values()].map(x => Object.assign(x, { w: voiceWords(x.name), count: Number((deacc(x.name).match(/^(\d+)\s/) || [])[1]) || 1 }));
+}
+function matchSpokenFoods(raw){
+  const s = voiceNums(raw), known = knownFoods(), items = [], miss = [];
+  const near = (a, b) => a === b || (a.length >= 4 && b.length >= 4 && (a.startsWith(b.slice(0, 4)) || b.startsWith(a.slice(0, 4))));
+  // "și" ends in a letter JavaScript's \b does not treat as a word letter, so the parts are split on the spaces around
+  for (const ph of s.split(/,|;|\s+(?:și|si|plus|cu|apoi|iar)\s+/).map(x => x.trim()).filter(Boolean)){
+    const w = voiceWords(ph); if (!w.length) continue;
+    let best = null, score = 0;
+    for (const f of known){
+      const hit = w.filter(x => f.w.some(y => near(x, y))).length; if (!hit) continue;
+      const sc = hit / w.length - Math.max(0, f.w.length - hit) * 0.03;
+      if (sc > score){ best = f; score = sc; }
+    }
+    if (!best || score < 0.6){ miss.push(ph); continue; }
+    // the portion: grams said, else a count against the count in the food's own name ("2 ouă" is already two)
+    const g = ph.match(/(\d+(?:\.\d+)?)\s*(g|gr|grame|ml)\b/), c = !g && ph.match(/^(\d+(?:\.\d+)?)\b/);
+    let f = 1;
+    if (g && best.grams) f = Number(g[1]) / best.grams; else if (c) f = Number(c[1]) / best.count;
+    f = Math.max(0.1, Math.min(10, f));
+    items.push({ on: true, said: ph, name: best.name, grams: best.grams ? Math.round(best.grams * f) : null, kcal: Math.round(best.kcal * f), protein: r1(best.protein * f), carbs: r1(best.carbs * f), fat: r1(best.fat * f), micro: best.micro ? microTimes(best.micro, f) : null });
+  }
+  return { items, miss };
+}
+function voiceGo(){
+  const m = S.mini; if (!m || m.kind !== 'voice') return;
+  const box = $('#vText'), text = ((box && box.value) || m.text || '').trim(); m.text = text;
+  if (!text){ toast('Spune sau scrie ce ai mâncat.'); return; }
+  const tg = parseVoiceTargets(text);
+  if (tg){ m.out = { kind: 'targets', t: tg }; renderVoice(); return; }
+  if (!S.aiOff){
+    closeMini(); S.tab = 'text'; showErr(''); renderTabs(); go('add');
+    $('#foodText').value = text; estimate('text'); return;
+  }
+  m.out = Object.assign({ kind: 'food' }, matchSpokenFoods(text)); renderVoice();
+}
+function voiceOutHtml(m){
+  const o = m.out, T = S.profile.targets;
+  if (o.kind === 'targets'){
+    const t = o.t, row = (l, v, cur, u) => '<li><span>' + l + '</span><b>' + fmt(v) + (u ? '<small> ' + u + '</small>' : '') + '</b><em>acum ' + fmt(cur) + '</em></li>';
+    return '<div class="v-card"><h3>Ținte noi</h3><ul class="v-tg">' + row('Calorii', t.kcal, T.kcal, 'kcal') + row('Proteine', t.protein, T.protein, 'g') + row('Glucide', t.carbs, T.carbs, 'g') + row('Grăsimi', t.fat, T.fat, 'g') +
+        (t.said.water != null ? '<li><span>Apă</span><b>' + fmtL(t.water) + '<small> L</small></b><em>acum ' + fmtL(T.water) + '</em></li>' : '') + '</ul>' +
+      (Object.keys(t.said).length < 4 ? '<p class="hint">Ce nu ai spus s-a completat din celelalte, ca totalul să se potrivească.</p>' : '') +
+      (t.off ? '<p class="hint">Din macronutrienții spuși ies cam ' + fmt(t.off) + ' kcal, nu ' + fmt(t.kcal) + '.</p>' : '') +
+      (t.err ? '<p class="ferr">' + t.err + '</p>' : '') + '</div>' +
+      '<div class="row ebtns"><button class="btn ghost" data-action="voice-again">Din nou</button><button class="btn primary wide" data-action="voice-targets"' + (t.err ? ' disabled' : '') + '>Aplică țintele</button></div>';
+  }
+  const on = o.items.filter(x => x.on), sum = on.reduce((a, x) => a + x.kcal, 0);
+  return '<div class="v-card">' + (o.items.length ? '<h3>Recunoscute din jurnalul tău</h3><ul class="v-items">' + o.items.map((x, i) =>
+      '<li><label><input type="checkbox" data-voice-item="' + i + '"' + (x.on ? ' checked' : '') + '><span><b>' + esc(x.name) + '</b><small>' + (x.grams ? fmt(x.grams) + ' g · ' : '') + fmt(x.kcal) + ' kcal · ' + fmt(x.protein) + ' g proteine</small></span></label></li>').join('') + '</ul>' : '') +
+    (o.miss.length ? '<p class="v-miss">' + o.miss.map(x => '„' + esc(x.replace(/^1\s+/, '')) + '”').join(', ') + (o.miss.length === 1 ? ' nu e' : ' nu sunt') + ' încă în jurnal. Ce notezi o dată de mână se recunoaște data viitoare.</p>' : '') +
+    (S.noSample ? '' : '<p class="hint">Cu estimările AI pornite, din Profil → Datele tale, orice mâncare spusă primește valori.</p>') + '</div>' +
+    (o.items.length ? '<span class="lbl">Masa</span><div class="v-meals" role="radiogroup" aria-label="Masa">' + MEALS.map(x => '<button class="chip" role="radio" data-action="voice-meal" data-meal="' + x.id + '" aria-checked="' + (m.meal === x.id) + '">' + x.t + '</button>').join('') + '</div>' : '') +
+    '<div class="row ebtns">' + (o.items.length
+      ? (o.miss.length ? '<button class="btn ghost" data-action="voice-manual">Adaugă manual</button>' : '<button class="btn ghost" data-action="voice-again">Din nou</button>') +
+        '<button class="btn primary wide" data-action="voice-add"' + (on.length ? '' : ' disabled') + '>Adaugă ' + (on.length ? fmt(sum) + ' kcal' : '') + '</button>'
+      : '<button class="btn ghost" data-action="voice-again">Din nou</button><button class="btn primary wide" data-action="voice-manual">Adaugă manual</button>') + '</div>';
+}
+function voiceAdd(){
+  const m = S.mini; if (!m || !m.out || m.out.kind !== 'food') return;
+  const now = Date.now(), k = S.view, list = m.out.items.filter(x => x.on).map((x, i) => normEntry({ id: newId(), name: x.name, grams: x.grams, kcal: x.kcal, protein: x.protein, carbs: x.carbs, fat: x.fat, micro: x.micro, meal: m.meal, at: now + i, src: 'voice' })).filter(Boolean);
+  if (!list.length) return;
+  const ids = new Set(list.map(e => e.id)), meal = m.meal;
+  closeMini();
+  mutateDay(k, d => d.entries.push(...list));
+  addedToast(k, atMeal(list.length === 1 ? list[0].name : cnt(list.length, 'alimente'), meal), list.reduce((a, e) => a + e.kcal, 0), () => mutateDay(k, d => { d.entries = d.entries.filter(e => !ids.has(e.id)); }), meal);
+}
+function voiceTargetsApply(){
+  const m = S.mini; if (!m || !m.out || m.out.kind !== 'targets' || m.out.t.err) return;
+  const t = m.out.t, old = clone(S.profile);
+  S.profile = keepTargetHistory(S.profile, Object.assign(clone(S.profile), { custom: true, updatedAt: Date.now(), targets: { kcal: t.kcal, protein: t.protein, carbs: t.carbs, fat: t.fat, water: t.water } }));
+  saveProfile(); closeMini(); renderAll();
+  toast('Ținte noi: ' + fmt(t.kcal) + ' kcal', 'Anulează', () => { S.profile = old; saveProfile(); renderAll(); }, { sub: fmt(t.protein) + ' g proteine, ' + fmt(t.carbs) + ' g glucide, ' + fmt(t.fat) + ' g grăsimi' });
+}
+function voiceManual(){
+  const m = S.mini, first = m && m.out && m.out.miss && m.out.miss[0];
+  closeMini(); S.tab = 'manual'; showErr(''); renderTabs(); go('add');
+  const n = $('#mName'); if (n){ n.value = first ? first.replace(/^\d+(\.\d+)?\s*(g|gr|grame|ml)?\s*(de\s+)?/, '').trim() : ''; n.focus({ preventScroll: true }); }
+}
+
 
 /* ---------- snow (falls from the top) ---------- */
 const Snow = { kind: null, on: false, raf: 0, flakes: [], cvs: null, ctx: null, color: '', dark: true, sprites: [], w: 0, h: 0, last: 0 };
@@ -5677,6 +5862,14 @@ function bindStatic(){
       case 'coach-inc-weight': case 'coach-inc-train': case 'coach-inc-habits': case 'coach-inc-med': setCoach({ inc: { [a.slice(10)]: b.getAttribute('aria-checked') !== 'true' } }); break;
       case 'coach-send': if (S.mini && S.mini.kind === 'coach') closeMini(); sendCoach(); break;
       case 'coach-preview': openCoachPreview(); break;
+      case 'voice-open': openVoice(); break;
+      case 'voice-listen': listenVoice(); break;
+      case 'voice-go': voiceGo(); break;
+      case 'voice-again': if (S.mini && S.mini.kind === 'voice'){ S.mini.out = null; S.mini.text = ''; renderVoice(); if (voiceEngine() === 'web') listenVoice(); else { const t = $('#vText'); if (t) t.focus(); } } break;
+      case 'voice-meal': if (S.mini && S.mini.kind === 'voice'){ S.mini.meal = b.dataset.meal; renderVoice(); } break;
+      case 'voice-add': voiceAdd(); break;
+      case 'voice-targets': voiceTargetsApply(); break;
+      case 'voice-manual': voiceManual(); break;
       case 'health-on': if (b.getAttribute('aria-checked') === 'true') disconnectHealth(); else connectHealth(); break;
       case 'health-sync': syncHealth(true); break;
       case 'health-settings': nat('Health', 'openHealthConnectSettings'); break;
@@ -5826,6 +6019,7 @@ function bindStatic(){
     if (t.id === 'bpShare' && S.bc) S.bc.share = t.checked;
     if (t.id === 'impFile'){ readImportFile(t.files && t.files[0]); t.value = ''; }
     if (t.id === 'coachName') setCoach({ name: t.value });
+    if (t.dataset && t.dataset.voiceItem != null && S.mini && S.mini.kind === 'voice' && S.mini.out){ const it = S.mini.out.items[Number(t.dataset.voiceItem)]; if (it){ it.on = t.checked; renderVoice(); } }
     if (t.dataset && t.dataset.consent && S.cdraft){ S.cdraft[t.dataset.consent] = t.checked; const b = $('[data-action="consent-ok"]'); if (b) b.disabled = !(S.cdraft.health && S.cdraft.age); }
   });
   $('#toastBtn').addEventListener('click', () => { const fn = toastFn; toastFn = null; $('#toast').hidden = true; if (fn) fn(); });
